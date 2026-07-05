@@ -140,7 +140,7 @@ export default function NewEventPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="max-w-2xl mx-auto px-6 py-12">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-12">
 
         {/* Breadcrumb */}
         <div className="mb-8">
@@ -390,7 +390,7 @@ export default function NewEventPage() {
           </div>
 
           {/* Spend + Timeline */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Estimated Annual Spend (TCO)</label>
               <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>

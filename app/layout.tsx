@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import { ClerkProvider, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import MobileMenu from "@/components/MobileMenu";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="min-h-screen flex flex-col">
           {/* Top nav */}
           <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
-            <div className="max-w-screen-2xl mx-auto px-6 h-14 flex items-center justify-between">
+            <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
               <div className="flex items-center gap-8">
                 <Link href="/dashboard" className="flex items-center gap-2.5 group">
                   <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm shadow-blue-600/30">
@@ -51,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   Agents ready
                 </div>
                 <SignedIn>
-                  <Link href="/events/new" className="btn-primary py-2">
+                  <Link href="/events/new" className="btn-primary py-2 hidden sm:inline-flex">
                     <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
                       <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <SignedOut>
                   <Link href="/sign-in" className="btn-primary py-2">Sign in</Link>
                 </SignedOut>
+                <MobileMenu />
               </div>
             </div>
           </header>

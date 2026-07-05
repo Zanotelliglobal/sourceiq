@@ -907,10 +907,10 @@ export default function EventPage() {
   };
 
   return (
-    <div className="h-[calc(100vh-56px)] flex overflow-hidden">
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-56px)] lg:overflow-hidden">
 
       {/* ── Left sidebar: agent panel ── */}
-      <div className="w-64 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden">
+      <div className="w-full lg:w-64 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white flex flex-col lg:overflow-hidden">
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Agent Control</span>
@@ -979,11 +979,11 @@ export default function EventPage() {
         </div>
 
         {/* Activity log */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex flex-col overflow-hidden lg:flex-1">
           <div className="px-3 py-2 border-b border-slate-100">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Activity Log</span>
           </div>
-          <div ref={logsRef} className="flex-1 overflow-y-auto p-3 space-y-0.5">
+          <div ref={logsRef} className="overflow-y-auto p-3 space-y-0.5 max-h-56 lg:max-h-none lg:flex-1">
             {logs.length === 0 ? (
               <p className="text-[10px] text-slate-400 text-center pt-4">Log appears here during discovery</p>
             ) : logs.map((l, i) => (
@@ -994,11 +994,11 @@ export default function EventPage() {
       </div>
 
       {/* ── Main content ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col lg:overflow-hidden">
 
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4">
-          <div className="flex items-start justify-between gap-4">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div>
               <Link href="/dashboard" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">← Dashboard</Link>
               <div className="flex items-center gap-3 mt-0.5">
@@ -1020,7 +1020,7 @@ export default function EventPage() {
               </div>
             </div>
             {/* KPIs */}
-            <div className="flex items-center gap-6 text-right">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 sm:text-right">
               {[
                 { label: "Total Found", value: suppliers.length },
                 { label: "Avg Score",   value: avgScore || "—" },
@@ -1071,7 +1071,7 @@ export default function EventPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between gap-4">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-1 overflow-x-auto">
             {STAGES.filter(s => stageCounts[s.key] > 0 || s.key === "all").map(s => (
               <button
@@ -1115,7 +1115,7 @@ export default function EventPage() {
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-auto">
           {suppliers.length === 0 && !running ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-12">
               <div className="text-5xl mb-4">🏭</div>
