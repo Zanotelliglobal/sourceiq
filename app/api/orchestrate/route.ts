@@ -197,6 +197,13 @@ export async function POST(req: NextRequest) {
   });
 
   return new NextResponse(stream, {
-    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" }
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      // Disable proxy buffering (Vercel/nginx) so events flush to the client
+      // as they are produced rather than being held until the stream closes.
+      "X-Accel-Buffering": "no",
+    }
   });
 }

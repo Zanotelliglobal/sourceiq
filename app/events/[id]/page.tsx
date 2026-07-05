@@ -80,6 +80,45 @@ function tryParse<T>(s: string | null, fallback: T): T {
   try { return s ? JSON.parse(s) as T : fallback; } catch { return fallback; }
 }
 
+// ─── SSE stream reader ──────────────────────────────────────────────────────────
+// Reads a text/event-stream response and dispatches each complete `data:` line.
+// Network chunks do NOT align to line boundaries — a single read() can deliver a
+// partial line, with the remainder arriving in a later chunk. We buffer across
+// reads and only parse lines terminated by a newline, so events are never lost or
+// split mid-JSON (the previous per-chunk split() dropped/crashed on partial lines,
+// which made the live UI appear frozen until a manual refresh).
+async function readEventStream(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (msg: Record<string, unknown>) => void,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const flushLine = (line: string) => {
+    const trimmed = line.replace(/\r$/, "");
+    if (!trimmed.startsWith("data: ")) return;
+    const payload = trimmed.slice(6);
+    if (!payload || payload === "[DONE]") return;
+    try { onEvent(JSON.parse(payload)); }
+    catch { /* ignore malformed/partial payloads */ }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) !== -1) {
+      flushLine(buffer.slice(0, nl));
+      buffer = buffer.slice(nl + 1);
+    }
+  }
+  // Flush any trailing complete line left in the buffer at stream end.
+  buffer += decoder.decode();
+  if (buffer.length) flushLine(buffer);
+}
+
 // ─── Score bar ────────────────────────────────────────────────────────────────
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
@@ -719,13 +758,11 @@ export default function EventPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: id, wave: nextWave }),
       });
-      const reader  = res.body!.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        decoder.decode(value).split("\n").filter(l => l.startsWith("data: "))
-          .forEach(l => handleStreamEvent(JSON.parse(l.slice(6))));
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}));
+        addLog(`ERR discovery failed (${res.status})${err.error ? ` — ${err.error}` : ""}`);
+      } else {
+        await readEventStream(res.body, handleStreamEvent);
       }
       await loadData();
     } finally {
@@ -824,13 +861,11 @@ export default function EventPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: id }),
       });
-      const reader  = res.body!.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        decoder.decode(value).split("\n").filter(l => l.startsWith("data: "))
-          .forEach(l => handleCampaignEvent(JSON.parse(l.slice(6))));
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}));
+        addLog(`ERR outreach failed (${res.status})${err.error ? ` — ${err.error}` : ""}`);
+      } else {
+        await readEventStream(res.body, handleCampaignEvent);
       }
       await loadData();
     } finally {
