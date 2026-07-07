@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { scrapeSupplierContact } from "./contact";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -375,10 +376,18 @@ Return JSON only:
 }
 
 // ─── CONTACT DISCOVERY AGENT ──────────────────────────────────────────────────
-// Finds a real contact email for a supplier, ideally from their own "Contact Us"
-// page. Uses web_search and resolves the pause_turn resume loop like the scout.
-// Returns "" when no genuine address could be verified — never a guessed address.
-export type ContactResult = { contact_email: string; source: string };
+// Finds a way to reach a supplier — a verified email if possible, otherwise the
+// next-best channel (contact page, phone, LinkedIn). Uses web_search and resolves
+// the pause_turn resume loop like the scout. Never guesses/constructs an email.
+export type ContactResult = {
+  contact_email: string; // verified email, or ""
+  contact_url: string;   // contact/"contact us" page URL, or ""
+  phone: string;         // phone number, or ""
+  linkedin: string;      // company LinkedIn URL, or ""
+  source: string;        // where the primary channel came from, or ""
+};
+
+const EMPTY_CONTACT: ContactResult = { contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" };
 
 export async function runContactFinderAgent(
   supplierName: string,
@@ -386,19 +395,25 @@ export async function runContactFinderAgent(
   website: string,
   onUsage?: UsageCb
 ): Promise<ContactResult> {
-  const prompt = `You are SourceIQ's Contact Discovery Agent. Find a REAL contact email address for this supplier.
+  const prompt = `You are SourceIQ's Contact Discovery Agent. Find the best way to CONTACT this supplier.
 
 Supplier: ${supplierName}
 Country: ${country}
 Known website: ${website || "(unknown — find it via search)"}
 
+Your job is to ALWAYS return at least ONE usable way to get in touch. Prefer them in this order:
+1. A real contact EMAIL (prefer a sales/info/RFQ/contact mailbox over a personal one).
+2. The URL of the company's "Contact Us" page (/contact, /kontakt, /contatti, /contacto…) — many use a form instead of a public email.
+3. A phone number.
+4. The company's LinkedIn page.
+
 RULES (critical):
-- You have a \`web_search\` tool. USE IT. Prefer the company's own "Contact Us" / "Contatti" / "Kontakt" / "Contacto" page.
-- Return ONLY an email address you actually saw on the company's own site or a reputable directory listing. Prefer a sales/info/RFQ/contact mailbox over a personal one.
-- NEVER guess, construct, or infer an address from the domain. If you cannot verify a real address, return an empty string.
+- You have a \`web_search\` tool. USE IT. Open the company's own site first; fall back to reputable directories.
+- Return ONLY details you actually saw. For the email specifically: NEVER guess, construct, or infer it from the domain — leave it "" if you didn't see a real one.
+- It is fine (and expected) to return "" for the email as long as you provide a contact_url, phone, or linkedin instead.
 
 Your FINAL message must be ONLY this JSON:
-{ "contact_email": "the verified address, or empty string", "source": "the URL where you saw it, or empty string" }`;
+{ "contact_email": "verified email or ''", "contact_url": "contact page URL or ''", "phone": "phone or ''", "linkedin": "company LinkedIn URL or ''", "source": "URL the info came from or ''" }`;
 
   const markCache = (content: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (Array.isArray(content) && content.length) {
@@ -437,13 +452,63 @@ Your FINAL message must be ONLY this JSON:
   }
 
   const match = fullText.match(/\{[\s\S]*\}/);
-  if (!match) return { contact_email: "", source: "" };
+  if (!match) return { ...EMPTY_CONTACT };
   try {
-    const r = JSON.parse(match[0]) as ContactResult;
-    return { contact_email: (r.contact_email || "").trim(), source: (r.source || "").trim() };
+    const r = JSON.parse(match[0]) as Partial<ContactResult>;
+    return {
+      contact_email: (r.contact_email || "").trim(),
+      contact_url: (r.contact_url || "").trim(),
+      phone: (r.phone || "").trim(),
+      linkedin: (r.linkedin || "").trim(),
+      source: (r.source || "").trim(),
+    };
   } catch {
-    return { contact_email: "", source: "" };
+    return { ...EMPTY_CONTACT };
   }
+}
+
+// Combined, reliability-first resolver: scrape the supplier's own website
+// deterministically first (cheap, no LLM), then fall back to the web-search agent
+// only for whatever channels the scrape didn't turn up. Guarantees we return the
+// richest set of channels available. `hasWebSearch` gates the (paid) agent call.
+export async function resolveSupplierContact(
+  supplierName: string,
+  country: string,
+  website: string,
+  onUsage?: UsageCb,
+): Promise<ContactResult> {
+  let result: ContactResult = { ...EMPTY_CONTACT };
+
+  // 1 ── Deterministic scrape of the supplier's own site.
+  if (website) {
+    try {
+      const scraped = await scrapeSupplierContact(website);
+      result = {
+        contact_email: scraped.contact_email,
+        contact_url: scraped.contact_url,
+        phone: scraped.phone,
+        linkedin: scraped.linkedin,
+        source: scraped.source,
+      };
+    } catch { /* scrape best-effort */ }
+  }
+
+  // 2 ── If we still lack an email (the highest-value channel), ask the agent.
+  //      It can also discover a website we didn't have, plus phone/LinkedIn.
+  if (!result.contact_email) {
+    try {
+      const found = await runContactFinderAgent(supplierName, country, website, onUsage);
+      result = {
+        contact_email: result.contact_email || found.contact_email,
+        contact_url: result.contact_url || found.contact_url,
+        phone: result.phone || found.phone,
+        linkedin: result.linkedin || found.linkedin,
+        source: result.source || found.source,
+      };
+    } catch { /* agent best-effort */ }
+  }
+
+  return result;
 }
 
 // ─── OUTREACH AGENT ───────────────────────────────────────────────────────────

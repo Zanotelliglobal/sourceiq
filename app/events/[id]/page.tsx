@@ -9,7 +9,9 @@ type Supplier = {
   id: number; event_id: number; name: string; country: string; city: string | null;
   description: string; capabilities: string; certifications: string | null;
   employees: string | null; annual_revenue: string | null; founded: string | null;
-  website: string | null; contact_email: string | null; data_sources: string | null; scout_agent: string | null;
+  website: string | null; contact_email: string | null;
+  contact_url: string | null; contact_phone: string | null; contact_linkedin: string | null;
+  data_sources: string | null; scout_agent: string | null;
   wave: number; ai_score: number | null; score_rationale: string | null;
   score_breakdown: string | null; enrichment: string | null;
   funnel_stage: string; outreach_status: string; response_detail: string | null;
@@ -203,6 +205,9 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               { label: "Founded", v: supplier.founded },
               { label: "Website", v: supplier.website },
               { label: "Contact", v: supplier.contact_email },
+              { label: "Contact Page", v: supplier.contact_url },
+              { label: "Phone", v: supplier.contact_phone },
+              { label: "LinkedIn", v: supplier.contact_linkedin },
               { label: "Scout Agent", v: supplier.scout_agent },
               { label: "Wave", v: supplier.wave ? `Wave ${supplier.wave}` : null },
             ].filter(x => x.v).map(({ label, v }) => (
@@ -463,13 +468,31 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
                 <button onClick={copyDraft} className="btn-secondary justify-center py-2.5 text-sm">
                   {copied ? "✓ Copied" : "Copy draft"}
                 </button>
-                <a
-                  href={mailtoHref}
-                  className={`btn-secondary justify-center py-2.5 text-sm ${supplier.contact_email ? "" : "opacity-50 pointer-events-none"}`}
-                  title={supplier.contact_email ? "Open in your default email app" : "No contact email on file"}
-                >
-                  Open in email app
-                </a>
+                {supplier.contact_email ? (
+                  <a
+                    href={mailtoHref}
+                    className="btn-secondary justify-center py-2.5 text-sm"
+                    title="Open in your default email app"
+                  >
+                    Open in email app
+                  </a>
+                ) : supplier.contact_url ? (
+                  <a
+                    href={supplier.contact_url}
+                    target="_blank" rel="noopener noreferrer"
+                    className="btn-secondary justify-center py-2.5 text-sm"
+                    title={`Open contact page — ${supplier.contact_url}`}
+                  >
+                    Open contact page
+                  </a>
+                ) : (
+                  <span
+                    className="btn-secondary justify-center py-2.5 text-sm opacity-50 pointer-events-none"
+                    title="No contact channel on file"
+                  >
+                    No contact channel
+                  </span>
+                )}
               </div>
 
               <button onClick={() => { onSent(supplier.id); onClose(); }} className="btn-primary w-full justify-center py-3">
@@ -515,11 +538,18 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
       <td className="px-3 py-3 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="font-semibold text-slate-900 text-sm leading-tight truncate">{supplier.name}</span>
-          {supplier.contact_email ? (
-            <span title={`Contactable — ${supplier.contact_email}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">✉ Email</span>
-          ) : (
-            <span title="No contact email found yet" className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">No email</span>
-          )}
+          {(() => {
+            // Tiered reachability badge: email → contact page → phone → LinkedIn → none.
+            if (supplier.contact_email)
+              return <span title={`Contactable — ${supplier.contact_email}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">✉ Email</span>;
+            if (supplier.contact_url)
+              return <span title={`Contact page — ${supplier.contact_url}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">🌐 Contact page</span>;
+            if (supplier.contact_phone)
+              return <span title={`Phone — ${supplier.contact_phone}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">☎ Phone</span>;
+            if (supplier.contact_linkedin)
+              return <span title={`LinkedIn — ${supplier.contact_linkedin}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">in LinkedIn</span>;
+            return <span title="No contact channel found yet" className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">No contact</span>;
+          })()}
         </div>
         <div className="text-xs text-slate-400 mt-0.5 truncate">
           {[supplier.city, supplier.country].filter(Boolean).join(", ")}
@@ -862,6 +892,14 @@ export default function EventPage() {
       setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...p } : s));
 
     if (type === "campaign_start") addLog(msg.message as string);
+    if (type === "contact_found") {
+      const email = msg.contact_email as string, url = msg.contact_url as string, phone = msg.phone as string;
+      patch(msg.supplier_id as number, {
+        contact_email: email || undefined, contact_url: url || undefined, contact_phone: phone || undefined,
+      });
+      const via = email ? `email ${email}` : url ? `contact page` : phone ? `phone ${phone}` : "a channel";
+      addLog(`🔎  Found ${via} for ${msg.supplier_name}`);
+    }
     if (type === "contacting")  addLog(`📨  Contacting ${msg.supplier_name}...`);
     if (type === "contacted") {
       patch(msg.supplier_id as number, { funnel_stage: "contacted", outreach_status: "sent" });
@@ -956,6 +994,9 @@ export default function EventPage() {
       { header: "Funnel Stage",    get: s => STAGES.find(x => x.key === s.funnel_stage)?.label || s.funnel_stage },
       { header: "Outreach Status", get: s => s.outreach_status },
       { header: "Contact Email",   get: s => s.contact_email },
+      { header: "Contact Page",    get: s => s.contact_url },
+      { header: "Phone",           get: s => s.contact_phone },
+      { header: "LinkedIn",        get: s => s.contact_linkedin },
       { header: "Website",         get: s => s.website },
       { header: "Employees",       get: s => s.employees },
       { header: "Annual Revenue",  get: s => s.annual_revenue },

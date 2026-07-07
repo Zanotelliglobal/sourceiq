@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOutreachAgent, runSupplierResponseAgent, runContactFinderAgent } from "@/lib/agents";
+import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact } from "@/lib/agents";
 import { sendEmail, isMailLive, mailStatus, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, usageSummary } from "@/lib/usage";
@@ -78,14 +78,17 @@ export async function POST(req: NextRequest) {
         let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0;
 
         for (const s of targets) {
-          // 0 ── Contact discovery: find a real email if we don't have one yet.
+          // 0 ── Contact discovery: resolve the best reachable channel if we have no email.
           if (!s.contact_email) {
             try {
-              const found = await runContactFinderAgent(s.name, s.country, s.website || "", track("contact_finder"));
-              if (found.contact_email) {
-                s.contact_email = found.contact_email;
-                await db.prepare("UPDATE suppliers SET contact_email=? WHERE id=?").run(found.contact_email, s.id);
-                send({ type: "contact_found", supplier_id: s.id, supplier_name: s.name, contact_email: found.contact_email });
+              const found = await resolveSupplierContact(s.name, s.country, s.website || "", track("contact_finder"));
+              if (found.contact_email || found.contact_url || found.phone || found.linkedin) {
+                s.contact_email = found.contact_email || s.contact_email;
+                await db.prepare(
+                  "UPDATE suppliers SET contact_email=COALESCE(NULLIF(?,''), contact_email), contact_url=COALESCE(NULLIF(?,''), contact_url), contact_phone=COALESCE(NULLIF(?,''), contact_phone), contact_linkedin=COALESCE(NULLIF(?,''), contact_linkedin) WHERE id=?"
+                ).run(found.contact_email, found.contact_url, found.phone, found.linkedin, s.id);
+                send({ type: "contact_found", supplier_id: s.id, supplier_name: s.name,
+                  contact_email: found.contact_email, contact_url: found.contact_url, phone: found.phone });
               }
             } catch { /* non-fatal — continue with draft */ }
           }

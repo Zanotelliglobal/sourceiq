@@ -188,6 +188,9 @@ async function initSchema(): Promise<void> {
       founded       TEXT,
       website       TEXT,
       contact_email TEXT,
+      contact_url   TEXT,
+      contact_phone TEXT,
+      contact_linkedin TEXT,
       data_sources  TEXT,
       scout_agent   TEXT,
       wave          INTEGER NOT NULL DEFAULT 1,
@@ -205,6 +208,10 @@ async function initSchema(): Promise<void> {
       notes         TEXT,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_url TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_phone TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_linkedin TEXT;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
@@ -305,6 +312,9 @@ export type Supplier = {
   website: string | null;
   data_sources: string | null;
   contact_email: string | null;
+  contact_url: string | null;
+  contact_phone: string | null;
+  contact_linkedin: string | null;
   scout_agent: string | null;
   wave: number;
   ai_score: number | null;

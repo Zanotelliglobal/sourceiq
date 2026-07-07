@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOutreachAgent, runFollowUpAgent, runContactFinderAgent } from "@/lib/agents";
+import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact } from "@/lib/agents";
 import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage } from "@/lib/usage";
@@ -56,17 +56,19 @@ export async function POST(req: NextRequest) {
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Contact discovery: if we don't yet have an email, try to find a real one
-    // (ideally from the supplier's "Contact Us" page) before drafting.
+    // Contact discovery: if we don't yet have an email, resolve the best available
+    // channel (scrape the site, then web-search fallback) before drafting.
     if (!supplier.contact_email) {
       try {
-        const found = await runContactFinderAgent(
+        const found = await resolveSupplierContact(
           supplier.name, supplier.country, supplier.website || "",
           (u) => { void recordUsage(db, supplier.event_id, "contact_finder", u as never); }
         );
-        if (found.contact_email) {
-          supplier.contact_email = found.contact_email;
-          await db.prepare("UPDATE suppliers SET contact_email=? WHERE id=?").run(found.contact_email, supplier.id);
+        if (found.contact_email || found.contact_url || found.phone || found.linkedin) {
+          supplier.contact_email = found.contact_email || supplier.contact_email;
+          await db.prepare(
+            "UPDATE suppliers SET contact_email=COALESCE(NULLIF(?,''), contact_email), contact_url=COALESCE(NULLIF(?,''), contact_url), contact_phone=COALESCE(NULLIF(?,''), contact_phone), contact_linkedin=COALESCE(NULLIF(?,''), contact_linkedin) WHERE id=?"
+          ).run(found.contact_email, found.contact_url, found.phone, found.linkedin, supplier.id);
         }
       } catch { /* non-fatal — proceed without an address (draft/copy still works) */ }
     }
