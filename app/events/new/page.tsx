@@ -72,36 +72,48 @@ export default function NewEventPage() {
     title: "", category: "", subcategory: "", description: "",
     requirements: "", annual_spend: "", timeline: "",
     supply_risk: "", incumbent: "",
+    // Outreach identity: when anonymous, SourceIQ reaches out on the buyer's behalf
+    // without naming them. When disclosed, the buyer's name/role/company appear in
+    // the outreach email and drafts can be copied or opened in the default mail app.
+    outreach_anonymous: "true",
+    buyer_name: "", buyer_role: "", buyer_company: "",
   });
   const [countries, setCountries] = useState<string[]>([]);
   const [classifying, setClassifying] = useState(false);
   const [autoDetected, setAutoDetected] = useState(false); // category came from AI, not a manual click
   const [confidence, setConfidence] = useState<number | null>(null);
+  const [classifyFailed, setClassifyFailed] = useState(false); // auto-detect errored → prompt manual pick
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryTouchedRef = useRef(false); // user manually picked → stop auto-overriding
 
   const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }));
   const toggleCountry = (c: string) =>
     setCountries(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
-  const complete = form.title && form.category && form.description && form.requirements;
+  const disclosedComplete = form.outreach_anonymous !== "false"
+    || (form.buyer_name.trim() && form.buyer_role.trim() && form.buyer_company.trim());
+  const complete = form.title && form.category && form.description && form.requirements && disclosedComplete;
 
   // Ask the classifier to pick a category + subcategory from the description.
   const classify = useCallback(async (description: string) => {
     if (categoryTouchedRef.current) return;          // respect manual override
     if (description.trim().length < 12) return;
     setClassifying(true);
+    setClassifyFailed(false);
     try {
       const res = await fetch("/api/classify", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description, categories: CATEGORIES }),
       });
-      if (!res.ok) return;
+      if (!res.ok) { setClassifyFailed(true); return; }
       const r = await res.json() as { category: string; subcategory: string; confidence: number };
       if (categoryTouchedRef.current) return;         // user clicked while we waited
+      if (!r.category) { setClassifyFailed(true); return; }
       setForm(f => ({ ...f, category: r.category, subcategory: r.subcategory || "" }));
       setAutoDetected(true);
       setConfidence(typeof r.confidence === "number" ? r.confidence : null);
-    } catch { /* silent — manual selection remains available */ }
+    } catch {
+      setClassifyFailed(true);      // surface failure so the user knows to pick manually
+    }
     finally { setClassifying(false); }
   }, []);
 
@@ -109,6 +121,15 @@ export default function NewEventPage() {
     set("description", value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => classify(value), 900);
+  };
+
+  // Blur = the buyer finished the description → classify immediately (skip the debounce),
+  // so the category is suggested right after they leave the field rather than only mid-typing.
+  const onDescriptionBlur = () => {
+    if (categoryTouchedRef.current || autoDetected || classifying) return;
+    if (form.description.trim().length < 12) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    classify(form.description);
   };
 
   const pickCategory = (c: string) => {
@@ -225,6 +246,7 @@ export default function NewEventPage() {
               placeholder={`Describe the scope in precise commercial terms. Include:\n• Part or service description, materials, grades\n• Annual volumes or call-off quantities\n• Critical dimensions, tolerances, or performance specs\n• End-use application and sector context`}
               value={form.description}
               onChange={e => onDescriptionChange(e.target.value)}
+              onBlur={onDescriptionBlur}
               required
             />
             <p className="text-xs text-slate-400 mt-1.5">
@@ -245,6 +267,11 @@ export default function NewEventPage() {
               {!classifying && autoDetected && form.category && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                   ✨ Auto-detected{confidence != null ? ` · ${confidence}%` : ""}
+                </span>
+              )}
+              {!classifying && classifyFailed && !form.category && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                  Auto-detect unavailable — pick one below
                 </span>
               )}
             </label>
@@ -389,6 +416,60 @@ export default function NewEventPage() {
             )}
           </div>
 
+          {/* Outreach identity — anonymous vs. disclosed (per event) */}
+          <div>
+            <label className="label">Supplier Outreach Identity</label>
+            <p className="text-xs text-slate-400 mb-2.5">
+              Choose how you appear to suppliers when SourceIQ reaches out on this event.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { v: "true",  icon: "🕶️", title: "Anonymous", sub: "SourceIQ contacts suppliers on your behalf — your organisation is never named." },
+                { v: "false", icon: "🙋", title: "Disclosed", sub: "Your name, role & company appear in the outreach. Copy or send via your own mail client." },
+              ].map(opt => {
+                const active = form.outreach_anonymous === opt.v;
+                return (
+                  <button
+                    key={opt.v} type="button"
+                    onClick={() => set("outreach_anonymous", opt.v)}
+                    className={`text-left px-4 py-3 rounded-xl border transition-all ${
+                      active
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-semibold text-sm">
+                      <span>{opt.icon}</span>{opt.title}
+                    </div>
+                    <div className={`text-[11px] mt-1 leading-snug ${active ? "text-blue-100" : "text-slate-400"}`}>
+                      {opt.sub}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {form.outreach_anonymous === "false" && (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <label className="label text-xs">Your Name<span className="ml-1 text-red-400">*</span></label>
+                  <input className="input" placeholder="Jane Smith" value={form.buyer_name} onChange={e => set("buyer_name", e.target.value)} />
+                </div>
+                <div>
+                  <label className="label text-xs">Role<span className="ml-1 text-red-400">*</span></label>
+                  <input className="input" placeholder="Procurement Lead" value={form.buyer_role} onChange={e => set("buyer_role", e.target.value)} />
+                </div>
+                <div>
+                  <label className="label text-xs">Company<span className="ml-1 text-red-400">*</span></label>
+                  <input className="input" placeholder="Acme Corp" value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
+                </div>
+                <p className="sm:col-span-3 text-[11px] text-slate-400">
+                  These details are included in disclosed outreach emails so suppliers know who they&apos;re dealing with.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Spend + Timeline */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -431,16 +512,6 @@ export default function NewEventPage() {
             {!complete && (
               <p className="text-center text-xs text-slate-400">Complete all required fields to proceed</p>
             )}
-          </div>
-
-          {/* Confidentiality */}
-          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <svg className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-            </svg>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              <strong className="text-slate-700">Buyer identity protected.</strong> SourceIQ conducts all supplier outreach anonymously on your behalf. Your organisation is not disclosed to any supplier until you grant explicit approval to proceed to engagement.
-            </p>
           </div>
 
         </form>

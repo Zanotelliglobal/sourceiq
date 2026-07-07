@@ -159,11 +159,20 @@ async function initSchema(): Promise<void> {
       annual_spend  TEXT,
       timeline      TEXT,
       target_countries TEXT,
+      outreach_anonymous BOOLEAN NOT NULL DEFAULT true,
+      buyer_name    TEXT,
+      buyer_role    TEXT,
+      buyer_company TEXT,
       status        TEXT NOT NULL DEFAULT 'idle',
       wave_count    INTEGER NOT NULL DEFAULT 0,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS outreach_anonymous BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS buyer_name TEXT;
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS buyer_role TEXT;
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS buyer_company TEXT;
 
     CREATE TABLE IF NOT EXISTS suppliers (
       id            BIGSERIAL PRIMARY KEY,
@@ -271,6 +280,10 @@ export type SourcingEvent = {
   annual_spend: string | null;
   timeline: string | null;
   target_countries: string | null;
+  outreach_anonymous: boolean;
+  buyer_name: string | null;
+  buyer_role: string | null;
+  buyer_company: string | null;
   status: string;
   wave_count: number;
   created_at: string;

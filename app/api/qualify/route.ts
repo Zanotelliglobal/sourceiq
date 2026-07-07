@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOutreachAgent, runFollowUpAgent } from "@/lib/agents";
+import { runOutreachAgent, runFollowUpAgent, runContactFinderAgent } from "@/lib/agents";
 import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage } from "@/lib/usage";
@@ -43,19 +43,42 @@ export async function POST(req: NextRequest) {
 
   if (action === "send_outreach") {
     const supplier = await db.prepare(`
-      SELECT s.*, se.category, se.requirements, se.annual_spend
+      SELECT s.*, se.category, se.requirements, se.annual_spend,
+             se.outreach_anonymous, se.buyer_name, se.buyer_role, se.buyer_company
       FROM suppliers s JOIN sourcing_events se ON se.id = s.event_id
       WHERE s.id = ?
     `).get(supplier_id) as {
       id: number; event_id: number; name: string; country: string; contact_email: string | null;
       category: string; requirements: string; annual_spend: string;
+      outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
+      website: string | null;
     } | undefined;
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    // Contact discovery: if we don't yet have an email, try to find a real one
+    // (ideally from the supplier's "Contact Us" page) before drafting.
+    if (!supplier.contact_email) {
+      try {
+        const found = await runContactFinderAgent(
+          supplier.name, supplier.country, supplier.website || "",
+          (u) => { void recordUsage(db, supplier.event_id, "contact_finder", u as never); }
+        );
+        if (found.contact_email) {
+          supplier.contact_email = found.contact_email;
+          await db.prepare("UPDATE suppliers SET contact_email=? WHERE id=?").run(found.contact_email, supplier.id);
+        }
+      } catch { /* non-fatal — proceed without an address (draft/copy still works) */ }
+    }
+
+    const buyer = supplier.outreach_anonymous
+      ? null
+      : { name: supplier.buyer_name, role: supplier.buyer_role, company: supplier.buyer_company };
+
     const email = await runOutreachAgent(
       supplier.name, supplier.country, supplier.category, supplier.requirements, supplier.annual_spend,
-      (u) => { void recordUsage(db, supplier.event_id, "outreach", u as never); }
+      (u) => { void recordUsage(db, supplier.event_id, "outreach", u as never); },
+      buyer
     );
 
     const replyToken = randomBytes(9).toString("base64url");

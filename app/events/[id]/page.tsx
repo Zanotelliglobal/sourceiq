@@ -31,6 +31,8 @@ type Event = {
   id: number; title: string; category: string; subcategory: string | null; description: string;
   requirements: string; annual_spend: string | null; timeline: string | null;
   target_countries: string | null;
+  outreach_anonymous?: boolean;
+  buyer_name?: string | null; buyer_role?: string | null; buyer_company?: string | null;
   status: string; wave_count: number; created_at: string;
 };
 
@@ -376,12 +378,13 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
 }
 
 // ─── Outreach modal ───────────────────────────────────────────────────────────
-function OutreachModal({ supplier, onClose, onSent }: {
-  supplier: Supplier; onClose: () => void; onSent: (id: number) => void;
+function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
+  supplier: Supplier; anonymous?: boolean; onClose: () => void; onSent: (id: number) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<{ language?: string; subject: string; body: string; subject_en?: string; body_en?: string } | null>(null);
   const [showEn, setShowEn] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetch("/api/qualify", {
@@ -392,14 +395,28 @@ function OutreachModal({ supplier, onClose, onSent }: {
 
   const isForeign = email?.language && email.language.toLowerCase() !== "english";
 
+  // For disclosed outreach the buyer may prefer to send from their own mailbox.
+  const activeSubject = email ? (showEn && email.subject_en ? email.subject_en : email.subject) : "";
+  const activeBody = email ? (showEn && email.body_en ? email.body_en : email.body) : "";
+  const copyDraft = async () => {
+    try {
+      await navigator.clipboard.writeText(`Subject: ${activeSubject}\n\n${activeBody}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
+  };
+  const mailtoHref =
+    `mailto:${encodeURIComponent(supplier.contact_email || "")}` +
+    `?subject=${encodeURIComponent(activeSubject)}&body=${encodeURIComponent(activeBody)}`;
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in">
         <div className="p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h3 className="font-bold text-slate-900">Anonymous RFI Outreach</h3>
-              <p className="text-xs text-slate-400 mt-0.5">{supplier.name} · Identity protected</p>
+              <h3 className="font-bold text-slate-900">{anonymous ? "Anonymous RFI Outreach" : "RFI Outreach"}</h3>
+              <p className="text-xs text-slate-400 mt-0.5">{supplier.name} · {anonymous ? "Identity protected" : "Sent under your name"}</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">✕</button>
           </div>
@@ -431,11 +448,32 @@ function OutreachModal({ supplier, onClose, onSent }: {
                 <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Message</div>
                 <div className="text-sm text-slate-700 bg-slate-50 px-4 py-4 rounded-xl border border-slate-200 whitespace-pre-wrap leading-relaxed">{showEn && email.body_en ? email.body_en : email.body}</div>
               </div>
-              <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
-                🔒 Sent anonymously via SourceIQ — your organisation identity is not disclosed
+              {anonymous ? (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
+                  🔒 Sent anonymously via SourceIQ — your organisation identity is not disclosed
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
+                  🙋 Disclosed outreach — copy the draft or open it in your own email client to send under your name.
+                </div>
+              )}
+
+              {/* Copy / send-via-own-client — always available, primary path when disclosed */}
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={copyDraft} className="btn-secondary justify-center py-2.5 text-sm">
+                  {copied ? "✓ Copied" : "Copy draft"}
+                </button>
+                <a
+                  href={mailtoHref}
+                  className={`btn-secondary justify-center py-2.5 text-sm ${supplier.contact_email ? "" : "opacity-50 pointer-events-none"}`}
+                  title={supplier.contact_email ? "Open in your default email app" : "No contact email on file"}
+                >
+                  Open in email app
+                </a>
               </div>
+
               <button onClick={() => { onSent(supplier.id); onClose(); }} className="btn-primary w-full justify-center py-3">
-                Confirm & Log RFI Sent
+                Confirm &amp; Log RFI Sent
               </button>
             </div>
           ) : <p className="text-red-500 text-sm">Failed to generate email.</p>}
@@ -475,7 +513,14 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
 
       {/* Company */}
       <td className="px-3 py-3 min-w-0">
-        <div className="font-semibold text-slate-900 text-sm leading-tight truncate">{supplier.name}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-slate-900 text-sm leading-tight truncate">{supplier.name}</span>
+          {supplier.contact_email ? (
+            <span title={`Contactable — ${supplier.contact_email}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">✉ Email</span>
+          ) : (
+            <span title="No contact email found yet" className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">No email</span>
+          )}
+        </div>
         <div className="text-xs text-slate-400 mt-0.5 truncate">
           {[supplier.city, supplier.country].filter(Boolean).join(", ")}
           {supplier.employees && <span className="ml-2">· {supplier.employees}</span>}
@@ -896,6 +941,46 @@ export default function EventPage() {
     STAGES.map(s => [s.key, s.key === "all" ? suppliers.length : suppliers.filter(x => x.funnel_stage === s.key).length])
   );
 
+  // Export the currently-filtered supplier list to a CSV the buyer can open in Excel.
+  const exportCsv = () => {
+    const cell = (v: unknown) => {
+      const str = v == null ? "" : String(v);
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const listVal = (raw: string | null) => tryParse<string[]>(raw, []).join("; ");
+    const cols: { header: string; get: (s: Supplier) => unknown }[] = [
+      { header: "Name",            get: s => s.name },
+      { header: "Country",         get: s => s.country },
+      { header: "City",            get: s => s.city },
+      { header: "AI Score",        get: s => s.ai_score },
+      { header: "Funnel Stage",    get: s => STAGES.find(x => x.key === s.funnel_stage)?.label || s.funnel_stage },
+      { header: "Outreach Status", get: s => s.outreach_status },
+      { header: "Contact Email",   get: s => s.contact_email },
+      { header: "Website",         get: s => s.website },
+      { header: "Employees",       get: s => s.employees },
+      { header: "Annual Revenue",  get: s => s.annual_revenue },
+      { header: "Founded",         get: s => s.founded },
+      { header: "Capabilities",    get: s => listVal(s.capabilities) },
+      { header: "Certifications",  get: s => listVal(s.certifications) },
+      { header: "Wave",            get: s => s.wave },
+      { header: "Description",     get: s => s.description },
+    ];
+    const rows = [
+      cols.map(c => cell(c.header)).join(","),
+      ...filtered.map(s => cols.map(c => cell(c.get(s))).join(",")),
+    ];
+    const blob = new Blob(["﻿" + rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const slug = (event?.title || "suppliers").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+    a.href = url;
+    a.download = `${slug || "suppliers"}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const shortlisted = suppliers.filter(s => s.funnel_stage === "shortlisted").length;
   const longListCount = suppliers.filter(s => s.funnel_stage === "long_list").length;
   const avgScore    = suppliers.length ? Math.round(suppliers.reduce((a, s) => a + (s.ai_score ?? 0), 0) / suppliers.length) : 0;
@@ -1111,6 +1196,18 @@ export default function EventPage() {
                 {s === "score" ? "Score ↓" : s === "name" ? "Name" : "Wave"}
               </button>
             ))}
+            {suppliers.length > 0 && (
+              <button
+                onClick={exportCsv}
+                title="Export the current list to CSV"
+                className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Export CSV
+              </button>
+            )}
           </div>
         </div>
 
@@ -1178,6 +1275,7 @@ export default function EventPage() {
       {outreachTarget && (
         <OutreachModal
           supplier={outreachTarget}
+          anonymous={event?.outreach_anonymous !== false}
           onClose={() => setOutreachTarget(null)}
           onSent={handleOutreachSent}
         />

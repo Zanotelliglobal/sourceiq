@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
   const body = await req.json();
-  const { title, category, subcategory, description, requirements, annual_spend, timeline, target_countries } =
-    body;
+  const { title, category, subcategory, description, requirements, annual_spend, timeline, target_countries,
+    outreach_anonymous, buyer_name, buyer_role, buyer_company } = body;
 
   if (!title || !category || !description || !requirements) {
     return NextResponse.json(
@@ -44,6 +44,12 @@ export async function POST(req: NextRequest) {
 
   const countries = Array.isArray(target_countries) ? target_countries.join(", ") : (target_countries || null);
 
+  // Outreach identity: default anonymous unless the buyer explicitly opts to disclose.
+  const anonymous = !(outreach_anonymous === false || outreach_anonymous === "false");
+  const bName = anonymous ? null : (buyer_name || null);
+  const bRole = anonymous ? null : (buyer_role || null);
+  const bCompany = anonymous ? null : (buyer_company || null);
+
   // Tenant scoping: the event belongs to the caller's resolved organization.
   const orgId = ctx.orgId;
 
@@ -51,10 +57,10 @@ export async function POST(req: NextRequest) {
   try {
     const result = await db
       .prepare(
-        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, timeline, target_countries)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, timeline, target_countries, outreach_anonymous, buyer_name, buyer_role, buyer_company)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, timeline ?? null, countries);
+      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, timeline ?? null, countries, anonymous, bName, bRole, bCompany);
 
     const event = await db
       .prepare("SELECT * FROM sourcing_events WHERE id = ?")

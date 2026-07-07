@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOutreachAgent, runSupplierResponseAgent } from "@/lib/agents";
+import { runOutreachAgent, runSupplierResponseAgent, runContactFinderAgent } from "@/lib/agents";
 import { sendEmail, isMailLive, mailStatus, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, usageSummary } from "@/lib/usage";
@@ -28,8 +28,13 @@ export async function POST(req: NextRequest) {
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; category: string; requirements: string; annual_spend: string;
+    outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
   } | undefined;
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const buyer = event.outreach_anonymous
+    ? null
+    : { name: event.buyer_name, role: event.buyer_role, company: event.buyer_company };
 
   // Target: explicit list, else everyone sitting in the long list.
   const targets = (Array.isArray(supplier_ids) && supplier_ids.length > 0
@@ -38,7 +43,7 @@ export async function POST(req: NextRequest) {
       ).all(event.id, ...supplier_ids)
     : await db.prepare("SELECT * FROM suppliers WHERE event_id=? AND funnel_stage='long_list' ORDER BY ai_score DESC")
         .all(event.id)) as {
-    id: number; name: string; country: string; ai_score: number | null; contact_email: string | null;
+    id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null;
   }[];
 
   const live = isMailLive();
@@ -73,11 +78,23 @@ export async function POST(req: NextRequest) {
         let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0;
 
         for (const s of targets) {
+          // 0 ── Contact discovery: find a real email if we don't have one yet.
+          if (!s.contact_email) {
+            try {
+              const found = await runContactFinderAgent(s.name, s.country, s.website || "", track("contact_finder"));
+              if (found.contact_email) {
+                s.contact_email = found.contact_email;
+                await db.prepare("UPDATE suppliers SET contact_email=? WHERE id=?").run(found.contact_email, s.id);
+                send({ type: "contact_found", supplier_id: s.id, supplier_name: s.name, contact_email: found.contact_email });
+              }
+            } catch { /* non-fatal — continue with draft */ }
+          }
+
           // 1 ── Draft + send RFI
           send({ type: "contacting", supplier_id: s.id, supplier_name: s.name });
           let email;
           try {
-            email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach"));
+            email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach"), buyer);
           } catch (err) {
             send({ type: "supplier_error", supplier_id: s.id, message: String(err) });
             continue;

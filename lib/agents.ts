@@ -374,6 +374,78 @@ Return JSON only:
   return JSON.parse(match[0]) as EnrichmentResult;
 }
 
+// ─── CONTACT DISCOVERY AGENT ──────────────────────────────────────────────────
+// Finds a real contact email for a supplier, ideally from their own "Contact Us"
+// page. Uses web_search and resolves the pause_turn resume loop like the scout.
+// Returns "" when no genuine address could be verified — never a guessed address.
+export type ContactResult = { contact_email: string; source: string };
+
+export async function runContactFinderAgent(
+  supplierName: string,
+  country: string,
+  website: string,
+  onUsage?: UsageCb
+): Promise<ContactResult> {
+  const prompt = `You are SourceIQ's Contact Discovery Agent. Find a REAL contact email address for this supplier.
+
+Supplier: ${supplierName}
+Country: ${country}
+Known website: ${website || "(unknown — find it via search)"}
+
+RULES (critical):
+- You have a \`web_search\` tool. USE IT. Prefer the company's own "Contact Us" / "Contatti" / "Kontakt" / "Contacto" page.
+- Return ONLY an email address you actually saw on the company's own site or a reputable directory listing. Prefer a sales/info/RFQ/contact mailbox over a personal one.
+- NEVER guess, construct, or infer an address from the domain. If you cannot verify a real address, return an empty string.
+
+Your FINAL message must be ONLY this JSON:
+{ "contact_email": "the verified address, or empty string", "source": "the URL where you saw it, or empty string" }`;
+
+  const markCache = (content: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (Array.isArray(content) && content.length) {
+      const last = content[content.length - 1];
+      if (last && typeof last === "object") last.cache_control = { type: "ephemeral" };
+    }
+    return content;
+  };
+
+  const messages: any[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
+    { role: "user", content: [{ type: "text", text: prompt, cache_control: { type: "ephemeral" } }] },
+  ];
+  let fullText = "";
+  let guard = 0;
+
+  while (guard++ < 6) {
+    const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      model: "claude-opus-4-7",
+      max_tokens: 4000,
+      thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
+      messages,
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    onUsage?.(response.usage);
+
+    fullText = (response.content || [])
+      .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
+      .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .join("");
+
+    if (response.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: markCache(response.content) });
+      continue;
+    }
+    break;
+  }
+
+  const match = fullText.match(/\{[\s\S]*\}/);
+  if (!match) return { contact_email: "", source: "" };
+  try {
+    const r = JSON.parse(match[0]) as ContactResult;
+    return { contact_email: (r.contact_email || "").trim(), source: (r.source || "").trim() };
+  } catch {
+    return { contact_email: "", source: "" };
+  }
+}
+
 // ─── OUTREACH AGENT ───────────────────────────────────────────────────────────
 export type OutreachEmail = {
   language: string;        // e.g. "German", "Italian", "English"
@@ -383,15 +455,34 @@ export type OutreachEmail = {
   body_en: string;         // English translation
 };
 
+export type BuyerIdentity = {
+  name?: string | null;
+  role?: string | null;
+  company?: string | null;
+};
+
 export async function runOutreachAgent(
   supplierName: string,
   country: string,
   category: string,
   requirements: string,
   annualSpend: string,
-  onUsage?: UsageCb
+  onUsage?: UsageCb,
+  buyer?: BuyerIdentity | null
 ): Promise<OutreachEmail> {
-  const prompt = `You are SourceIQ's Outreach Agent. Write a compelling, anonymous outreach email to a supplier.
+  const disclosed = !!(buyer && (buyer.name || buyer.company));
+  const identityRules = disclosed
+    ? `IDENTITY (disclosed outreach):
+- This email is sent on behalf of a named buyer. Introduce them clearly.
+- Buyer name: ${buyer?.name || "(not provided)"}
+- Buyer role: ${buyer?.role || "(not provided)"}
+- Buyer company: ${buyer?.company || "(not provided)"}
+- Write as this buyer (first person), and sign off with their name, role, and company.
+- Do NOT mention SourceIQ or any intermediary.`
+    : `IDENTITY (anonymous outreach):
+- Do NOT reveal the buyer's identity (SourceIQ acts as intermediary).`;
+
+  const prompt = `You are SourceIQ's Outreach Agent. Write a compelling outreach email to a supplier.
 
 Supplier: ${supplierName}
 Supplier country: ${country}
@@ -399,12 +490,13 @@ Category: ${category}
 Requirements: ${requirements}
 Annual Spend: ${annualSpend || "Confidential at this stage"}
 
+${identityRules}
+
 LANGUAGE RULE (critical):
 - Write the email in the primary BUSINESS language of the supplier's country (e.g. Germany→German, Italy→Italian, Mexico→Spanish, France→French, Japan→Japanese, Brazil→Portuguese, China→Simplified Chinese, Turkey→Turkish, Poland→Polish, Vietnam→Vietnamese). For English-speaking countries, write in English.
 - Also provide a faithful English translation.
 
 Other rules:
-- Do NOT reveal the buyer's identity (SourceIQ acts as intermediary)
 - Be professional and concise (under 180 words)
 - Reference the spend opportunity to signal seriousness
 - End with a clear CTA to express interest
