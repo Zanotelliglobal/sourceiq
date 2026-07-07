@@ -128,13 +128,19 @@ function merge(base: ContactChannels, add: Partial<ContactChannels>): ContactCha
 // Scrape a supplier's own site for contact channels. Fetches the homepage, follows
 // a discovered contact link (or tries common slugs), and stops early once it has
 // a solid email. Fully deterministic — no model call.
-export async function scrapeSupplierContact(website: string): Promise<ContactChannels> {
+export async function scrapeSupplierContact(
+  website: string,
+  opts?: { timeoutMs?: number; maxPages?: number },
+): Promise<ContactChannels> {
   const origin = normalizeSite(website);
   if (!origin) return EMPTY;
 
+  const timeoutMs = opts?.timeoutMs ?? 7000;
+  const maxPages = opts?.maxPages ?? 4;
+
   let result: ContactChannels = { ...EMPTY };
 
-  const home = await fetchHtml(origin);
+  const home = await fetchHtml(origin, timeoutMs);
   if (home) {
     result = merge(result, extractFromHtml(home, origin));
     const link = findContactLink(home, origin);
@@ -146,9 +152,9 @@ export async function scrapeSupplierContact(website: string): Promise<ContactCha
   if (!haveGoodEmail) {
     const candidates = [result.contact_url, ...CONTACT_PATHS.map(p => origin + p)]
       .filter((v, i, a): v is string => !!v && a.indexOf(v) === i)
-      .slice(0, 4); // bound the number of extra requests
+      .slice(0, maxPages); // bound the number of extra requests
     for (const url of candidates) {
-      const html = await fetchHtml(url);
+      const html = await fetchHtml(url, timeoutMs);
       if (!html) continue;
       result.contact_url = result.contact_url || url;
       result = merge(result, extractFromHtml(html, url));

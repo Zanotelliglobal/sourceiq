@@ -6,6 +6,7 @@ import {
   runQualifierAgent,
   runEnricherAgent,
 } from "@/lib/agents";
+import { scrapeSupplierContact } from "@/lib/contact";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
@@ -139,6 +140,23 @@ export async function POST(req: NextRequest) {
               enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
             }
 
+            // Contact mapping DURING sourcing: cheaply scrape the supplier's own
+            // site for a real email / contact page / phone / LinkedIn. This is a
+            // deterministic HTTP scrape (no LLM); the heavier web-search fallback
+            // runs later at outreach time only for suppliers still missing an email.
+            let contactEmail = s.contact_email || "";
+            let contactUrl = "", contactPhone = "", contactLinkedin = "";
+            if (!contactEmail && s.website) {
+              try {
+                // Tight budget during bulk discovery: homepage + 2 contact pages, 5s each.
+                const c = await scrapeSupplierContact(s.website, { timeoutMs: 5000, maxPages: 2 });
+                contactEmail = c.contact_email || contactEmail;
+                contactUrl = c.contact_url;
+                contactPhone = c.phone;
+                contactLinkedin = c.linkedin;
+              } catch { /* best-effort — supplier still saved without a channel */ }
+            }
+
             // Every discovered supplier enters the Long List. Progression through
             // Contacted → Responded → Short List is driven by the outreach campaign.
             const funnel_stage = "long_list";
@@ -146,14 +164,14 @@ export async function POST(req: NextRequest) {
             const result = await db.prepare(`
               INSERT INTO suppliers
                 (event_id, name, country, city, description, capabilities, certifications,
-                 employees, annual_revenue, founded, website, contact_email, data_sources, scout_agent, wave,
+                 employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
                  ai_score, score_rationale, score_breakdown, enrichment, funnel_stage)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
               .run(
                 event.id, s.name, s.country, s.city, s.description,
                 JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
                 s.employees, s.annual_revenue, s.founded, s.website,
-                s.contact_email || null,
+                contactEmail || null, contactUrl || null, contactPhone || null, contactLinkedin || null,
                 JSON.stringify(s.data_sources), agent.label, waveNumber,
                 score.overall_score, score.rationale, JSON.stringify(score.breakdown),
                 JSON.stringify(enrichment), funnel_stage
