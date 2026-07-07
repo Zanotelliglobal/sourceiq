@@ -33,6 +33,28 @@ function normalizeSite(website: string): string | null {
   try { return new URL(w).origin; } catch { return null; }
 }
 
+// Registrable-ish domain: last two labels of a host (e.g. www.ritrama.com →
+// ritrama.com). Good enough to tell "same company" from "third party"; it over-
+// collapses a few multi-part TLDs (foo.co.uk) but that only makes matching
+// slightly stricter, which is the safe direction here.
+function baseDomain(host: string): string {
+  const parts = host.toLowerCase().replace(/^www\./, "").split(".");
+  return parts.length <= 2 ? parts.join(".") : parts.slice(-2).join(".");
+}
+
+function hostOf(url: string): string {
+  try { return new URL(url).hostname; } catch { return ""; }
+}
+
+// An email "belongs to" a page if its domain matches the page's base domain.
+// This is what stops us from scraping an unrelated third-party address (a web
+// agency, a partner, an embedded widget) that merely appears on the page.
+function emailMatchesDomain(email: string, pageBase: string): boolean {
+  if (!pageBase) return false;
+  const dom = (email.split("@")[1] || "").toLowerCase();
+  return !!dom && baseDomain(dom) === pageBase;
+}
+
 // Score an email so we prefer generic business mailboxes over noreply/personal.
 function emailScore(email: string): number {
   const local = email.split("@")[0].toLowerCase();
@@ -79,10 +101,15 @@ function extractFromHtml(html: string, pageUrl: string): Partial<ContactChannels
   }
   // Also scan visible text for bare addresses (many sites print them without mailto:).
   const bare = html.match(EMAIL_RE) || [];
+  const pageBase = baseDomain(hostOf(pageUrl));
   const seen: Record<string, true> = {};
   const emails = mailtos.concat(bare)
     .filter(e => {
       if (!e.includes("@") || JUNK_EMAIL.test(e)) return false;
+      // Only accept addresses on the SAME domain as the page — this rejects
+      // unrelated third-party emails (partners, web agencies, embedded widgets)
+      // that merely appear in the HTML.
+      if (!emailMatchesDomain(e, pageBase)) return false;
       if (seen[e]) return false;
       seen[e] = true;
       return true;
