@@ -31,12 +31,6 @@ const SPEND_RANGES = [
   "Confidential",
 ];
 
-const TIMELINES = [
-  "Critical path — decision required < 4 weeks",
-  "Accelerated — 1 to 3 months",
-  "Standard cycle — 3 to 6 months",
-  "Strategic / long-term — 6+ months",
-];
 
 
 // Sourcing geographies the scout agents should prioritise (quick picks).
@@ -65,7 +59,7 @@ export default function NewEventPage() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     title: "", category: "", subcategory: "", description: "",
-    requirements: "", annual_spend: "", timeline: "",
+    requirements: "", annual_spend: "",
     incumbent: "",
     // Outreach identity: when anonymous, SourceIQ reaches out on the buyer's behalf
     // without naming them. When disclosed, the buyer's name/role/company appear in
@@ -450,22 +444,13 @@ export default function NewEventPage() {
             )}
           </div>
 
-          {/* Spend + Timeline */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Estimated Annual Spend (TCO)</label>
-              <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
-                <option value="">Select range...</option>
-                {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Decision Timeline</label>
-              <select className="input" value={form.timeline} onChange={e => set("timeline", e.target.value)}>
-                <option value="">Select timeline...</option>
-                {TIMELINES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
+          {/* Spend */}
+          <div>
+            <label className="label">Estimated Annual Spend (TCO)</label>
+            <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
+              <option value="">Select range...</option>
+              {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
 
           {/* Submit */}

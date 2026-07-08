@@ -35,7 +35,7 @@ type AgentRun = {
 
 type Event = {
   id: number; title: string; category: string; subcategory: string | null; description: string;
-  requirements: string; annual_spend: string | null; timeline: string | null;
+  requirements: string; annual_spend: string | null;
   target_countries: string | null;
   outreach_anonymous?: boolean;
   buyer_name?: string | null; buyer_role?: string | null; buyer_company?: string | null;
@@ -43,7 +43,6 @@ type Event = {
 };
 
 const SPEND_RANGES = ["< $500K / year", "$500K – $1M / year", "$1M – $5M / year", "$5M – $20M / year", "$20M – $50M / year", "> $50M / year", "Confidential"];
-const TIMELINES = ["Critical path — decision required < 4 weeks", "Accelerated — 1 to 3 months", "Standard cycle — 3 to 6 months", "Strategic / long-term — 6+ months"];
 const GEOGRAPHIES = ["United States", "Canada", "Mexico", "Germany", "United Kingdom", "Italy", "Poland", "Czech Republic", "Turkey", "India", "China", "Vietnam", "Japan", "South Korea", "Taiwan", "Brazil"];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -631,7 +630,6 @@ function BriefModal({ event, onClose, onSaved }: {
     description: event.description,
     requirements: event.requirements,
     annual_spend: event.annual_spend || "",
-    timeline: event.timeline || "",
   });
   const [countries, setCountries] = useState<string[]>(
     (event.target_countries || "").split(",").map(c => c.trim()).filter(Boolean)
@@ -721,21 +719,12 @@ function BriefModal({ event, onClose, onSaved }: {
             )}
             <p className="text-xs text-slate-400 mt-1.5">Empty = global search. Scouts prioritise these countries and search local-language sources.</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Estimated Annual Spend</label>
-              <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
-                <option value="">Select range…</option>
-                {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Decision Timeline</label>
-              <select className="input" value={form.timeline} onChange={e => set("timeline", e.target.value)}>
-                <option value="">Select timeline…</option>
-                {TIMELINES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className="label">Estimated Annual Spend</label>
+            <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
+              <option value="">Select range…</option>
+              {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         </div>
 

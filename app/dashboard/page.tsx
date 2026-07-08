@@ -6,7 +6,7 @@ import { Zap, Factory, Star, ClipboardList, Search, Plus, ArrowRight } from "luc
 
 type EventRow = {
   id: number; title: string; category: string; status: string;
-  annual_spend: string | null; timeline: string | null;
+  annual_spend: string | null;
   wave_count: number; created_at: string;
   supplier_count: number; shortlisted_count: number;
 };

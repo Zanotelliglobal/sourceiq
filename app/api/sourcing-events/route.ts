@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
   const body = await req.json();
-  const { title, category, subcategory, description, requirements, annual_spend, timeline, target_countries,
+  const { title, category, subcategory, description, requirements, annual_spend, target_countries,
     outreach_anonymous, buyer_name, buyer_role, buyer_company } = body;
 
   if (!title || !category || !description || !requirements) {
@@ -57,10 +57,10 @@ export async function POST(req: NextRequest) {
   try {
     const result = await db
       .prepare(
-        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, timeline, target_countries, outreach_anonymous, buyer_name, buyer_role, buyer_company)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, target_countries, outreach_anonymous, buyer_name, buyer_role, buyer_company)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, timeline ?? null, countries, anonymous, bName, bRole, bCompany);
+      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, countries, anonymous, bName, bRole, bCompany);
 
     const event = await db
       .prepare("SELECT * FROM sourcing_events WHERE id = ?")
