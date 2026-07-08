@@ -38,12 +38,6 @@ const TIMELINES = [
   "Strategic / long-term — 6+ months",
 ];
 
-const SUPPLY_RISKS = [
-  "Single-sourced — no approved alternates",
-  "Dual-sourced — limited backup capacity",
-  "Multi-sourced — seeking additional options",
-  "New category — no incumbent",
-];
 
 // Sourcing geographies the scout agents should prioritise (quick picks).
 const GEOGRAPHIES = [
@@ -72,7 +66,7 @@ export default function NewEventPage() {
   const [form, setForm] = useState({
     title: "", category: "", subcategory: "", description: "",
     requirements: "", annual_spend: "", timeline: "",
-    supply_risk: "", incumbent: "",
+    incumbent: "",
     // Outreach identity: when anonymous, SourceIQ reaches out on the buyer's behalf
     // without naming them. When disclosed, the buyer's name/role/company appear in
     // the outreach email and drafts can be copied or opened in the default mail app.
@@ -145,7 +139,7 @@ export default function NewEventPage() {
     setLoading(true);
     try {
       const description = form.incumbent
-        ? `${form.description}\n\nSupply Risk: ${form.supply_risk || "Not specified"}\nIncumbent: ${form.incumbent}`
+        ? `${form.description}\n\nIncumbent: ${form.incumbent}`
         : form.description;
       const res = await fetch("/api/sourcing-events", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -331,35 +325,15 @@ export default function NewEventPage() {
             </p>
           </div>
 
-          {/* Supply risk + incumbent */}
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="label">Supply Risk Profile</label>
-              <div className="grid grid-cols-2 gap-2">
-                {SUPPLY_RISKS.map(r => (
-                  <button
-                    key={r} type="button"
-                    onClick={() => set("supply_risk", r)}
-                    className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-                      form.supply_risk === r
-                        ? "bg-amber-500 text-white border-amber-500"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-amber-300 hover:bg-amber-50"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="label">Incumbent Supplier(s) <span className="font-normal text-slate-400">— optional</span></label>
-              <input
-                className="input"
-                placeholder="e.g. Acme Machining Co., Smith Fabricators (will be excluded from outreach)"
-                value={form.incumbent}
-                onChange={e => set("incumbent", e.target.value)}
-              />
-            </div>
+          {/* Incumbent */}
+          <div>
+            <label className="label">Incumbent Supplier(s) <span className="font-normal text-slate-400">— optional</span></label>
+            <input
+              className="input"
+              placeholder="e.g. Acme Machining Co., Smith Fabricators (will be excluded from outreach)"
+              value={form.incumbent}
+              onChange={e => set("incumbent", e.target.value)}
+            />
           </div>
 
           {/* Target geographies */}
