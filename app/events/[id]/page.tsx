@@ -55,19 +55,21 @@ const STAGES = [
 ];
 
 // The ordered progression pipeline shown as the funnel bar.
+// Semantic funnel colors — canonical per design-system/MASTER.md:
+// long=slate · contacted=blue · responded=green · shortlisted=amber(gold) · declined=red.
 const FUNNEL = [
-  { key: "long_list",   label: "Long List",  hint: "Discovered",       dot: "bg-slate-400" },
-  { key: "contacted",   label: "Contacted",  hint: "RFI sent by agent", dot: "bg-amber-500" },
-  { key: "responded",   label: "Responded",  hint: "Positive reply",    dot: "bg-blue-500" },
-  { key: "shortlisted", label: "Short List", hint: "Buyer approved",    dot: "bg-emerald-500" },
+  { key: "long_list",   label: "Long List",  hint: "Discovered",        dot: "bg-slate-400" },
+  { key: "contacted",   label: "Contacted",  hint: "RFI sent by agent", dot: "bg-blue-500" },
+  { key: "responded",   label: "Responded",  hint: "Positive reply",    dot: "bg-emerald-500" },
+  { key: "shortlisted", label: "Short List", hint: "Buyer approved",    dot: "bg-amber-500" },
 ];
 
 const STAGE_STYLE: Record<string, { dot: string; text: string; bg: string }> = {
-  long_list:    { dot: "bg-slate-400",   text: "text-slate-500",   bg: "bg-slate-50" },
-  contacted:    { dot: "bg-amber-500 animate-pulse", text: "text-amber-700", bg: "bg-amber-50" },
-  responded:    { dot: "bg-blue-500",    text: "text-blue-600",    bg: "bg-blue-50" },
-  shortlisted:  { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" },
-  declined:     { dot: "bg-red-400",     text: "text-red-500",     bg: "bg-red-50" },
+  long_list:    { dot: "bg-slate-400",              text: "text-slate-500",   bg: "bg-slate-50" },
+  contacted:    { dot: "bg-blue-500 animate-pulse", text: "text-blue-700",    bg: "bg-blue-50" },
+  responded:    { dot: "bg-emerald-500",            text: "text-emerald-700", bg: "bg-emerald-50" },
+  shortlisted:  { dot: "bg-amber-500",              text: "text-amber-700",   bg: "bg-amber-50" },
+  declined:     { dot: "bg-red-400",                text: "text-red-500",     bg: "bg-red-50" },
 };
 
 const SCORE_STYLE = (s: number) =>
@@ -347,8 +349,8 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
         <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4">
           <div className="flex flex-wrap gap-2">
             {supplier.funnel_stage === "long_list" && (
-              <button onClick={() => { onOutreach(supplier); onClose(); }} className="btn-primary flex-1 justify-center py-2.5">
-                📨 Send RFI Now
+              <button onClick={() => { onOutreach(supplier); onClose(); }} className="btn-cta flex-1 justify-center py-2.5">
+                Send RFI Now
               </button>
             )}
             {supplier.funnel_stage === "contacted" && (
@@ -1045,7 +1047,7 @@ export default function EventPage() {
           <button
             onClick={runWave}
             disabled={busy}
-            className="btn-primary w-full justify-center mt-2 py-2"
+            className="btn-cta w-full justify-center mt-2 py-2"
           >
             {running ? (
               <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Running...</>
