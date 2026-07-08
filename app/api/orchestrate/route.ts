@@ -4,8 +4,11 @@ import {
   runOrchestrator,
   runScoutAgent,
   runQualifierAgent,
+  runQualifierAgentGrounded,
   runEnricherAgent,
 } from "@/lib/agents";
+
+type ScoutSupplier = Awaited<ReturnType<typeof runScoutAgent>>[number];
 import { scrapeSupplierContact } from "@/lib/contact";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
@@ -76,27 +79,138 @@ export async function POST(req: NextRequest) {
 
         send({ type: "agents_registered", agents: plan.agents });
 
-        // Get existing supplier names to avoid duplicates
-        const existing = await db.prepare("SELECT name FROM suppliers WHERE event_id=?").all(event.id) as { name: string }[];
-        const existingNames = existing.map(s => s.name);
+        // Get existing suppliers (name + website) to avoid duplicates across waves.
+        const existing = await db.prepare("SELECT name, website FROM suppliers WHERE event_id=?").all(event.id) as { name: string; website: string | null }[];
 
-        // Run each scout agent sequentially (streaming results as they come)
+        // Dedup on BOTH a normalized company name and a website domain, so
+        // "Acme Manufacturing Inc." and "Acme Mfg" (or two listings that share a
+        // domain) collapse to one. Exact-string matching leaked obvious dupes.
+        const normName = (n: string) =>
+          (n || "")
+            .toLowerCase()
+            .replace(/\b(inc|llc|ltd|limited|gmbh|corp|corporation|co|company|srl|spa|sa|ag|kg|bv|plc|pvt|pte|group|holding|holdings|industries|manufacturing|mfg)\b/g, "")
+            .replace(/[^a-z0-9]/g, "");
+        const domainOf = (url: string | null | undefined) => {
+          if (!url) return "";
+          return url
+            .toLowerCase()
+            .replace(/^https?:\/\//, "")
+            .replace(/^www\./, "")
+            .split("/")[0]
+            .trim();
+        };
+
+        const seenNames = new Set<string>();
+        const seenDomains = new Set<string>();
+        for (const s of existing) {
+          const nn = normName(s.name);
+          if (nn) seenNames.add(nn);
+          const dom = domainOf(s.website);
+          if (dom) seenDomains.add(dom);
+        }
+        // Synchronous check-and-claim so concurrent scouts never race in on a dupe.
+        const claimIfNew = (name: string, website?: string | null): boolean => {
+          const nn = normName(name);
+          const dom = domainOf(website);
+          if (nn && seenNames.has(nn)) return false;
+          if (dom && seenDomains.has(dom)) return false;
+          if (nn) seenNames.add(nn);
+          if (dom) seenDomains.add(dom);
+          return true;
+        };
+        // Avoid-list passed to scouts: the human-readable names we already have.
+        const avoidNames: string[] = existing.map(s => s.name);
+
+        const groundingOn = process.env.QUALIFIER_GROUNDING !== "0";
         let newSuppliers = 0;
-        for (const agent of plan.agents) {
-          // Mark agent as running
+
+        // Process one deduped supplier: qualify (cheap → grounded for the risky
+        // band) → enrich → contact scrape → insert → stream.
+        const makeProcessSupplier = (agent: (typeof plan.agents)[number]) => async (s: ScoutSupplier) => {
+          send({ type: "qualifying", agent_id: agent.id, supplier_name: s.name });
+
+          let score;
+          try {
+            score = await runQualifierAgent(s, categoryLabel, event.requirements, event.annual_spend, track("qualifier"));
+          } catch {
+            score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit:60, quality_signals:60, geographic_risk:60, financial_stability:60, compliance_readiness:60 } };
+          }
+
+          // Escalate to the grounded (web-verified) qualifier when the cheap pass
+          // is untrustworthy: thin evidence, or a borderline score where a false
+          // positive is most costly. Keeps cost down by grounding only the risky band.
+          const thinEvidence = (s.data_sources || []).length === 0;
+          const borderline = score.overall_score >= 60 && score.overall_score <= 82;
+          if (groundingOn && (thinEvidence || borderline)) {
+            try {
+              score = await runQualifierAgentGrounded(s, categoryLabel, event.requirements, event.annual_spend, track("qualifier"));
+            } catch { /* keep the cheap-pass score on failure */ }
+          }
+
+          let enrichment;
+          try {
+            enrichment = await runEnricherAgent(s, score, categoryLabel, track("enricher"));
+          } catch {
+            enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
+          }
+
+          // Contact mapping DURING sourcing: cheaply scrape the supplier's own
+          // site for a real email / contact page / phone / LinkedIn. This is a
+          // deterministic HTTP scrape (no LLM); the heavier web-search fallback
+          // runs later at outreach time only for suppliers still missing an email.
+          let contactEmail = s.contact_email || "";
+          let contactUrl = "", contactPhone = "", contactLinkedin = "";
+          if (!contactEmail && s.website) {
+            try {
+              // Tight budget during bulk discovery: homepage + 2 contact pages, 5s each.
+              const c = await scrapeSupplierContact(s.website, { timeoutMs: 5000, maxPages: 2 });
+              contactEmail = c.contact_email || contactEmail;
+              contactUrl = c.contact_url;
+              contactPhone = c.phone;
+              contactLinkedin = c.linkedin;
+            } catch { /* best-effort — supplier still saved without a channel */ }
+          }
+
+          // Every discovered supplier enters the Long List. Progression through
+          // Contacted → Responded → Short List is driven by the outreach campaign.
+          const funnel_stage = "long_list";
+
+          const result = await db.prepare(`
+            INSERT INTO suppliers
+              (event_id, name, country, city, description, capabilities, certifications,
+               employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
+               ai_score, score_rationale, score_breakdown, enrichment, funnel_stage)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(
+              event.id, s.name, s.country, s.city, s.description,
+              JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
+              s.employees, s.annual_revenue, s.founded, s.website,
+              contactEmail || null, contactUrl || null, contactPhone || null, contactLinkedin || null,
+              JSON.stringify(s.data_sources), agent.label, waveNumber,
+              score.overall_score, score.rationale, JSON.stringify(score.breakdown),
+              JSON.stringify(enrichment), funnel_stage
+            );
+
+          const saved = await db.prepare("SELECT * FROM suppliers WHERE id=?").get(result.lastInsertRowid);
+          send({ type: "supplier_found", supplier: saved, agent_id: agent.id, agent_label: agent.label });
+          newSuppliers++;
+        };
+
+        // Run one scout end-to-end: scout → dedup claim → qualify/enrich pool.
+        const runScout = async (agent: (typeof plan.agents)[number]) => {
           await db.prepare(`UPDATE agent_runs SET status='running', message=?, started_at=datetime('now')
                       WHERE event_id=? AND agent_id=? AND wave=?`)
             .run(`Scouting ${event.category} suppliers...`, event.id, agent.id, waveNumber);
 
           send({ type: "agent_start", agent_id: agent.id, agent_label: agent.label, wave: waveNumber });
 
-          let found: Awaited<ReturnType<typeof runScoutAgent>> = [];
+          let found: ScoutSupplier[] = [];
           try {
             found = await runScoutAgent(
               agent.type, agent.focus,
               categoryLabel, event.description,
               event.requirements, event.annual_spend,
-              waveNumber, existingNames,
+              waveNumber, avoidNames,
               event.target_countries || "",
               track("scout")
             );
@@ -105,99 +219,45 @@ export async function POST(req: NextRequest) {
                         WHERE event_id=? AND agent_id=? AND wave=?`)
               .run(String(err), event.id, agent.id, waveNumber);
             send({ type: "agent_error", agent_id: agent.id, message: String(err) });
-            continue;
+            return;
           }
 
-          // Dedup up-front (synchronously) so concurrent workers never race on names.
-          const fresh = found.filter(s => {
-            if (existingNames.includes(s.name)) return false;
-            existingNames.push(s.name);
-            return true;
-          });
+          // Claim new suppliers synchronously so parallel scouts can't double-insert.
+          const fresh = found.filter(s => claimIfNew(s.name, s.website));
 
           send({ type: "agent_scouted", agent_id: agent.id, count: fresh.length, message: `Found ${fresh.length} suppliers, qualifying...` });
           await db.prepare(`UPDATE agent_runs SET status='qualifying', message=?, suppliers_found=?
                       WHERE event_id=? AND agent_id=? AND wave=?`)
             .run(`Qualifying ${fresh.length} suppliers...`, fresh.length, event.id, agent.id, waveNumber);
 
-          // Qualify + enrich concurrently with a bounded pool. This keeps the live
-          // SSE streaming UX (results stream in as they finish) while running up to
-          // QUAL_CONCURRENCY suppliers in flight at once — a large wall-clock win.
-          const processSupplier = async (s: (typeof fresh)[number]) => {
-            send({ type: "qualifying", agent_id: agent.id, supplier_name: s.name });
-
-            let score;
-            try {
-              score = await runQualifierAgent(s, categoryLabel, event.requirements, event.annual_spend, track("qualifier"));
-            } catch {
-              score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit:60, quality_signals:60, geographic_risk:60, financial_stability:60, compliance_readiness:60 } };
-            }
-
-            let enrichment;
-            try {
-              enrichment = await runEnricherAgent(s, score, categoryLabel, track("enricher"));
-            } catch {
-              enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
-            }
-
-            // Contact mapping DURING sourcing: cheaply scrape the supplier's own
-            // site for a real email / contact page / phone / LinkedIn. This is a
-            // deterministic HTTP scrape (no LLM); the heavier web-search fallback
-            // runs later at outreach time only for suppliers still missing an email.
-            let contactEmail = s.contact_email || "";
-            let contactUrl = "", contactPhone = "", contactLinkedin = "";
-            if (!contactEmail && s.website) {
-              try {
-                // Tight budget during bulk discovery: homepage + 2 contact pages, 5s each.
-                const c = await scrapeSupplierContact(s.website, { timeoutMs: 5000, maxPages: 2 });
-                contactEmail = c.contact_email || contactEmail;
-                contactUrl = c.contact_url;
-                contactPhone = c.phone;
-                contactLinkedin = c.linkedin;
-              } catch { /* best-effort — supplier still saved without a channel */ }
-            }
-
-            // Every discovered supplier enters the Long List. Progression through
-            // Contacted → Responded → Short List is driven by the outreach campaign.
-            const funnel_stage = "long_list";
-
-            const result = await db.prepare(`
-              INSERT INTO suppliers
-                (event_id, name, country, city, description, capabilities, certifications,
-                 employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
-                 ai_score, score_rationale, score_breakdown, enrichment, funnel_stage)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-              .run(
-                event.id, s.name, s.country, s.city, s.description,
-                JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
-                s.employees, s.annual_revenue, s.founded, s.website,
-                contactEmail || null, contactUrl || null, contactPhone || null, contactLinkedin || null,
-                JSON.stringify(s.data_sources), agent.label, waveNumber,
-                score.overall_score, score.rationale, JSON.stringify(score.breakdown),
-                JSON.stringify(enrichment), funnel_stage
-              );
-
-            const saved = await db.prepare("SELECT * FROM suppliers WHERE id=?").get(result.lastInsertRowid);
-            send({ type: "supplier_found", supplier: saved, agent_id: agent.id, agent_label: agent.label });
-            newSuppliers++;
-          };
-
-          const concurrency = Math.max(1, Number(process.env.QUAL_CONCURRENCY) || 4);
-          let cursor = 0;
-          const worker = async () => {
-            while (cursor < fresh.length) {
-              const idx = cursor++;
+          // Qualify + enrich concurrently with a bounded pool per scout.
+          const processSupplier = makeProcessSupplier(agent);
+          const qualConcurrency = Math.max(1, Number(process.env.QUAL_CONCURRENCY) || 4);
+          let qCursor = 0;
+          const qWorker = async () => {
+            while (qCursor < fresh.length) {
+              const idx = qCursor++;
               await processSupplier(fresh[idx]);
             }
           };
-          await Promise.all(Array.from({ length: Math.min(concurrency, fresh.length) }, worker));
+          await Promise.all(Array.from({ length: Math.min(qualConcurrency, fresh.length) }, qWorker));
 
-          // Mark agent complete
           await db.prepare(`UPDATE agent_runs SET status='complete', message=?, completed_at=datetime('now')
                       WHERE event_id=? AND agent_id=? AND wave=?`)
-            .run(`Delivered ${found.length} qualified leads`, event.id, agent.id, waveNumber);
-          send({ type: "agent_complete", agent_id: agent.id, agent_label: agent.label, suppliers_found: found.length });
-        }
+            .run(`Delivered ${fresh.length} qualified leads`, event.id, agent.id, waveNumber);
+          send({ type: "agent_complete", agent_id: agent.id, agent_label: agent.label, suppliers_found: fresh.length });
+        };
+
+        // Run scouts in a bounded pool — the big wall-clock win over sequential.
+        const scoutConcurrency = Math.max(1, Number(process.env.SCOUT_CONCURRENCY) || 3);
+        let sCursor = 0;
+        const sWorker = async () => {
+          while (sCursor < plan.agents.length) {
+            const idx = sCursor++;
+            await runScout(plan.agents[idx]);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(scoutConcurrency, plan.agents.length) }, sWorker));
 
         await db.prepare(`UPDATE sourcing_events SET status='reviewing', updated_at=datetime('now') WHERE id=?`)
           .run(event.id);

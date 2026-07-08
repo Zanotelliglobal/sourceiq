@@ -164,7 +164,7 @@ export async function runScoutAgent(
   onUsage?: UsageCb
 ): Promise<ScoutResult[]> {
   const avoidList = existingNames.length > 0
-    ? `\n\nDo NOT include these already-found suppliers (find DIFFERENT ones): ${existingNames.slice(0, 60).join(", ")}`
+    ? `\n\nDo NOT include these already-found suppliers (find DIFFERENT ones): ${existingNames.slice(0, 150).join(", ")}`
     : "";
 
   const geoLine = targetCountries
@@ -322,6 +322,86 @@ Return JSON only:
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
   onUsage?.((response as any).usage); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  const text = response.content
+    .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
+    .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .join("");
+
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return { overall_score: 60, rationale: "Limited data for qualification.", breakdown: { capability_fit: 60, quality_signals: 60, geographic_risk: 60, financial_stability: 60, compliance_readiness: 60 } };
+  return JSON.parse(match[0]) as QualificationResult;
+}
+
+// ─── GROUNDED QUALIFIER AGENT ─────────────────────────────────────────────────
+// A stricter, evidence-backed qualifier. Unlike runQualifierAgent (which scores
+// blind on the scout's self-report), this one gets web_search and must VERIFY the
+// supplier's core capability before awarding a high score. Reserved for the
+// thin-evidence / borderline band where a false positive is most costly.
+// Resolves the pause_turn loop like the scout/contact agents.
+export async function runQualifierAgentGrounded(
+  supplier: ScoutResult,
+  category: string,
+  requirements: string,
+  annualSpend: string,
+  onUsage?: UsageCb
+): Promise<QualificationResult> {
+  const prompt = `You are SourceIQ's Qualification Agent, verification tier. Score this supplier RIGOROUSLY, and verify claims with web_search before trusting them.
+
+Supplier: ${supplier.name} (${supplier.country})
+Website: ${supplier.website || "unknown"}
+Description: ${supplier.description}
+Capabilities: ${supplier.capabilities.join(", ")}
+Certifications: ${supplier.certifications.join(", ")}
+Employees: ${supplier.employees}
+Revenue: ${supplier.annual_revenue}
+Evidence sources (from web scouting): ${(supplier.data_sources || []).join(", ") || "none"}
+
+Buyer Requirements:
+- Category: ${category}
+- Requirements: ${requirements}
+- Annual Spend: ${annualSpend || "Not specified"}
+
+Use web_search (up to 3 searches) to confirm the supplier genuinely offers the core capability required for "${category}" and that they are a real, active business. Prioritize the company's own site and independent sources.
+
+Scoring rules:
+- Score 0-100 across 5 dimensions. Be strict — 80+ means genuinely excellent, VERIFIED fit.
+- If you CANNOT verify the core capability from credible sources, cap overall_score at 74 and note the gap in the rationale.
+- Reward independently confirmed capabilities, certifications, and scale; penalize thin or contradicted evidence.
+
+Return JSON only (after any searches):
+{
+  "overall_score": 78,
+  "rationale": "2-3 sentence assessment citing what you verified and any gaps",
+  "breakdown": {
+    "capability_fit": 82,
+    "quality_signals": 75,
+    "geographic_risk": 70,
+    "financial_stability": 80,
+    "compliance_readiness": 85
+  }
+}`;
+
+  const messages: any[] = [{ role: "user", content: prompt }]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  let response: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  // Resume the pause_turn loop until the model finishes its turn.
+  for (let i = 0; i < 6; i++) {
+    response = await client.messages.create({
+      model: "claude-opus-4-7",
+      max_tokens: 3000,
+      thinking: { type: "adaptive" },
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+      messages,
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    onUsage?.(response.usage);
+
+    if (response.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: response.content });
+      continue;
+    }
+    break;
+  }
 
   const text = response.content
     .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
