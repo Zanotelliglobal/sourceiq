@@ -189,31 +189,36 @@ export default function NewEventPage() {
         </div>
 
         {/* Agent pipeline preview */}
-        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50/40 p-5 mb-8">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50/40 p-5 sm:p-6 mb-8">
+          <div className="flex items-center gap-2 mb-5">
             <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse-dot" />
             <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600">Agent Pipeline</span>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-stretch gap-2 sm:gap-3">
             {[
               { Icon: Brain, label: "Orchestrator", sub: "Plans wave strategy" },
-              { Icon: null, label: "", sub: "" },
               { Icon: Search, label: "Scout ×3", sub: "Broad · Niche · Geo" },
-              { Icon: null, label: "", sub: "" },
               { Icon: Scale, label: "Qualifier", sub: "5-axis scoring" },
-              { Icon: null, label: "", sub: "" },
               { Icon: Lightbulb, label: "Enricher", sub: "Risk · Strengths" },
-            ].map((a, i) => a.label && a.Icon ? (
-              <div key={i} className="flex-shrink-0 bg-white/80 rounded-xl px-3 py-2.5 border border-blue-100/80 text-center min-w-[80px]">
-                <a.Icon className="w-5 h-5 mx-auto mb-1 text-blue-600" strokeWidth={2} />
-                <div className="text-[11px] font-bold text-slate-700">{a.label}</div>
-                <div className="text-[10px] text-slate-400">{a.sub}</div>
+            ].map((a, i, arr) => (
+              <div key={a.label} className="flex items-stretch flex-1 min-w-0">
+                <div className="relative flex-1 flex flex-col items-center text-center bg-white rounded-xl px-2 py-4 border border-blue-100/80 shadow-sm shadow-blue-600/[0.03] min-w-0">
+                  <span className="absolute top-2 left-2.5 text-[10px] font-bold text-slate-300 tabular-nums">{i + 1}</span>
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center mb-2">
+                    <a.Icon className="w-[18px] h-[18px] text-blue-600" strokeWidth={2} />
+                  </div>
+                  <div className="text-[12px] font-bold text-slate-700 leading-tight truncate max-w-full">{a.label}</div>
+                  <div className="text-[10px] text-slate-400 leading-tight mt-0.5 truncate max-w-full">{a.sub}</div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="flex items-center px-0.5 sm:px-1 flex-shrink-0" aria-hidden="true">
+                    <ChevronRight className="w-4 h-4 text-blue-300" />
+                  </div>
+                )}
               </div>
-            ) : (
-              <ChevronRight key={i} className="w-4 h-4 text-slate-300 flex-shrink-0" />
             ))}
           </div>
-          <p className="text-[11px] text-slate-400 mt-3">Runs in 4 waves · discovers 40–60 suppliers · auto-scores against your requirements</p>
+          <p className="text-[11px] text-slate-400 mt-4">Runs in 4 waves · discovers 40–60 suppliers · auto-scores against your requirements</p>
         </div>
 
         {/* Form */}
