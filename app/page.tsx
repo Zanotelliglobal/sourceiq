@@ -16,33 +16,45 @@ export default function Home() {
     <div className="bg-white">
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-50/60 via-white to-white" aria-hidden />
-        <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 pt-20 pb-24 text-center">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-6">
+        {/* Layered background: base wash → drifting aurora blobs → blueprint grid */}
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-50/70 via-white to-white" aria-hidden />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+          <div className="aurora aurora-1 w-[42rem] h-[42rem] -top-40 -left-40" />
+          <div className="aurora aurora-2 w-[38rem] h-[38rem] -top-56 right-[-8rem]" />
+          <div className="aurora aurora-3 w-[30rem] h-[30rem] top-24 left-1/2 -translate-x-1/2" />
+        </div>
+        <div className="absolute inset-0 bg-grid" aria-hidden />
+
+        <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 pt-24 pb-28 text-center">
+          <div className="animate-rise inline-flex items-center gap-2 text-xs font-semibold text-blue-700 bg-white/70 backdrop-blur border border-blue-100 px-3 py-1.5 rounded-full mb-6 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
             <Sparkles className="w-3.5 h-3.5" />
             Multi-agent supplier intelligence
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 max-w-4xl mx-auto leading-[1.05]">
-            Find qualified suppliers in <span className="text-blue-600">minutes</span>, not months
+          <h1 className="animate-rise delay-1 text-4xl sm:text-5xl lg:text-[4rem] font-extrabold tracking-tight text-slate-900 max-w-4xl mx-auto leading-[1.03]">
+            Find qualified suppliers in{" "}
+            <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">minutes</span>, not months
           </h1>
-          <p className="text-lg text-slate-500 max-w-2xl mx-auto mt-6 leading-relaxed">
+          <p className="animate-rise delay-2 text-lg text-slate-500 max-w-2xl mx-auto mt-6 leading-relaxed">
             SourceIQ deploys a team of AI agents across global supplier networks to discover,
             score, and shortlist vendors against your exact requirements — so your procurement
             team can focus on decisions, not desk research.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-9">
-            <Link href="/sign-up" className="btn-cta text-base px-6 py-3">
+          <div className="animate-rise delay-3 flex flex-col sm:flex-row items-center justify-center gap-3 mt-9">
+            <Link href="/sign-up" className="btn-cta text-base px-6 py-3 shadow-lg shadow-amber-600/25">
               Start free trial <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="/sign-in" className="btn-secondary text-base px-6 py-3">
+            <Link href="/sign-in" className="btn-secondary text-base px-6 py-3 bg-white/70 backdrop-blur">
               Sign in
             </Link>
           </div>
-          <p className="text-xs text-slate-400 mt-4">No credit card required · 14-day trial</p>
+          <p className="animate-rise delay-3 text-xs text-slate-400 mt-4">No credit card required · 14-day trial</p>
 
           {/* Product preview */}
-          <div className="mt-16 max-w-4xl mx-auto">
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          <div className="animate-rise delay-4 mt-16 max-w-4xl mx-auto relative">
+            {/* soft glow behind the card */}
+            <div className="absolute -inset-4 bg-gradient-to-tr from-blue-500/20 via-indigo-500/10 to-amber-500/10 blur-2xl rounded-[2rem]" aria-hidden />
+            <div className="relative rounded-2xl border border-slate-200/80 bg-white/90 backdrop-blur shadow-2xl ring-1 ring-slate-900/5 overflow-hidden">
               <div className="flex items-center gap-1.5 px-4 py-3 border-b border-slate-100 bg-slate-50">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-300" />
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-300" />
@@ -178,8 +190,11 @@ export default function Home() {
 
       {/* ── Final CTA ────────────────────────────────────────── */}
       <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-24">
-        <div className="rounded-3xl bg-slate-900 px-8 py-16 text-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent" aria-hidden />
+        <div className="rounded-3xl bg-slate-900 px-8 py-16 text-center relative overflow-hidden ring-1 ring-white/10">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-600/30 via-indigo-600/10 to-transparent" aria-hidden />
+          <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-amber-500/20 blur-3xl" aria-hidden />
+          <div className="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-blue-500/20 blur-3xl" aria-hidden />
+          <div className="absolute inset-0 bg-grid opacity-[0.15]" aria-hidden />
           <div className="relative">
             <Zap className="w-10 h-10 text-amber-500 mx-auto mb-5" />
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight max-w-2xl mx-auto">
