@@ -13,6 +13,7 @@
     "@clerk/nextjs": "^5.7.6",
     "@neondatabase/serverless": "^1.1.0",
     "@types/ws": "^8.18.1",
+    "lucide-react": "^1.23.0",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
