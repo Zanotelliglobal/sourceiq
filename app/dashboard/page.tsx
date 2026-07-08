@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Zap, Factory, Star, ClipboardList, Search, Plus, ArrowRight } from "lucide-react";
 
 type EventRow = {
   id: number; title: string; category: string; status: string;
@@ -54,9 +55,7 @@ export default function Dashboard() {
           </p>
         </div>
         <Link href="/events/new" className="btn-primary">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-          </svg>
+          <Plus className="w-4 h-4" />
           New Sourcing Event
         </Link>
       </div>
@@ -64,14 +63,14 @@ export default function Dashboard() {
       {/* KPI bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Active Events",      value: stats.active,     sub: `${stats.total} total events`,        icon: "⚡", color: "text-blue-600" },
-          { label: "Suppliers Identified",value: stats.suppliers,  sub: "across all events",                  icon: "🏭", color: "text-slate-900" },
-          { label: "Short Listed",       value: stats.shortlisted, sub: "approved for RFI",                  icon: "⭐", color: "text-violet-600" },
-          { label: "Total Events",       value: stats.total,       sub: "all time",                           icon: "📋", color: "text-slate-600" },
+          { label: "Active Events",      value: stats.active,     sub: `${stats.total} total events`,        Icon: Zap,           color: "text-blue-600",   iconColor: "text-blue-500" },
+          { label: "Suppliers Identified",value: stats.suppliers,  sub: "across all events",                  Icon: Factory,       color: "text-slate-900",  iconColor: "text-slate-400" },
+          { label: "Short Listed",       value: stats.shortlisted, sub: "approved for RFI",                  Icon: Star,          color: "text-amber-600",  iconColor: "text-amber-500" },
+          { label: "Total Events",       value: stats.total,       sub: "all time",                           Icon: ClipboardList, color: "text-slate-600",  iconColor: "text-slate-400" },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl">{s.icon}</span>
+              <s.Icon className={`w-5 h-5 ${s.iconColor}`} strokeWidth={2} />
             </div>
             <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
             <div className="text-sm font-semibold text-slate-700 mt-0.5">{s.label}</div>
@@ -97,7 +96,9 @@ export default function Dashboard() {
         </div>
       ) : events.length === 0 ? (
         <div className="card p-20 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-3xl mx-auto mb-4">🔍</div>
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto mb-4">
+            <Search className="w-7 h-7 text-blue-600" />
+          </div>
           <h2 className="text-lg font-bold text-slate-700 mb-2">No sourcing events yet</h2>
           <p className="text-sm text-slate-400 max-w-sm mx-auto mb-6">
             Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.
@@ -149,7 +150,7 @@ export default function Dashboard() {
                         <span className="font-normal text-slate-400"> found</span>
                       </div>
                       {(event.shortlisted_count || 0) > 0 && (
-                        <div className="text-xs text-violet-600 font-medium">{event.shortlisted_count} shortlisted</div>
+                        <div className="text-xs text-amber-600 font-medium">{event.shortlisted_count} shortlisted</div>
                       )}
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
@@ -163,9 +164,9 @@ export default function Dashboard() {
                     <td className="px-4 py-4 text-right">
                       <Link
                         href={`/events/${event.id}`}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        Open →
+                        Open <ArrowRight className="w-3 h-3" />
                       </Link>
                     </td>
                   </tr>

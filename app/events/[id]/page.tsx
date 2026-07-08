@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import {
+  X, Check, Minus, Bell, Star, Undo2, Sparkles, Lock, Hand,
+  Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown,
+} from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
@@ -166,7 +170,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
             <h2 className="font-bold text-slate-900 text-lg leading-tight">{supplier.name}</h2>
             <p className="text-sm text-slate-400 mt-0.5">{[supplier.city, supplier.country].filter(Boolean).join(", ")}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0">✕</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6 space-y-6 flex-1">
@@ -185,12 +189,12 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
                 {STAGES.find(s => s.key === supplier.funnel_stage)?.label || supplier.funnel_stage}
               </div>
               {enrichment?.recommended_action && (
-                <div className={`text-sm font-semibold ${
+                <div className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
                   enrichment.recommended_action === "pursue" ? "text-emerald-600" :
                   enrichment.recommended_action === "pass" ? "text-red-500" : "text-amber-600"
                 }`}>
-                  {enrichment.recommended_action === "pursue" ? "✓ Recommended: Pursue" :
-                   enrichment.recommended_action === "pass" ? "✕ Recommended: Pass" : "△ Recommended: Monitor"}
+                  {enrichment.recommended_action === "pursue" ? <><Check className="w-4 h-4" /> Recommended: Pursue</> :
+                   enrichment.recommended_action === "pass" ? <><X className="w-4 h-4" /> Recommended: Pass</> : <><Minus className="w-4 h-4" /> Recommended: Monitor</>}
                 </div>
               )}
               {enrichment?.market_position && (
@@ -291,7 +295,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
                   <ul className="space-y-1.5">
                     {enrichment.key_risks.map((r, i) => (
                       <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
-                        <span className="text-amber-500 flex-shrink-0">△</span>{r}
+                        <Minus className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />{r}
                       </li>
                     ))}
                   </ul>
@@ -355,22 +359,22 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
             )}
             {supplier.funnel_stage === "contacted" && (
               <button onClick={() => { onFollowUp(supplier); onClose(); }} className="btn-ghost flex-1 justify-center py-2.5">
-                🔔 Send Follow-up
+                <Bell className="w-4 h-4" /> Send Follow-up
               </button>
             )}
             {supplier.funnel_stage === "responded" && (
               <button onClick={() => { onMove(supplier.id, "shortlisted"); onClose(); }} className="btn-primary flex-1 justify-center py-2.5">
-                ⭐ Add to Short List
+                <Star className="w-4 h-4" /> Add to Short List
               </button>
             )}
             {supplier.funnel_stage === "shortlisted" && (
               <button onClick={() => { onMove(supplier.id, "responded"); onClose(); }} className="btn-ghost py-2.5">
-                ↩ Remove from Short List
+                <Undo2 className="w-4 h-4" /> Remove from Short List
               </button>
             )}
             {supplier.funnel_stage !== "declined" ? (
               <button onClick={() => { onMove(supplier.id, "declined"); onClose(); }} className="btn-ghost text-red-500 hover:bg-red-50 py-2.5">
-                ✕ Decline
+                <X className="w-4 h-4" /> Decline
               </button>
             ) : (
               <button onClick={() => { onMove(supplier.id, "long_list"); onClose(); }} className="btn-ghost py-2.5">
@@ -425,7 +429,7 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
               <h3 className="font-bold text-slate-900">{anonymous ? "Anonymous RFI Outreach" : "RFI Outreach"}</h3>
               <p className="text-xs text-slate-400 mt-0.5">{supplier.name} · {anonymous ? "Identity protected" : "Sent under your name"}</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">✕</button>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
           </div>
           {loading ? (
             <div className="flex flex-col items-center py-12 gap-3">
@@ -436,8 +440,8 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
             <div className="space-y-4">
               {isForeign && (
                 <div className="flex items-center justify-between gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-100">
-                  <span className="text-xs text-blue-700 font-medium">
-                    ✦ Written in {email.language} for this supplier
+                  <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 font-medium">
+                    <Sparkles className="w-3.5 h-3.5" /> Written in {email.language} for this supplier
                   </span>
                   <button
                     onClick={() => setShowEn(v => !v)}
@@ -457,18 +461,18 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
               </div>
               {anonymous ? (
                 <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
-                  🔒 Sent anonymously via SourceIQ — your organisation identity is not disclosed
+                  <Lock className="w-4 h-4 flex-shrink-0" /> Sent anonymously via SourceIQ — your organisation identity is not disclosed
                 </div>
               ) : (
                 <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
-                  🙋 Disclosed outreach — copy the draft or open it in your own email client to send under your name.
+                  <Hand className="w-4 h-4 flex-shrink-0" /> Disclosed outreach — copy the draft or open it in your own email client to send under your name.
                 </div>
               )}
 
               {/* Copy / send-via-own-client — always available, primary path when disclosed */}
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={copyDraft} className="btn-secondary justify-center py-2.5 text-sm">
-                  {copied ? "✓ Copied" : "Copy draft"}
+                  {copied ? <><Check className="w-4 h-4" /> Copied</> : "Copy draft"}
                 </button>
                 {supplier.contact_email ? (
                   <a
@@ -543,11 +547,11 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
           {(() => {
             // Tiered reachability badge: email → contact page → phone → LinkedIn → none.
             if (supplier.contact_email)
-              return <span title={`Contactable — ${supplier.contact_email}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">✉ Email</span>;
+              return <span title={`Contactable — ${supplier.contact_email}`} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded"><Mail className="w-2.5 h-2.5" /> Email</span>;
             if (supplier.contact_url)
-              return <span title={`Contact page — ${supplier.contact_url}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">🌐 Contact page</span>;
+              return <span title={`Contact page — ${supplier.contact_url}`} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded"><Globe className="w-2.5 h-2.5" /> Contact page</span>;
             if (supplier.contact_phone)
-              return <span title={`Phone — ${supplier.contact_phone}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">☎ Phone</span>;
+              return <span title={`Phone — ${supplier.contact_phone}`} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded"><Phone className="w-2.5 h-2.5" /> Phone</span>;
             if (supplier.contact_linkedin)
               return <span title={`LinkedIn — ${supplier.contact_linkedin}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">in LinkedIn</span>;
             return <span title="No contact channel found yet" className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">No contact</span>;
@@ -588,19 +592,19 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
           {supplier.funnel_stage === "responded" && (
             <button
               onClick={async () => await onMove(supplier.id, "shortlisted")}
-              className="text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg transition-colors"
               title="Add to Short List"
             >
-              ⭐ Shortlist
+              <Star className="w-2.5 h-2.5" /> Shortlist
             </button>
           )}
           {supplier.funnel_stage !== "declined" ? (
             <button
               onClick={async () => await onMove(supplier.id, "declined")}
-              className="text-[10px] font-semibold text-red-400 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors"
+              className="inline-flex items-center text-[10px] font-semibold text-red-400 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors"
               title="Decline"
             >
-              ✕
+              <X className="w-3 h-3" />
             </button>
           ) : (
             <button
@@ -608,7 +612,7 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
               className="text-[10px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors"
               title="Restore"
             >
-              ↩
+              <Undo2 className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -666,7 +670,7 @@ function BriefModal({ event, onClose, onSaved }: {
             <h3 className="font-bold text-slate-900">Scouting Brief</h3>
             <p className="text-xs text-slate-400 mt-0.5">Review and refine the mandate driving the agents</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">✕</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -694,8 +698,8 @@ function BriefModal({ event, onClose, onSaved }: {
                 const active = countries.includes(c);
                 return (
                   <button key={c} type="button" onClick={() => toggle(c)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
-                    {active && <span className="mr-1">✓</span>}{c}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                    {active && <Check className="w-3 h-3" />}{c}
                   </button>
                 );
               })}
@@ -710,7 +714,7 @@ function BriefModal({ event, onClose, onSaved }: {
               <div className="flex flex-wrap gap-2 mt-2">
                 {countries.filter(c => !GEOGRAPHIES.includes(c)).map(c => (
                   <span key={c} className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg">
-                    {c}<button type="button" onClick={() => toggle(c)} className="hover:text-blue-200">✕</button>
+                    {c}<button type="button" onClick={() => toggle(c)} className="hover:text-blue-200"><X className="w-3 h-3" /></button>
                   </span>
                 ))}
               </div>
@@ -1128,7 +1132,7 @@ export default function EventPage() {
         <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div>
-              <Link href="/dashboard" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">← Dashboard</Link>
+              <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"><ArrowLeft className="w-3 h-3" /> Dashboard</Link>
               <div className="flex items-center gap-3 mt-0.5">
                 <h1 className="font-bold text-slate-900 text-lg leading-tight">{event.title}</h1>
                 <button
@@ -1143,7 +1147,7 @@ export default function EventPage() {
                 <span className="text-xs text-slate-500">{event.category}</span>
                 {event.subcategory && <span className="text-xs bg-violet-50 text-violet-600 px-2 py-0.5 rounded">{event.subcategory}</span>}
                 {event.annual_spend && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{event.annual_spend}</span>}
-                {event.target_countries && <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">🌍 {event.target_countries}</span>}
+                {event.target_countries && <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded"><Globe className="w-3 h-3" /> {event.target_countries}</span>}
                 {event.wave_count > 0 && <span className="text-xs bg-blue-50 text-blue-600 font-medium px-2 py-0.5 rounded">{event.wave_count} wave{event.wave_count !== 1 ? "s" : ""} complete</span>}
               </div>
             </div>
@@ -1224,9 +1228,9 @@ export default function EventPage() {
             {(stageCounts["responded"] ?? 0) > 0 && (
               <button
                 onClick={shortlistResponders}
-                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-all whitespace-nowrap"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-all whitespace-nowrap"
               >
-                ⭐ Shortlist all responders ({stageCounts["responded"]})
+                <Star className="w-3 h-3" /> Shortlist all responders ({stageCounts["responded"]})
               </button>
             )}
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">Sort:</span>
@@ -1236,7 +1240,7 @@ export default function EventPage() {
                 onClick={() => setSortBy(s)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${sortBy === s ? "bg-slate-900 text-white" : "text-slate-400 hover:bg-slate-100"}`}
               >
-                {s === "score" ? "Score ↓" : s === "name" ? "Name" : "Wave"}
+                {s === "score" ? <span className="inline-flex items-center gap-0.5">Score <ArrowDown className="w-3 h-3" /></span> : s === "name" ? "Name" : "Wave"}
               </button>
             ))}
             {suppliers.length > 0 && (
@@ -1258,7 +1262,7 @@ export default function EventPage() {
         <div className="flex-1 overflow-y-auto overflow-x-auto">
           {suppliers.length === 0 && !running ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-12">
-              <div className="text-5xl mb-4">🏭</div>
+              <Factory className="w-12 h-12 text-slate-300 mb-4" strokeWidth={1.5} />
               <h2 className="text-lg font-bold text-slate-700 mb-2">Ready to initiate market intelligence</h2>
               <p className="text-sm text-slate-400 max-w-md mb-6">Click <strong>Launch Discovery</strong> in the left panel to deploy AI agents across global supplier directories, trade databases, and industry registries.</p>
             </div>

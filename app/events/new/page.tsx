@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Brain, Search, Scale, Lightbulb, ChevronRight, Sparkles, Check, X, EyeOff, Hand } from "lucide-react";
 
 const CATEGORIES = [
   "Precision Machining & CNC",
@@ -195,21 +196,21 @@ export default function NewEventPage() {
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {[
-              { icon: "🧠", label: "Orchestrator", sub: "Plans wave strategy" },
-              { icon: "→", label: "", sub: "" },
-              { icon: "🔍", label: "Scout ×3", sub: "Broad · Niche · Geo" },
-              { icon: "→", label: "", sub: "" },
-              { icon: "⚖️", label: "Qualifier", sub: "5-axis scoring" },
-              { icon: "→", label: "", sub: "" },
-              { icon: "💡", label: "Enricher", sub: "Risk · Strengths" },
-            ].map((a, i) => a.label ? (
+              { Icon: Brain, label: "Orchestrator", sub: "Plans wave strategy" },
+              { Icon: null, label: "", sub: "" },
+              { Icon: Search, label: "Scout ×3", sub: "Broad · Niche · Geo" },
+              { Icon: null, label: "", sub: "" },
+              { Icon: Scale, label: "Qualifier", sub: "5-axis scoring" },
+              { Icon: null, label: "", sub: "" },
+              { Icon: Lightbulb, label: "Enricher", sub: "Risk · Strengths" },
+            ].map((a, i) => a.label && a.Icon ? (
               <div key={i} className="flex-shrink-0 bg-white/80 rounded-xl px-3 py-2.5 border border-blue-100/80 text-center min-w-[80px]">
-                <div className="text-lg mb-0.5">{a.icon}</div>
+                <a.Icon className="w-5 h-5 mx-auto mb-1 text-blue-600" strokeWidth={2} />
                 <div className="text-[11px] font-bold text-slate-700">{a.label}</div>
                 <div className="text-[10px] text-slate-400">{a.sub}</div>
               </div>
             ) : (
-              <div key={i} className="text-slate-300 text-lg flex-shrink-0">›</div>
+              <ChevronRight key={i} className="w-4 h-4 text-slate-300 flex-shrink-0" />
             ))}
           </div>
           <p className="text-[11px] text-slate-400 mt-3">Runs in 4 waves · discovers 40–60 suppliers · auto-scores against your requirements</p>
@@ -266,7 +267,7 @@ export default function NewEventPage() {
               )}
               {!classifying && autoDetected && form.category && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                  ✨ Auto-detected{confidence != null ? ` · ${confidence}%` : ""}
+                  <Sparkles className="w-3 h-3" /> Auto-detected{confidence != null ? ` · ${confidence}%` : ""}
                 </span>
               )}
               {!classifying && classifyFailed && !form.category && (
@@ -378,7 +379,7 @@ export default function NewEventPage() {
                         : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     }`}
                   >
-                    {active && <span className="mr-1">✓</span>}{c}
+                    <span className="inline-flex items-center gap-1">{active && <Check className="w-3 h-3" />}{c}</span>
                   </button>
                 );
               })}
@@ -403,7 +404,7 @@ export default function NewEventPage() {
                 {countries.filter(c => !GEOGRAPHIES.includes(c)).map(c => (
                   <span key={c} className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg">
                     {c}
-                    <button type="button" onClick={() => toggleCountry(c)} className="hover:text-blue-200">✕</button>
+                    <button type="button" onClick={() => toggleCountry(c)} className="hover:text-blue-200"><X className="w-3 h-3" /></button>
                   </span>
                 ))}
               </div>
@@ -424,8 +425,8 @@ export default function NewEventPage() {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {[
-                { v: "true",  icon: "🕶️", title: "Anonymous", sub: "SourceIQ contacts suppliers on your behalf — your organisation is never named." },
-                { v: "false", icon: "🙋", title: "Disclosed", sub: "Your name, role & company appear in the outreach. Copy or send via your own mail client." },
+                { v: "true",  Icon: EyeOff, title: "Anonymous", sub: "SourceIQ contacts suppliers on your behalf — your organisation is never named." },
+                { v: "false", Icon: Hand, title: "Disclosed", sub: "Your name, role & company appear in the outreach. Copy or send via your own mail client." },
               ].map(opt => {
                 const active = form.outreach_anonymous === opt.v;
                 return (
@@ -439,7 +440,7 @@ export default function NewEventPage() {
                     }`}
                   >
                     <div className="flex items-center gap-2 font-semibold text-sm">
-                      <span>{opt.icon}</span>{opt.title}
+                      <opt.Icon className="w-4 h-4" />{opt.title}
                     </div>
                     <div className={`text-[11px] mt-1 leading-snug ${active ? "text-blue-100" : "text-slate-400"}`}>
                       {opt.sub}

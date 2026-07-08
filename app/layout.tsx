@@ -4,6 +4,7 @@ import "./globals.css";
 import Link from "next/link";
 import { ClerkProvider, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import MobileMenu from "@/components/MobileMenu";
+import AppShell from "@/components/AppShell";
 
 // UI/marketing face — professional but approachable (top-ranked B2B/enterprise pairing).
 const jakarta = Plus_Jakarta_Sans({
@@ -79,7 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </header>
 
-          <main className="flex-1">{children}</main>
+          <main className="flex-1"><AppShell>{children}</AppShell></main>
         </div>
       </body>
     </html>
