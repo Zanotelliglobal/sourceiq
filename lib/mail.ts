@@ -65,11 +65,53 @@ export function parseReplyToken(to: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
+// ─── ANTI-SPAM COMPLIANCE ─────────────────────────────────────────────────────
+// Commercial email must carry a working opt-out and the sender's physical postal
+// address (CAN-SPAM in the US, CASL in Canada, PECR/GDPR in the EU/UK). We add a
+// per-supplier unsubscribe link, a List-Unsubscribe header (with RFC 8058
+// one-click support), and a postal-address footer to every RFI.
+
+/** Sender's registered postal address, shown in the footer. */
+export function postalAddress(): string | null {
+  return process.env.MAIL_POSTAL_ADDRESS || null;
+}
+
+/** Public unsubscribe URL for a supplier's reply token. */
+export function unsubscribeUrl(token: string): string | null {
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  if (!base || !token) return null;
+  return `${base.replace(/\/$/, "")}/api/unsubscribe?t=${encodeURIComponent(token)}`;
+}
+
+/** Append the legally-required unsubscribe + postal-address footer to a body. */
+export function withComplianceFooter(body: string, token: string): string {
+  const url = unsubscribeUrl(token);
+  const addr = postalAddress();
+  const lines: string[] = [body, "", "—"];
+  lines.push(
+    "You received this message because SourceIQ is conducting a supplier sourcing search on behalf of a buyer. If this is not relevant to your business, you can opt out and we will not contact you again" +
+      (url ? `: ${url}` : ".")
+  );
+  if (addr) lines.push(addr);
+  return lines.join("\n");
+}
+
+/** List-Unsubscribe headers (RFC 2369 + RFC 8058 one-click) for a token. */
+export function unsubscribeHeaders(token: string): Record<string, string> {
+  const url = unsubscribeUrl(token);
+  if (!url) return {};
+  return {
+    "List-Unsubscribe": `<${url}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
 export async function sendEmail(opts: {
   to: string | null | undefined;
   subject: string;
   body: string;           // plain text
   replyTo?: string;
+  headers?: Record<string, string>;   // extra headers, e.g. List-Unsubscribe
 }): Promise<SendResult> {
   const provider = process.env.MAIL_PROVIDER || "";
 
@@ -93,6 +135,7 @@ export async function sendEmail(opts: {
         subject: opts.subject,
         text: opts.body,
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
       }),
     });
     if (!res.ok) {

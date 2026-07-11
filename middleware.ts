@@ -4,12 +4,15 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 //   • the marketing/landing page and auth pages
 //   • the inbound email webhook (verified via Svix signature, not a user session)
 //   • the Stripe webhook (verified via Stripe signature)
+//   • the unsubscribe endpoint (clicked by suppliers, who have no session;
+//     authorized by an unguessable per-supplier reply token)
 const isPublic = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/inbound(.*)",
   "/api/stripe/webhook(.*)",
+  "/api/unsubscribe(.*)",
 ]);
 
 // DEV-ONLY: when DEV_AUTH_BYPASS=1 (and not in production), skip route

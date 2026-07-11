@@ -212,6 +212,9 @@ async function initSchema(): Promise<void> {
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_url TEXT;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_phone TEXT;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_linkedin TEXT;
+    -- Anti-spam suppression: a supplier who unsubscribes is never emailed again.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opted_out BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opted_out_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,

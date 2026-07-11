@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact } from "@/lib/agents";
-import { sendEmail, isMailLive, mailStatus, replyToAddress } from "@/lib/mail";
+import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
@@ -37,11 +37,12 @@ export async function POST(req: NextRequest) {
     : { name: event.buyer_name, role: event.buyer_role, company: event.buyer_company };
 
   // Target: explicit list, else everyone sitting in the long list.
+  // Opted-out suppliers are suppressed — never re-contacted, even if selected.
   const targets = (Array.isArray(supplier_ids) && supplier_ids.length > 0
     ? await db.prepare(
-        `SELECT * FROM suppliers WHERE event_id=? AND id IN (${supplier_ids.map(() => "?").join(",")})`
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND id IN (${supplier_ids.map(() => "?").join(",")})`
       ).all(event.id, ...supplier_ids)
-    : await db.prepare("SELECT * FROM suppliers WHERE event_id=? AND funnel_stage='long_list' ORDER BY ai_score DESC")
+    : await db.prepare("SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND funnel_stage='long_list' ORDER BY ai_score DESC")
         .all(event.id)) as {
     id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null;
   }[];
@@ -108,13 +109,16 @@ export async function POST(req: NextRequest) {
           await db.prepare("UPDATE suppliers SET reply_token=? WHERE id=?").run(replyToken, s.id);
 
           // ── Deliver the RFI (real send when live, no-op draft otherwise) ──
+          // Every outbound RFI carries a compliant unsubscribe footer + headers.
+          const rfiBody = withComplianceFooter(`${email.body}\n\n---\n[EN] ${email.body_en}`, replyToken);
           let delivery;
           try {
             delivery = await sendEmail({
               to: s.contact_email,
               subject: email.subject,
-              body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
+              body: rfiBody,
               replyTo: replyToAddress(replyToken) ?? undefined,
+              headers: unsubscribeHeaders(replyToken),
             });
           } catch (err) {
             send({ type: "supplier_error", supplier_id: s.id, message: `Send failed: ${String(err)}` });
