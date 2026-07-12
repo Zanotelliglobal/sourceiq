@@ -45,6 +45,19 @@ type Event = {
 const SPEND_RANGES = ["< $500K / year", "$500K – $1M / year", "$1M – $5M / year", "$5M – $20M / year", "$20M – $50M / year", "> $50M / year", "Confidential"];
 const GEOGRAPHIES = ["United States", "Canada", "Mexico", "Germany", "United Kingdom", "Italy", "Poland", "Czech Republic", "Turkey", "India", "China", "Vietnam", "Japan", "South Korea", "Taiwan", "Brazil"];
 
+// Full country list for the "add another country" dropdown (mirrors the new-event form).
+const ALL_COUNTRIES = [
+  "Argentina", "Australia", "Austria", "Bangladesh", "Belgium", "Brazil", "Bulgaria",
+  "Cambodia", "Canada", "Chile", "China", "Colombia", "Croatia", "Czech Republic",
+  "Denmark", "Egypt", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary",
+  "India", "Indonesia", "Ireland", "Israel", "Italy", "Japan", "Malaysia", "Mexico",
+  "Morocco", "Netherlands", "New Zealand", "Norway", "Pakistan", "Philippines", "Poland",
+  "Portugal", "Romania", "Saudi Arabia", "Serbia", "Singapore", "Slovakia", "Slovenia",
+  "South Africa", "South Korea", "Spain", "Sweden", "Switzerland", "Taiwan", "Thailand",
+  "Tunisia", "Turkey", "Ukraine", "United Arab Emirates", "United Kingdom", "United States",
+  "Vietnam",
+];
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Funnel: Long List (start) → Contacted → Responded (positive gate) → Short List (end).
 // Declined is a side state for suppliers that did not reply or replied negatively.
@@ -634,16 +647,10 @@ function BriefModal({ event, onClose, onSaved }: {
   const [countries, setCountries] = useState<string[]>(
     (event.target_countries || "").split(",").map(c => c.trim()).filter(Boolean)
   );
-  const [extra, setExtra] = useState("");
   const [saving, setSaving] = useState(false);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const toggle = (c: string) => setCountries(p => p.includes(c) ? p.filter(x => x !== c) : [...p, c]);
-  const addExtra = () => {
-    const c = extra.trim();
-    if (c && !countries.includes(c)) setCountries(p => [...p, c]);
-    setExtra("");
-  };
 
   async function save() {
     setSaving(true);
@@ -702,12 +709,16 @@ function BriefModal({ event, onClose, onSaved }: {
                 );
               })}
             </div>
-            <div className="flex gap-2">
-              <input className="input flex-1" placeholder="Add another country…" value={extra}
-                onChange={e => setExtra(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }} />
-              <button type="button" onClick={addExtra} className="btn-secondary px-4">Add</button>
-            </div>
+            <select
+              className="input"
+              value=""
+              onChange={e => { if (e.target.value) toggle(e.target.value); }}
+            >
+              <option value="">+ Add another country…</option>
+              {ALL_COUNTRIES.filter(c => !GEOGRAPHIES.includes(c) && !countries.includes(c)).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
             {countries.filter(c => !GEOGRAPHIES.includes(c)).length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {countries.filter(c => !GEOGRAPHIES.includes(c)).map(c => (
