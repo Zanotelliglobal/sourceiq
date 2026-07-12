@@ -148,7 +148,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, matched: true, classified: false, error: String(err) });
   }
 
-  await db.prepare("UPDATE suppliers SET response_detail=? WHERE id=?").run(JSON.stringify(cls), supplier.id);
+  // The dashboard reads response_detail as a SupplierResponse
+  // ({responded, reply, reply_en, sentiment, …}), but the classifier returns a
+  // different shape ({summary_en, interested, is_auto_reply, …}). Map it so the
+  // real inbound reply actually renders in the RFI Response panel — otherwise the
+  // funnel advances but the UI shows "No reply received".
+  const detail = {
+    responded: !cls.is_auto_reply,
+    sentiment: cls.sentiment === "positive" ? "positive" : "negative",
+    language: cls.language || "English",
+    reply: replyBody || cls.summary_en || "(empty message)",
+    reply_en: cls.summary_en || replyBody || "",
+    capacity_confirmed: cls.capacity_confirmed || "N/A",
+    lead_time: cls.lead_time || "N/A",
+    highlights: cls.highlights || [],
+  };
+  await db.prepare("UPDATE suppliers SET response_detail=? WHERE id=?").run(JSON.stringify(detail), supplier.id);
 
   if (cls.interested && cls.sentiment === "positive" && !cls.is_auto_reply) {
     await db.prepare(`UPDATE suppliers SET outreach_status='responded', supplier_responded_at=datetime('now'), funnel_stage='responded' WHERE id=?`)
