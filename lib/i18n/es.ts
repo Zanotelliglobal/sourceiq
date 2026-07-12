@@ -274,4 +274,10 @@ export const es: Record<string, string> = {
   "minutes": "minutos",
   "per month": "al mes",
   "suppliers discovered per event": "proveedores descubiertos por evento",
+  "Send outreach to {n} suppliers?": "¿Enviar la solicitud a {n} proveedores?",
+  "These RFIs are sent anonymously via SourceIQ — your organisation is never named. This emails real suppliers and cannot be undone.": "Estas RFI se envían de forma anónima a través de SourceIQ — su organización nunca se menciona. Esta acción envía correos a proveedores reales y no se puede deshacer.",
+  "These RFIs disclose your name, role & company. This emails real suppliers and cannot be undone.": "Estas RFI revelan su nombre, cargo y empresa. Esta acción envía correos a proveedores reales y no se puede deshacer.",
+  "Recipients preview": "Vista previa de destinatarios",
+  "+ {n} more": "+ {n} más",
+  "Send to {n} suppliers": "Enviar a {n} proveedores",
 };

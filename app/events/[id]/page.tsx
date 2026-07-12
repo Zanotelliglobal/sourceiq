@@ -759,6 +759,72 @@ function BriefModal({ event, onClose, onSaved }: {
   );
 }
 
+// Confirmation gate before firing a bulk RFI campaign. Bulk outreach sends real
+// emails to real suppliers and cannot be undone, so we surface the recipient
+// count, the anonymous/disclosed mode, and a short recipient preview first.
+function CampaignConfirmModal({ count, anonymous, preview, onCancel, onConfirm }: {
+  count: number; anonymous: boolean; preview: Supplier[];
+  onCancel: () => void; onConfirm: () => void;
+}) {
+  const t = useT();
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onCancel]);
+
+  const channel = (s: Supplier) =>
+    s.contact_email ? s.contact_email
+    : s.contact_url ? t("Contact page")
+    : s.contact_phone ? s.contact_phone
+    : t("No contact channel found yet");
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" role="dialog" aria-modal="true" onClick={onCancel}>
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in" onClick={e => e.stopPropagation()}>
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-900">{t("Send outreach to {n} suppliers?", { n: count })}</h3>
+            <button onClick={onCancel} aria-label={t("Cancel")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+          </div>
+
+          <div className={`flex items-start gap-2.5 p-3 rounded-xl border mb-4 ${anonymous ? "bg-blue-50 border-blue-100" : "bg-amber-50 border-amber-100"}`}>
+            <Lock className={`w-4 h-4 flex-shrink-0 mt-0.5 ${anonymous ? "text-blue-600" : "text-amber-600"}`} />
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {anonymous
+                ? t("These RFIs are sent anonymously via SourceIQ — your organisation is never named. This emails real suppliers and cannot be undone.")
+                : t("These RFIs disclose your name, role & company. This emails real suppliers and cannot be undone.")}
+            </p>
+          </div>
+
+          <div className="mb-5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Recipients preview")}</p>
+            <div className="space-y-1.5">
+              {preview.map(s => (
+                <div key={s.id} className="flex items-center justify-between gap-3 text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-100">
+                  <span className="font-semibold text-slate-700 truncate">{s.name}</span>
+                  <span className="text-slate-400 truncate max-w-[55%] text-right">{channel(s)}</span>
+                </div>
+              ))}
+              {count > preview.length && (
+                <p className="text-[11px] text-slate-400 pl-1">{t("+ {n} more", { n: count - preview.length })}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={onCancel} className="btn-secondary py-2">{t("Cancel")}</button>
+            <button onClick={onConfirm} className="btn-primary py-2">
+              <Mail className="w-3.5 h-3.5" /> {t("Send to {n} suppliers", { n: count })}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function EventPage() {
   const t = useT();
@@ -769,6 +835,7 @@ export default function EventPage() {
   const [loading, setLoading]   = useState(true);
   const [running, setRunning]   = useState(false);
   const [campaigning, setCampaigning] = useState(false);
+  const [confirmCampaign, setConfirmCampaign] = useState(false);
   const [liveAgents, setLiveAgents] = useState<{ agent_id: string; agent_label: string; status: string; message?: string }[]>([]);
   const [logs, setLogs]         = useState<string[]>([]);
   const [stageFilter, setStageFilter] = useState("all");
@@ -1087,7 +1154,7 @@ export default function EventPage() {
           {/* Agentic outreach campaign */}
           {longListCount > 0 && (
             <button
-              onClick={runCampaign}
+              onClick={() => setConfirmCampaign(true)}
               disabled={busy}
               className="btn-secondary w-full justify-center mt-2 py-2"
             >
@@ -1356,6 +1423,17 @@ export default function EventPage() {
           event={event}
           onClose={() => setEditingBrief(false)}
           onSaved={(e) => setEvent(e)}
+        />
+      )}
+
+      {/* Bulk outreach confirmation */}
+      {confirmCampaign && (
+        <CampaignConfirmModal
+          count={longListCount}
+          anonymous={event?.outreach_anonymous !== false}
+          preview={suppliers.filter(s => s.funnel_stage === "long_list").slice(0, 3)}
+          onCancel={() => setConfirmCampaign(false)}
+          onConfirm={() => { setConfirmCampaign(false); void runCampaign(); }}
         />
       )}
     </div>
