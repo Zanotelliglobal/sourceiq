@@ -219,7 +219,13 @@ export default function Home() {
             </div>
             SourceIQ
           </div>
-          <p className="text-xs text-slate-400">© {new Date().getFullYear()} SourceIQ. AI-powered supplier intelligence.</p>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
+              <Link href="/legal/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</Link>
+              <Link href="/legal/terms" className="hover:text-slate-900 transition-colors">Terms of Service</Link>
+            </div>
+            <p className="text-xs text-slate-400">© {new Date().getFullYear()} SourceIQ. AI-powered supplier intelligence.</p>
+          </div>
         </div>
       </footer>
     </div>
