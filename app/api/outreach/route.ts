@@ -110,7 +110,10 @@ export async function POST(req: NextRequest) {
 
           // ── Deliver the RFI (real send when live, no-op draft otherwise) ──
           // Every outbound RFI carries a compliant unsubscribe footer + headers.
-          const rfiBody = withComplianceFooter(`${email.body}\n\n---\n[EN] ${email.body_en}`, replyToken);
+          // Send ONLY the localized body — a dual-language email with an "[EN]"
+          // separator block is a classic spam signal. The English translation is
+          // still logged below for the dashboard, just not sent to the supplier.
+          const rfiBody = withComplianceFooter(email.body, replyToken);
           let delivery;
           try {
             delivery = await sendEmail({

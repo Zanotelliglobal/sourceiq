@@ -646,6 +646,12 @@ Other rules:
 - Reference the spend opportunity to signal seriousness
 - End with a clear CTA to express interest
 
+SUBJECT LINE RULE (deliverability — critical):
+- Keep the subject plain, specific, and human — like an email a real buyer would type, NOT marketing copy.
+- Prefer a concrete inquiry framing, e.g. "Question about your ${category} capacity" or "${category} supply inquiry".
+- AVOID salesy/spam-trigger words and phrasing: "Opportunity", "Partnership", "Exclusive", "Deal", ALL CAPS, exclamation marks, and emoji.
+- No more than ~8 words.
+
 Return JSON only:
 {
   "language": "the language you wrote the email in (English name of the language)",
