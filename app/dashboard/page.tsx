@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Zap, Factory, Star, ClipboardList, Search, Plus, ArrowRight } from "lucide-react";
+import { Zap, Factory, Star, ClipboardList, Search, Plus, ArrowRight, Loader2 } from "lucide-react";
 
 type EventRow = {
   id: number; title: string; category: string; status: string;
@@ -11,12 +11,14 @@ type EventRow = {
   supplier_count: number; shortlisted_count: number;
 };
 
-const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
+// `working: true` marks statuses where an AI agent is actively running — these
+// render a spinning loader instead of a static dot so users see live progress.
+const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string; working?: boolean }> = {
   idle:       { label: "Draft",        dot: "bg-slate-400",   badge: "badge-slate" },
-  scouting:   { label: "Scouting",     dot: "bg-blue-500 animate-pulse", badge: "badge-blue" },
+  scouting:   { label: "Scouting",     dot: "bg-blue-500 animate-pulse", badge: "badge-blue", working: true },
   reviewing:  { label: "In Review",    dot: "bg-amber-500",   badge: "badge-amber" },
   shortlisting:{ label: "Shortlisting",dot: "bg-violet-500",  badge: "badge-purple" },
-  outreach:   { label: "Outreach",     dot: "bg-orange-500",  badge: "badge-amber" },
+  outreach:   { label: "Outreach",     dot: "bg-orange-500",  badge: "badge-amber", working: true },
   completed:  { label: "Completed",    dot: "bg-emerald-500", badge: "badge-green" },
 };
 
@@ -26,14 +28,30 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/sourcing-events")
-      .then(r => r.json())
-      .then(d => {
-        if (Array.isArray(d)) setEvents(d);
-        else setError(d?.error || "Failed to load events");
-        setLoading(false);
-      })
-      .catch(e => { setError(String(e)); setLoading(false); });
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const load = () => {
+      fetch("/api/sourcing-events")
+        .then(r => r.json())
+        .then(d => {
+          if (cancelled) return;
+          if (Array.isArray(d)) {
+            setEvents(d);
+            // Keep refreshing while any agent is actively working, so the
+            // spinner clears (and pipeline counts update) once discovery ends.
+            const stillWorking = d.some((e: EventRow) => STATUS_CONFIG[e.status]?.working);
+            if (stillWorking) timer = setTimeout(load, 5000);
+          } else {
+            setError(d?.error || "Failed to load events");
+          }
+          setLoading(false);
+        })
+        .catch(e => { if (!cancelled) { setError(String(e)); setLoading(false); } });
+    };
+
+    load();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   const stats = {
@@ -141,8 +159,15 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                        {cfg.working ? (
+                          <Loader2 className="w-3.5 h-3.5 flex-shrink-0 text-blue-500 animate-spin" strokeWidth={2.5} />
+                        ) : (
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                        )}
                         <span className={`badge ${cfg.badge}`}>{cfg.label}</span>
+                        {cfg.working && (
+                          <span className="text-[11px] font-medium text-blue-600 hidden sm:inline">AI working…</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden lg:table-cell">
