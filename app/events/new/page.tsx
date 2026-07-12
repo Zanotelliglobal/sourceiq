@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Brain, Search, Scale, Lightbulb, ChevronRight, Sparkles, Check, X, EyeOff, Hand } from "lucide-react";
+import { useT } from "@/components/LanguageProvider";
 
 const CATEGORIES = [
   "Precision Machining & CNC",
@@ -55,6 +56,7 @@ const ALL_COUNTRIES = [
 ];
 
 export default function NewEventPage() {
+  const t = useT();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -139,7 +141,7 @@ export default function NewEventPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries }),
       });
-      if (!res.ok) throw new Error("Failed to create sourcing event");
+      if (!res.ok) throw new Error(t("Failed to create sourcing event"));
       const event = await res.json();
       // autostart=1 → the event page kicks off the first discovery wave itself,
       // so the user doesn't have to click "Launch Discovery" after creating.
@@ -160,7 +162,7 @@ export default function NewEventPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
-            Sourcing Dashboard
+            {t("Sourcing Dashboard")}
           </Link>
 
           <div className="mt-6 flex items-start gap-4">
@@ -170,9 +172,9 @@ export default function NewEventPage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Initiate Sourcing Event</h1>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("Initiate Sourcing Event")}</h1>
               <p className="text-sm text-slate-500 mt-1">
-                Define your sourcing requirement. A team of AI agents will execute market intelligence, supplier discovery, and pre-qualification across global supply chains.
+                {t("Define your sourcing requirement. A team of AI agents will execute market intelligence, supplier discovery, and pre-qualification across global supply chains.")}
               </p>
             </div>
           </div>
@@ -182,14 +184,14 @@ export default function NewEventPage() {
         <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50/40 p-5 sm:p-6 mb-8">
           <div className="flex items-center gap-2 mb-5">
             <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse-dot" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600">Agent Pipeline</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600">{t("Agent Pipeline")}</span>
           </div>
           <div className="flex items-stretch gap-2 sm:gap-3">
             {[
-              { Icon: Brain, label: "Orchestrator", sub: "Plans wave strategy" },
-              { Icon: Search, label: "Scout ×3", sub: "Broad · Niche · Geo" },
-              { Icon: Scale, label: "Qualifier", sub: "5-axis scoring" },
-              { Icon: Lightbulb, label: "Enricher", sub: "Risk · Strengths" },
+              { Icon: Brain, label: t("Orchestrator"), sub: t("Plans wave strategy") },
+              { Icon: Search, label: t("Scout ×3"), sub: t("Broad · Niche · Geo") },
+              { Icon: Scale, label: t("Qualifier"), sub: t("5-axis scoring") },
+              { Icon: Lightbulb, label: t("Enricher"), sub: t("Risk · Strengths") },
             ].map((a, i, arr) => (
               <div key={a.label} className="flex items-stretch flex-1 min-w-0">
                 <div className="relative flex-1 flex flex-col items-center text-center bg-white rounded-xl px-2 py-4 border border-blue-100/80 shadow-sm shadow-blue-600/[0.03] min-w-0">
@@ -208,7 +210,7 @@ export default function NewEventPage() {
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-slate-400 mt-4">Runs in 4 waves · discovers 40–60 suppliers · auto-scores against your requirements</p>
+          <p className="text-[11px] text-slate-400 mt-4">{t("Runs in 4 waves · discovers 40–60 suppliers · auto-scores against your requirements")}</p>
         </div>
 
         {/* Form */}
@@ -217,57 +219,57 @@ export default function NewEventPage() {
           {/* Event name */}
           <div>
             <label className="label">
-              Event Reference
+              {t("Event Reference")}
               <span className="ml-1 text-red-400">*</span>
             </label>
             <input
               className="input text-base"
-              placeholder="e.g. Precision CNC Machined Parts — Hydraulic Subassembly, FY2025-Q3"
+              placeholder={t("e.g. Precision CNC Machined Parts — Hydraulic Subassembly, FY2025-Q3")}
               value={form.title}
               onChange={e => set("title", e.target.value)}
               required
             />
-            <p className="text-xs text-slate-400 mt-1.5">Use your internal naming convention for traceability</p>
+            <p className="text-xs text-slate-400 mt-1.5">{t("Use your internal naming convention for traceability")}</p>
           </div>
 
           {/* Scope — comes first so the category can be inferred from it */}
           <div>
             <label className="label">
-              Sourcing Scope & Specification
+              {t("Sourcing Scope & Specification")}
               <span className="ml-1 text-red-400">*</span>
             </label>
             <textarea
               className="input resize-none"
               rows={5}
-              placeholder={`Describe the scope in precise commercial terms. Include:\n• Part or service description, materials, grades\n• Annual volumes or call-off quantities\n• Critical dimensions, tolerances, or performance specs\n• End-use application and sector context`}
+              placeholder={t("Describe the scope in precise commercial terms. Include:\n• Part or service description, materials, grades\n• Annual volumes or call-off quantities\n• Critical dimensions, tolerances, or performance specs\n• End-use application and sector context")}
               value={form.description}
               onChange={e => onDescriptionChange(e.target.value)}
               onBlur={onDescriptionBlur}
               required
             />
             <p className="text-xs text-slate-400 mt-1.5">
-              The commodity category is detected automatically as you describe the scope — you can override it below.
+              {t("The commodity category is detected automatically as you describe the scope — you can override it below.")}
             </p>
           </div>
 
           {/* Category — auto-selected from the description, manually overridable */}
           <div>
             <label className="label flex items-center gap-2">
-              <span>Commodity Category<span className="ml-1 text-red-400">*</span></span>
+              <span>{t("Commodity Category")}<span className="ml-1 text-red-400">*</span></span>
               {classifying && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-500">
                   <span className="w-3 h-3 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
-                  Detecting…
+                  {t("Detecting…")}
                 </span>
               )}
               {!classifying && autoDetected && form.category && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                  <Sparkles className="w-3 h-3" /> Auto-detected{confidence != null ? ` · ${confidence}%` : ""}
+                  <Sparkles className="w-3 h-3" /> {t("Auto-detected")}{confidence != null ? ` · ${confidence}%` : ""}
                 </span>
               )}
               {!classifying && classifyFailed && !form.category && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                  Auto-detect unavailable — pick one below
+                  {t("Auto-detect unavailable — pick one below")}
                 </span>
               )}
             </label>
@@ -290,12 +292,12 @@ export default function NewEventPage() {
             {/* Subcategory — populated by the classifier, freely editable */}
             <div className="mt-3">
               <label className="label text-xs">
-                Subcategory
-                <span className="font-normal text-slate-400"> — refine the specific commodity</span>
+                {t("Subcategory")}
+                <span className="font-normal text-slate-400"> {t("— refine the specific commodity")}</span>
               </label>
               <input
                 className="input"
-                placeholder="e.g. 5-axis aluminum machining"
+                placeholder={t("e.g. 5-axis aluminum machining")}
                 value={form.subcategory}
                 onChange={e => set("subcategory", e.target.value)}
               />
@@ -305,28 +307,28 @@ export default function NewEventPage() {
           {/* Requirements */}
           <div>
             <label className="label">
-              Qualification Criteria & Constraints
+              {t("Qualification Criteria & Constraints")}
               <span className="ml-1 text-red-400">*</span>
             </label>
             <textarea
               className="input resize-none"
               rows={5}
-              placeholder={`Define mandatory and desirable criteria. Include:\n• Required certifications (ISO 9001, IATF 16949, AS9100, NADCAP)\n• Geographic constraints or preferred regions\n• Minimum capacity or production rate thresholds\n• Lead time requirements and MOQ expectations\n• Country-of-origin restrictions (ITAR, Trade Compliance)`}
+              placeholder={t("Define mandatory and desirable criteria. Include:\n• Required certifications (ISO 9001, IATF 16949, AS9100, NADCAP)\n• Geographic constraints or preferred regions\n• Minimum capacity or production rate thresholds\n• Lead time requirements and MOQ expectations\n• Country-of-origin restrictions (ITAR, Trade Compliance)")}
               value={form.requirements}
               onChange={e => set("requirements", e.target.value)}
               required
             />
             <p className="text-xs text-blue-600 font-medium mt-2">
-              AI qualification scoring is calibrated directly against these criteria. Greater specificity yields more accurate supplier rankings.
+              {t("AI qualification scoring is calibrated directly against these criteria. Greater specificity yields more accurate supplier rankings.")}
             </p>
           </div>
 
           {/* Incumbent */}
           <div>
-            <label className="label">Incumbent Supplier(s) <span className="font-normal text-slate-400">— optional</span></label>
+            <label className="label">{t("Incumbent Supplier(s)")} <span className="font-normal text-slate-400">{t("— optional")}</span></label>
             <input
               className="input"
-              placeholder="e.g. Acme Machining Co., Smith Fabricators (will be excluded from outreach)"
+              placeholder={t("e.g. Acme Machining Co., Smith Fabricators (will be excluded from outreach)")}
               value={form.incumbent}
               onChange={e => set("incumbent", e.target.value)}
             />
@@ -335,11 +337,11 @@ export default function NewEventPage() {
           {/* Target geographies */}
           <div>
             <label className="label">
-              Target Sourcing Geographies
-              <span className="font-normal text-slate-400"> — optional</span>
+              {t("Target Sourcing Geographies")}
+              <span className="font-normal text-slate-400"> {t("— optional")}</span>
             </label>
             <p className="text-xs text-slate-400 mb-2.5">
-              Select the countries or regions the scout agents should focus on. Leave empty for a global search.
+              {t("Select the countries or regions the scout agents should focus on. Leave empty for a global search.")}
             </p>
             <div className="flex flex-wrap gap-2">
               {GEOGRAPHIES.map(c => {
@@ -366,7 +368,7 @@ export default function NewEventPage() {
                 value=""
                 onChange={e => { if (e.target.value) toggleCountry(e.target.value); }}
               >
-                <option value="">+ Add another country…</option>
+                <option value="">{t("+ Add another country…")}</option>
                 {ALL_COUNTRIES.filter(c => !GEOGRAPHIES.includes(c) && !countries.includes(c)).map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -387,21 +389,21 @@ export default function NewEventPage() {
 
             {countries.length > 0 && (
               <p className="text-xs text-blue-600 font-medium mt-2">
-                Agents will prioritise: {countries.join(", ")}
+                {t("Agents will prioritise: {countries}", { countries: countries.join(", ") })}
               </p>
             )}
           </div>
 
           {/* Outreach identity — anonymous vs. disclosed (per event) */}
           <div>
-            <label className="label">Supplier Outreach Identity</label>
+            <label className="label">{t("Supplier Outreach Identity")}</label>
             <p className="text-xs text-slate-400 mb-2.5">
-              Choose how you appear to suppliers when SourceIQ reaches out on this event.
+              {t("Choose how you appear to suppliers when SourceIQ reaches out on this event.")}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {[
-                { v: "true",  Icon: EyeOff, title: "Anonymous", sub: "SourceIQ contacts suppliers on your behalf — your organisation is never named." },
-                { v: "false", Icon: Hand, title: "Disclosed", sub: "Your name, role & company appear in the outreach. Copy or send via your own mail client." },
+                { v: "true",  Icon: EyeOff, title: t("Anonymous"), sub: t("SourceIQ contacts suppliers on your behalf — your organisation is never named.") },
+                { v: "false", Icon: Hand, title: t("Disclosed"), sub: t("Your name, role & company appear in the outreach. Copy or send via your own mail client.") },
               ].map(opt => {
                 const active = form.outreach_anonymous === opt.v;
                 return (
@@ -428,19 +430,19 @@ export default function NewEventPage() {
             {form.outreach_anonymous === "false" && (
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <label className="label text-xs">Your Name<span className="ml-1 text-red-400">*</span></label>
-                  <input className="input" placeholder="Jane Smith" value={form.buyer_name} onChange={e => set("buyer_name", e.target.value)} />
+                  <label className="label text-xs">{t("Your Name")}<span className="ml-1 text-red-400">*</span></label>
+                  <input className="input" placeholder={t("Jane Smith")} value={form.buyer_name} onChange={e => set("buyer_name", e.target.value)} />
                 </div>
                 <div>
-                  <label className="label text-xs">Role<span className="ml-1 text-red-400">*</span></label>
-                  <input className="input" placeholder="Procurement Lead" value={form.buyer_role} onChange={e => set("buyer_role", e.target.value)} />
+                  <label className="label text-xs">{t("Role")}<span className="ml-1 text-red-400">*</span></label>
+                  <input className="input" placeholder={t("Procurement Lead")} value={form.buyer_role} onChange={e => set("buyer_role", e.target.value)} />
                 </div>
                 <div>
-                  <label className="label text-xs">Company<span className="ml-1 text-red-400">*</span></label>
-                  <input className="input" placeholder="Acme Corp" value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
+                  <label className="label text-xs">{t("Company")}<span className="ml-1 text-red-400">*</span></label>
+                  <input className="input" placeholder={t("Acme Corp")} value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
                 </div>
                 <p className="sm:col-span-3 text-[11px] text-slate-400">
-                  These details are included in disclosed outreach emails so suppliers know who they&apos;re dealing with.
+                  {t("These details are included in disclosed outreach emails so suppliers know who they're dealing with.")}
                 </p>
               </div>
             )}
@@ -448,9 +450,9 @@ export default function NewEventPage() {
 
           {/* Spend */}
           <div>
-            <label className="label">Estimated Annual Spend (TCO)</label>
+            <label className="label">{t("Estimated Annual Spend (TCO)")}</label>
             <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
-              <option value="">Select range...</option>
+              <option value="">{t("Select range...")}</option>
               {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
@@ -465,19 +467,19 @@ export default function NewEventPage() {
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Initialising sourcing event...
+                  {t("Initialising sourcing event...")}
                 </>
               ) : (
                 <>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
                   </svg>
-                  Launch AI Discovery
+                  {t("Launch AI Discovery")}
                 </>
               )}
             </button>
             {!complete && (
-              <p className="text-center text-xs text-slate-400">Complete all required fields to proceed</p>
+              <p className="text-center text-xs text-slate-400">{t("Complete all required fields to proceed")}</p>
             )}
           </div>
 

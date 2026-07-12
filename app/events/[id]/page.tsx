@@ -7,6 +7,7 @@ import {
   X, Check, Minus, Bell, Star, Undo2, Sparkles, Lock, Hand,
   Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown,
 } from "lucide-react";
+import { useT } from "@/components/LanguageProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
@@ -162,6 +163,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   onOutreach: (s: Supplier) => void;
   onFollowUp: (s: Supplier) => void;
 }) {
+  const t = useT();
   const caps    = tryParse<string[]>(supplier.capabilities, []);
   const certs   = tryParse<string[]>(supplier.certifications, []);
   const breakdown = tryParse<Record<string, number>>(supplier.score_breakdown, {});
@@ -192,21 +194,21 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
             {supplier.ai_score !== null && (
               <div className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center border-2 font-bold ${SCORE_TEXT(supplier.ai_score)} border-current`}>
                 <span className="text-3xl leading-none">{supplier.ai_score}</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide mt-1 opacity-60">Score</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide mt-1 opacity-60">{t("Score")}</span>
               </div>
             )}
             <div className="flex-1">
               <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold mb-2 ${stage.bg} ${stage.text}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${stage.dot}`} />
-                {STAGES.find(s => s.key === supplier.funnel_stage)?.label || supplier.funnel_stage}
+                {(() => { const lbl = STAGES.find(s => s.key === supplier.funnel_stage)?.label; return lbl ? t(lbl) : supplier.funnel_stage; })()}
               </div>
               {enrichment?.recommended_action && (
                 <div className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
                   enrichment.recommended_action === "pursue" ? "text-emerald-600" :
                   enrichment.recommended_action === "pass" ? "text-red-500" : "text-amber-600"
                 }`}>
-                  {enrichment.recommended_action === "pursue" ? <><Check className="w-4 h-4" /> Recommended: Pursue</> :
-                   enrichment.recommended_action === "pass" ? <><X className="w-4 h-4" /> Recommended: Pass</> : <><Minus className="w-4 h-4" /> Recommended: Monitor</>}
+                  {enrichment.recommended_action === "pursue" ? <><Check className="w-4 h-4" /> {t("Recommended: Pursue")}</> :
+                   enrichment.recommended_action === "pass" ? <><X className="w-4 h-4" /> {t("Recommended: Pass")}</> : <><Minus className="w-4 h-4" /> {t("Recommended: Monitor")}</>}
                 </div>
               )}
               {enrichment?.market_position && (
@@ -227,10 +229,10 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               { label: "Phone", v: supplier.contact_phone },
               { label: "LinkedIn", v: supplier.contact_linkedin },
               { label: "Scout Agent", v: supplier.scout_agent },
-              { label: "Wave", v: supplier.wave ? `Wave ${supplier.wave}` : null },
+              { label: "Wave", v: supplier.wave ? t("Wave {n}", { n: supplier.wave }) : null },
             ].filter(x => x.v).map(({ label, v }) => (
               <div key={label} className="bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{t(label)}</div>
                 <div className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{v}</div>
               </div>
             ))}
@@ -238,14 +240,14 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
 
           {/* Description */}
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Company Overview</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Company Overview")}</div>
             <p className="text-sm text-slate-700 leading-relaxed">{supplier.description}</p>
           </div>
 
           {/* Capabilities */}
           {caps.length > 0 && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Core Capabilities</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Core Capabilities")}</div>
               <div className="flex flex-wrap gap-1.5">
                 {caps.map(c => (
                   <span key={c} className="text-xs bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-lg">{c}</span>
@@ -257,7 +259,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {/* Certifications */}
           {certs.length > 0 && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Certifications</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Certifications")}</div>
               <div className="flex flex-wrap gap-1.5">
                 {certs.map(c => (
                   <span key={c} className="text-xs bg-emerald-50 border border-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg font-medium">{c}</span>
@@ -269,7 +271,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {/* AI Assessment */}
           {supplier.score_rationale && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">AI Assessment</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("AI Assessment")}</div>
               <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-xl p-4 border border-slate-100">{supplier.score_rationale}</p>
             </div>
           )}
@@ -277,7 +279,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {/* Score breakdown */}
           {Object.keys(breakdown).length > 0 && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Qualification Dimensions</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">{t("Qualification Dimensions")}</div>
               <div className="space-y-2.5">
                 {Object.entries(breakdown).map(([k, v]) => (
                   <ScoreBar key={k} label={k.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())} value={v} />
@@ -291,7 +293,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
             <div className="grid grid-cols-2 gap-4">
               {enrichment.key_strengths && enrichment.key_strengths.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-500 mb-2">Strengths</div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-500 mb-2">{t("Strengths")}</div>
                   <ul className="space-y-1.5">
                     {enrichment.key_strengths.map((s, i) => (
                       <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
@@ -303,7 +305,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               )}
               {enrichment.key_risks && enrichment.key_risks.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-2">Risk Factors</div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-2">{t("Risk Factors")}</div>
                   <ul className="space-y-1.5">
                     {enrichment.key_risks.map((r, i) => (
                       <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
@@ -320,25 +322,25 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {response && (
             <div>
               <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                RFI Response
+                {t("RFI Response")}
                 {response.responded ? (
                   <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] ${response.sentiment === "positive" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"}`}>
-                    {response.sentiment === "positive" ? "POSITIVE" : "DECLINED"}
+                    {response.sentiment === "positive" ? t("POSITIVE") : t("DECLINED")}
                   </span>
                 ) : (
-                  <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] bg-slate-100 text-slate-400">NO RESPONSE</span>
+                  <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] bg-slate-100 text-slate-400">{t("NO RESPONSE")}</span>
                 )}
               </div>
               {response.responded ? (
                 <div className={`rounded-xl p-4 border ${response.sentiment === "positive" ? "bg-emerald-50/50 border-emerald-100" : "bg-red-50/50 border-red-100"}`}>
                   {replyForeign && (
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-[10px] text-slate-500 font-medium">Reply in {response.language}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">{t("Reply in {language}", { language: response.language })}</span>
                       <button
                         onClick={() => setShowReplyEn(v => !v)}
                         className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-white border border-slate-200 px-2 py-0.5 rounded transition-colors"
                       >
-                        {showReplyEn ? `Show ${response.language}` : "Translate to English"}
+                        {showReplyEn ? t("Show {language}", { language: response.language }) : t("Translate to English")}
                       </button>
                     </div>
                   )}
@@ -346,16 +348,16 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
                   {response.sentiment === "positive" && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {response.capacity_confirmed && response.capacity_confirmed !== "N/A" && (
-                        <span className="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg font-medium">Capacity: {response.capacity_confirmed}</span>
+                        <span className="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg font-medium">{t("Capacity: {value}", { value: response.capacity_confirmed })}</span>
                       )}
                       {response.lead_time && response.lead_time !== "N/A" && (
-                        <span className="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg font-medium">Lead time: {response.lead_time}</span>
+                        <span className="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg font-medium">{t("Lead time: {value}", { value: response.lead_time })}</span>
                       )}
                     </div>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 italic bg-slate-50 rounded-xl p-4 border border-slate-100">No reply received to the RFI within the follow-up window.</p>
+                <p className="text-sm text-slate-400 italic bg-slate-50 rounded-xl p-4 border border-slate-100">{t("No reply received to the RFI within the follow-up window.")}</p>
               )}
             </div>
           )}
@@ -366,31 +368,31 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           <div className="flex flex-wrap gap-2">
             {supplier.funnel_stage === "long_list" && (
               <button onClick={() => { onOutreach(supplier); onClose(); }} className="btn-cta flex-1 justify-center py-2.5">
-                Send RFI Now
+                {t("Send RFI Now")}
               </button>
             )}
             {supplier.funnel_stage === "contacted" && (
               <button onClick={() => { onFollowUp(supplier); onClose(); }} className="btn-ghost flex-1 justify-center py-2.5">
-                <Bell className="w-4 h-4" /> Send Follow-up
+                <Bell className="w-4 h-4" /> {t("Send Follow-up")}
               </button>
             )}
             {supplier.funnel_stage === "responded" && (
               <button onClick={() => { onMove(supplier.id, "shortlisted"); onClose(); }} className="btn-primary flex-1 justify-center py-2.5">
-                <Star className="w-4 h-4" /> Add to Short List
+                <Star className="w-4 h-4" /> {t("Add to Short List")}
               </button>
             )}
             {supplier.funnel_stage === "shortlisted" && (
               <button onClick={() => { onMove(supplier.id, "responded"); onClose(); }} className="btn-ghost py-2.5">
-                <Undo2 className="w-4 h-4" /> Remove from Short List
+                <Undo2 className="w-4 h-4" /> {t("Remove from Short List")}
               </button>
             )}
             {supplier.funnel_stage !== "declined" ? (
               <button onClick={() => { onMove(supplier.id, "declined"); onClose(); }} className="btn-ghost text-red-500 hover:bg-red-50 py-2.5">
-                <X className="w-4 h-4" /> Decline
+                <X className="w-4 h-4" /> {t("Decline")}
               </button>
             ) : (
               <button onClick={() => { onMove(supplier.id, "long_list"); onClose(); }} className="btn-ghost py-2.5">
-                Restore to Long List
+                {t("Restore to Long List")}
               </button>
             )}
           </div>
@@ -404,6 +406,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
 function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
   supplier: Supplier; anonymous?: boolean; onClose: () => void; onSent: (id: number) => void;
 }) {
+  const t = useT();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<{ language?: string; subject: string; body: string; subject_en?: string; body_en?: string } | null>(null);
   const [showEn, setShowEn] = useState(false);
@@ -438,86 +441,86 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
         <div className="p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h3 className="font-bold text-slate-900">{anonymous ? "Anonymous RFI Outreach" : "RFI Outreach"}</h3>
-              <p className="text-xs text-slate-400 mt-0.5">{supplier.name} · {anonymous ? "Identity protected" : "Sent under your name"}</p>
+              <h3 className="font-bold text-slate-900">{anonymous ? t("Anonymous RFI Outreach") : t("RFI Outreach")}</h3>
+              <p className="text-xs text-slate-400 mt-0.5">{supplier.name} · {anonymous ? t("Identity protected") : t("Sent under your name")}</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
           </div>
           {loading ? (
             <div className="flex flex-col items-center py-12 gap-3">
               <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-slate-500">Drafting personalised RFI email...</p>
+              <p className="text-sm text-slate-500">{t("Drafting personalised RFI email...")}</p>
             </div>
           ) : email ? (
             <div className="space-y-4">
               {isForeign && (
                 <div className="flex items-center justify-between gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-100">
                   <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 font-medium">
-                    <Sparkles className="w-3.5 h-3.5" /> Written in {email.language} for this supplier
+                    <Sparkles className="w-3.5 h-3.5" /> {t("Written in {language} for this supplier", { language: email.language ?? "" })}
                   </span>
                   <button
                     onClick={() => setShowEn(v => !v)}
                     className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 px-2.5 py-1 rounded-lg transition-colors"
                   >
-                    {showEn ? `Show ${email.language}` : "Translate to English"}
+                    {showEn ? t("Show {language}", { language: email.language ?? "" }) : t("Translate to English")}
                   </button>
                 </div>
               )}
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Subject Line</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">{t("Subject Line")}</div>
                 <div className="text-sm font-semibold text-slate-800 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200">{showEn && email.subject_en ? email.subject_en : email.subject}</div>
               </div>
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Message</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">{t("Message")}</div>
                 <div className="text-sm text-slate-700 bg-slate-50 px-4 py-4 rounded-xl border border-slate-200 whitespace-pre-wrap leading-relaxed">{showEn && email.body_en ? email.body_en : email.body}</div>
               </div>
               {anonymous ? (
                 <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
-                  <Lock className="w-4 h-4 flex-shrink-0" /> Sent anonymously via SourceIQ — your organisation identity is not disclosed
+                  <Lock className="w-4 h-4 flex-shrink-0" /> {t("Sent anonymously via SourceIQ — your organisation identity is not disclosed")}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
-                  <Hand className="w-4 h-4 flex-shrink-0" /> Disclosed outreach — copy the draft or open it in your own email client to send under your name.
+                  <Hand className="w-4 h-4 flex-shrink-0" /> {t("Disclosed outreach — copy the draft or open it in your own email client to send under your name.")}
                 </div>
               )}
 
               {/* Copy / send-via-own-client — always available, primary path when disclosed */}
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={copyDraft} className="btn-secondary justify-center py-2.5 text-sm">
-                  {copied ? <><Check className="w-4 h-4" /> Copied</> : "Copy draft"}
+                  {copied ? <><Check className="w-4 h-4" /> {t("Copied")}</> : t("Copy draft")}
                 </button>
                 {supplier.contact_email ? (
                   <a
                     href={mailtoHref}
                     className="btn-secondary justify-center py-2.5 text-sm"
-                    title="Open in your default email app"
+                    title={t("Open in your default email app")}
                   >
-                    Open in email app
+                    {t("Open in email app")}
                   </a>
                 ) : supplier.contact_url ? (
                   <a
                     href={supplier.contact_url}
                     target="_blank" rel="noopener noreferrer"
                     className="btn-secondary justify-center py-2.5 text-sm"
-                    title={`Open contact page — ${supplier.contact_url}`}
+                    title={t("Open contact page — {url}", { url: supplier.contact_url })}
                   >
-                    Open contact page
+                    {t("Open contact page")}
                   </a>
                 ) : (
                   <span
                     className="btn-secondary justify-center py-2.5 text-sm opacity-50 pointer-events-none"
-                    title="No contact channel on file"
+                    title={t("No contact channel on file")}
                   >
-                    No contact channel
+                    {t("No contact channel")}
                   </span>
                 )}
               </div>
 
               <button onClick={() => { onSent(supplier.id); onClose(); }} className="btn-primary w-full justify-center py-3">
-                Confirm &amp; Log RFI Sent
+                {t("Confirm & Log RFI Sent")}
               </button>
             </div>
-          ) : <p className="text-red-500 text-sm">Failed to generate email.</p>}
+          ) : <p className="text-red-500 text-sm">{t("Failed to generate email.")}</p>}
         </div>
       </div>
     </div>
@@ -530,10 +533,12 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
   onClick: () => void;
   onMove: (id: number, stage: string) => Promise<void>;
 }) {
+  const t = useT();
   const caps  = tryParse<string[]>(supplier.capabilities, []);
   const certs = tryParse<string[]>(supplier.certifications, []);
   const stage = STAGE_STYLE[supplier.funnel_stage] || STAGE_STYLE.long_list;
-  const stageLabel = STAGES.find(s => s.key === supplier.funnel_stage)?.label || "";
+  const stageLabelRaw = STAGES.find(s => s.key === supplier.funnel_stage)?.label || "";
+  const stageLabel = stageLabelRaw ? t(stageLabelRaw) : "";
 
   return (
     <tr
@@ -559,14 +564,14 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
           {(() => {
             // Tiered reachability badge: email → contact page → phone → LinkedIn → none.
             if (supplier.contact_email)
-              return <span title={`Contactable — ${supplier.contact_email}`} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded"><Mail className="w-2.5 h-2.5" /> Email</span>;
+              return <span title={t("Contactable — {value}", { value: supplier.contact_email })} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded"><Mail className="w-2.5 h-2.5" /> {t("Email")}</span>;
             if (supplier.contact_url)
-              return <span title={`Contact page — ${supplier.contact_url}`} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded"><Globe className="w-2.5 h-2.5" /> Contact page</span>;
+              return <span title={t("Contact page — {value}", { value: supplier.contact_url })} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded"><Globe className="w-2.5 h-2.5" /> {t("Contact page")}</span>;
             if (supplier.contact_phone)
-              return <span title={`Phone — ${supplier.contact_phone}`} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded"><Phone className="w-2.5 h-2.5" /> Phone</span>;
+              return <span title={t("Phone — {value}", { value: supplier.contact_phone })} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded"><Phone className="w-2.5 h-2.5" /> {t("Phone")}</span>;
             if (supplier.contact_linkedin)
-              return <span title={`LinkedIn — ${supplier.contact_linkedin}`} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">in LinkedIn</span>;
-            return <span title="No contact channel found yet" className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">No contact</span>;
+              return <span title={t("LinkedIn — {value}", { value: supplier.contact_linkedin })} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">{t("in LinkedIn")}</span>;
+            return <span title={t("No contact channel found yet")} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">{t("No contact")}</span>;
           })()}
         </div>
         <div className="text-xs text-slate-400 mt-0.5 truncate">
@@ -605,16 +610,16 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
             <button
               onClick={async () => await onMove(supplier.id, "shortlisted")}
               className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg transition-colors"
-              title="Add to Short List"
+              title={t("Add to Short List")}
             >
-              <Star className="w-2.5 h-2.5" /> Shortlist
+              <Star className="w-2.5 h-2.5" /> {t("Shortlist")}
             </button>
           )}
           {supplier.funnel_stage !== "declined" ? (
             <button
               onClick={async () => await onMove(supplier.id, "declined")}
               className="inline-flex items-center text-[10px] font-semibold text-red-400 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors"
-              title="Decline"
+              title={t("Decline")}
             >
               <X className="w-3 h-3" />
             </button>
@@ -622,7 +627,7 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
             <button
               onClick={async () => await onMove(supplier.id, "long_list")}
               className="text-[10px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors"
-              title="Restore"
+              title={t("Restore")}
             >
               <Undo2 className="w-3 h-3" />
             </button>
@@ -637,6 +642,7 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
 function BriefModal({ event, onClose, onSaved }: {
   event: Event; onClose: () => void; onSaved: (e: Event) => void;
 }) {
+  const t = useT();
   const [form, setForm] = useState({
     title: event.title,
     category: event.category,
@@ -672,32 +678,32 @@ function BriefModal({ event, onClose, onSaved }: {
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in">
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
           <div>
-            <h3 className="font-bold text-slate-900">Scouting Brief</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Review and refine the mandate driving the agents</p>
+            <h3 className="font-bold text-slate-900">{t("Scouting Brief")}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{t("Review and refine the mandate driving the agents")}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6 space-y-5">
           <div>
-            <label className="label">Event Reference</label>
+            <label className="label">{t("Event Reference")}</label>
             <input className="input" value={form.title} onChange={e => set("title", e.target.value)} />
           </div>
           <div>
-            <label className="label">Commodity Category</label>
+            <label className="label">{t("Commodity Category")}</label>
             <input className="input" value={form.category} onChange={e => set("category", e.target.value)} />
           </div>
           <div>
-            <label className="label">Sourcing Scope & Specification</label>
+            <label className="label">{t("Sourcing Scope & Specification")}</label>
             <textarea className="input resize-none" rows={4} value={form.description} onChange={e => set("description", e.target.value)} />
           </div>
           <div>
-            <label className="label">Qualification Criteria & Constraints</label>
+            <label className="label">{t("Qualification Criteria & Constraints")}</label>
             <textarea className="input resize-none" rows={4} value={form.requirements} onChange={e => set("requirements", e.target.value)} />
-            <p className="text-xs text-blue-600 font-medium mt-1.5">AI scoring recalibrates against these criteria on the next wave.</p>
+            <p className="text-xs text-blue-600 font-medium mt-1.5">{t("AI scoring recalibrates against these criteria on the next wave.")}</p>
           </div>
           <div>
-            <label className="label">Target Sourcing Geographies</label>
+            <label className="label">{t("Target Sourcing Geographies")}</label>
             <div className="flex flex-wrap gap-2 mb-2">
               {GEOGRAPHIES.map(c => {
                 const active = countries.includes(c);
@@ -714,7 +720,7 @@ function BriefModal({ event, onClose, onSaved }: {
               value=""
               onChange={e => { if (e.target.value) toggle(e.target.value); }}
             >
-              <option value="">+ Add another country…</option>
+              <option value="">{t("+ Add another country…")}</option>
               {ALL_COUNTRIES.filter(c => !GEOGRAPHIES.includes(c) && !countries.includes(c)).map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -728,23 +734,23 @@ function BriefModal({ event, onClose, onSaved }: {
                 ))}
               </div>
             )}
-            <p className="text-xs text-slate-400 mt-1.5">Empty = global search. Scouts prioritise these countries and search local-language sources.</p>
+            <p className="text-xs text-slate-400 mt-1.5">{t("Empty = global search. Scouts prioritise these countries and search local-language sources.")}</p>
           </div>
           <div>
-            <label className="label">Estimated Annual Spend</label>
+            <label className="label">{t("Estimated Annual Spend")}</label>
             <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
-              <option value="">Select range…</option>
-              {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="">{t("Select range…")}</option>
+              {SPEND_RANGES.map(s => <option key={s} value={s}>{t(s)}</option>)}
             </select>
           </div>
         </div>
 
         <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-400">Changes apply to the next discovery wave and outreach.</p>
+          <p className="text-xs text-slate-400">{t("Changes apply to the next discovery wave and outreach.")}</p>
           <div className="flex gap-2">
-            <button onClick={onClose} className="btn-ghost py-2.5">Cancel</button>
+            <button onClick={onClose} className="btn-ghost py-2.5">{t("Cancel")}</button>
             <button onClick={save} disabled={saving} className="btn-primary py-2.5 px-6">
-              {saving ? "Saving…" : "Save Brief"}
+              {saving ? t("Saving…") : t("Save Brief")}
             </button>
           </div>
         </div>
@@ -755,6 +761,7 @@ function BriefModal({ event, onClose, onSaved }: {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function EventPage() {
+  const t = useT();
   const { id } = useParams() as { id: string };
   const [event, setEvent]       = useState<Event | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -959,7 +966,7 @@ export default function EventPage() {
   async function runCampaign() {
     setCampaigning(true);
     setLiveAgents([]);
-    addLog("Deploying outreach agent across the Long List...");
+    addLog(t("Deploying outreach agent across the Long List..."));
     try {
       const res = await fetch("/api/outreach", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -981,11 +988,11 @@ export default function EventPage() {
     <div className="flex items-center justify-center h-96">
       <div className="flex flex-col items-center gap-3">
         <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-slate-400">Loading sourcing event...</p>
+        <p className="text-sm text-slate-400">{t("Loading sourcing event...")}</p>
       </div>
     </div>
   );
-  if (!event) return <div className="text-center py-24 text-slate-400">Event not found.</div>;
+  if (!event) return <div className="text-center py-24 text-slate-400">{t("Event not found.")}</div>;
 
   // Filter + sort
   const filtered = suppliers
@@ -1060,7 +1067,7 @@ export default function EventPage() {
       <div className="w-full lg:w-64 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white flex flex-col lg:overflow-hidden">
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Agent Control</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t("Agent Control")}</span>
             {running && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />}
           </div>
           <button
@@ -1069,11 +1076,11 @@ export default function EventPage() {
             className="btn-cta w-full justify-center mt-2 py-2"
           >
             {running ? (
-              <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Running...</>
+              <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("Running...")}</>
             ) : suppliers.length === 0 ? (
-              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Launch Discovery</>
+              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> {t("Launch Discovery")}</>
             ) : (
-              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Wave {(event.wave_count ?? 0) + 1}</>
+              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> {t("Wave {n}", { n: (event.wave_count ?? 0) + 1 })}</>
             )}
           </button>
 
@@ -1085,16 +1092,16 @@ export default function EventPage() {
               className="btn-secondary w-full justify-center mt-2 py-2"
             >
               {campaigning ? (
-                <><div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-600 rounded-full animate-spin" /> Contacting...</>
+                <><div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-600 rounded-full animate-spin" /> {t("Contacting...")}</>
               ) : (
-                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Auto-Outreach ({longListCount})</>
+                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> {t("Auto-Outreach ({n})", { n: longListCount })}</>
               )}
             </button>
           )}
           <p className="text-[10px] text-slate-400 mt-2 leading-snug">
             {longListCount > 0
-              ? `Agent will send anonymous RFIs to ${longListCount} long-list supplier${longListCount !== 1 ? "s" : ""} and advance those that reply positively.`
-              : "Run discovery waves to build the long list, then deploy the outreach agent."}
+              ? t("Agent will send anonymous RFIs to {n} long-list suppliers and advance those that reply positively.", { n: longListCount })
+              : t("Run discovery waves to build the long list, then deploy the outreach agent.")}
           </p>
         </div>
 
@@ -1121,18 +1128,18 @@ export default function EventPage() {
             </div>
           ))}
           {liveAgents.length === 0 && agents.length === 0 && (
-            <p className="text-xs text-slate-400 text-center py-4">No agents deployed yet</p>
+            <p className="text-xs text-slate-400 text-center py-4">{t("No agents deployed yet")}</p>
           )}
         </div>
 
         {/* Activity log */}
         <div className="flex flex-col overflow-hidden lg:flex-1">
           <div className="px-3 py-2 border-b border-slate-100">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Activity Log</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t("Activity Log")}</span>
           </div>
           <div ref={logsRef} className="overflow-y-auto p-3 space-y-0.5 max-h-56 lg:max-h-none lg:flex-1">
             {logs.length === 0 ? (
-              <p className="text-[10px] text-slate-400 text-center pt-4">Log appears here during discovery</p>
+              <p className="text-[10px] text-slate-400 text-center pt-4">{t("Log appears here during discovery")}</p>
             ) : logs.map((l, i) => (
               <div key={i} className="text-[10px] font-mono text-slate-500 leading-relaxed whitespace-pre-wrap break-all">{l}</div>
             ))}
@@ -1147,7 +1154,7 @@ export default function EventPage() {
         <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div>
-              <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"><ArrowLeft className="w-3 h-3" /> Dashboard</Link>
+              <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"><ArrowLeft className="w-3 h-3" /> {t("Dashboard")}</Link>
               <div className="flex items-center gap-3 mt-0.5">
                 <h1 className="font-bold text-slate-900 text-lg leading-tight">{event.title}</h1>
                 <button
@@ -1155,7 +1162,7 @@ export default function EventPage() {
                   className="text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-300 bg-blue-50 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                  Edit Brief
+                  {t("Edit Brief")}
                 </button>
               </div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -1163,23 +1170,23 @@ export default function EventPage() {
                 {event.subcategory && <span className="text-xs bg-violet-50 text-violet-600 px-2 py-0.5 rounded">{event.subcategory}</span>}
                 {event.annual_spend && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{event.annual_spend}</span>}
                 {event.target_countries && <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded"><Globe className="w-3 h-3" /> {event.target_countries}</span>}
-                {event.wave_count > 0 && <span className="text-xs bg-blue-50 text-blue-600 font-medium px-2 py-0.5 rounded">{event.wave_count} wave{event.wave_count !== 1 ? "s" : ""} complete</span>}
+                {event.wave_count > 0 && <span className="text-xs bg-blue-50 text-blue-600 font-medium px-2 py-0.5 rounded">{t("{n} waves complete", { n: event.wave_count })}</span>}
               </div>
             </div>
             {/* KPIs */}
             <div className="flex flex-wrap items-center gap-4 sm:gap-6 sm:text-right">
               {[
-                { label: "Total Found", value: suppliers.length },
-                { label: "Avg Score",   value: avgScore || "—" },
-                { label: "Short Listed",value: shortlisted },
+                { label: t("Total Found"), value: suppliers.length },
+                { label: t("Avg Score"),   value: avgScore || "—" },
+                { label: t("Short Listed"),value: shortlisted },
                 ...(usage && usage.cost_usd > 0
                   ? [{
-                      label: `AI Cost · ${(usage.total_tokens / 1000).toFixed(0)}k tok`,
+                      label: t("AI Cost · {tok}k tok", { tok: (usage.total_tokens / 1000).toFixed(0) }),
                       value: `$${usage.cost_usd.toFixed(2)}`,
                     }]
                   : []),
               ].map(k => (
-                <div key={k.label} title={usage ? `${usage.total_tokens.toLocaleString()} tokens · ${usage.web_searches} web searches` : undefined}>
+                <div key={k.label} title={usage ? t("{tokens} tokens · {searches} web searches", { tokens: usage.total_tokens.toLocaleString(), searches: usage.web_searches }) : undefined}>
                   <div className="text-2xl font-bold text-slate-900">{k.value}</div>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wide">{k.label}</div>
                 </div>
@@ -1203,10 +1210,10 @@ export default function EventPage() {
                   >
                     <div className="flex items-center gap-1.5">
                       <div className={`w-1.5 h-1.5 rounded-full ${f.dot}`} />
-                      <span className="text-[11px] font-bold text-slate-700">{f.label}</span>
+                      <span className="text-[11px] font-bold text-slate-700">{t(f.label)}</span>
                       <span className="ml-auto text-sm font-bold text-slate-900">{count}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{f.hint}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{t(f.hint)}</div>
                     {i < FUNNEL.length - 1 && (
                       <div className="absolute -right-1.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs z-10">›</div>
                     )}
@@ -1230,7 +1237,7 @@ export default function EventPage() {
                     : "text-slate-500 hover:bg-slate-100"
                 }`}
               >
-                {s.label}
+                {t(s.label)}
                 {stageCounts[s.key] > 0 && (
                   <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${stageFilter === s.key ? "bg-white/20" : "bg-slate-100"}`}>
                     {stageCounts[s.key]}
@@ -1245,29 +1252,29 @@ export default function EventPage() {
                 onClick={shortlistResponders}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-all whitespace-nowrap"
               >
-                <Star className="w-3 h-3" /> Shortlist all responders ({stageCounts["responded"]})
+                <Star className="w-3 h-3" /> {t("Shortlist all responders ({n})", { n: stageCounts["responded"] })}
               </button>
             )}
-            <span className="text-[10px] text-slate-400 uppercase tracking-wide">Sort:</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t("Sort:")}</span>
             {(["score", "name", "wave"] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSortBy(s)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${sortBy === s ? "bg-slate-900 text-white" : "text-slate-400 hover:bg-slate-100"}`}
               >
-                {s === "score" ? <span className="inline-flex items-center gap-0.5">Score <ArrowDown className="w-3 h-3" /></span> : s === "name" ? "Name" : "Wave"}
+                {s === "score" ? <span className="inline-flex items-center gap-0.5">{t("Score")} <ArrowDown className="w-3 h-3" /></span> : s === "name" ? t("Name") : t("Wave")}
               </button>
             ))}
             {suppliers.length > 0 && (
               <button
                 onClick={exportCsv}
-                title="Export the current list to CSV"
+                title={t("Export the current list to CSV")}
                 className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                 </svg>
-                Export CSV
+                {t("Export CSV")}
               </button>
             )}
           </div>
@@ -1278,21 +1285,21 @@ export default function EventPage() {
           {suppliers.length === 0 && !running ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-12">
               <Factory className="w-12 h-12 text-slate-300 mb-4" strokeWidth={1.5} />
-              <h2 className="text-lg font-bold text-slate-700 mb-2">Ready to initiate market intelligence</h2>
-              <p className="text-sm text-slate-400 max-w-md mb-6">Click <strong>Launch Discovery</strong> in the left panel to deploy AI agents across global supplier directories, trade databases, and industry registries.</p>
+              <h2 className="text-lg font-bold text-slate-700 mb-2">{t("Ready to initiate market intelligence")}</h2>
+              <p className="text-sm text-slate-400 max-w-md mb-6">{t("Click")} <strong>{t("Launch Discovery")}</strong> {t("in the left panel to deploy AI agents across global supplier directories, trade databases, and industry registries.")}</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-20 text-slate-400 text-sm">No suppliers in this stage.</div>
+            <div className="text-center py-20 text-slate-400 text-sm">{t("No suppliers in this stage.")}</div>
           ) : (
             <table className="w-full">
               <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
                 <tr>
                   <th className="pl-4 pr-2 py-2.5 text-left w-8 text-[10px] font-bold uppercase tracking-wider text-slate-400">#</th>
-                  <th className="px-2 py-2.5 text-left w-14 text-[10px] font-bold uppercase tracking-wider text-slate-400">Score</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier</th>
-                  <th className="px-3 py-2.5 text-left w-48 text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">Certifications</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">Capabilities</th>
-                  <th className="px-3 py-2.5 text-left w-32 text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">Stage</th>
+                  <th className="px-2 py-2.5 text-left w-14 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t("Score")}</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">{t("Supplier")}</th>
+                  <th className="px-3 py-2.5 text-left w-48 text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">{t("Certifications")}</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">{t("Capabilities")}</th>
+                  <th className="px-3 py-2.5 text-left w-32 text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">{t("Stage")}</th>
                   <th className="px-3 py-2.5 w-28" />
                 </tr>
               </thead>
@@ -1302,7 +1309,7 @@ export default function EventPage() {
                     <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                        Agents discovering suppliers...
+                        {t("Agents discovering suppliers...")}
                       </div>
                     </td>
                   </tr>

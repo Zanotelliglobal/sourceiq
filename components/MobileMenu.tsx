@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SignedIn } from "@clerk/nextjs";
+import { useT } from "@/components/LanguageProvider";
 
 // Compact hamburger menu shown only on small screens (the full nav links and the
 // "New Sourcing Event" button are hidden below the `md`/`sm` breakpoints).
 export default function MobileMenu() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -15,7 +17,7 @@ export default function MobileMenu() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label={open ? "Close menu" : "Open menu"}
+        aria-label={open ? t("Close menu") : t("Open menu")}
         aria-expanded={open}
         className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
       >
@@ -33,14 +35,14 @@ export default function MobileMenu() {
           <div className="fixed inset-0 top-14 bg-black/20 z-40" onClick={close} />
           <div className="absolute left-0 right-0 top-14 bg-white border-b border-slate-200 shadow-lg z-50 p-3 flex flex-col gap-1">
             <Link href="/dashboard" onClick={close} className="px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors">
-              Dashboard
+              {t("Dashboard")}
             </Link>
             <SignedIn>
               <Link href="/billing" onClick={close} className="px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors">
-                Billing
+                {t("Billing")}
               </Link>
               <Link href="/events/new" onClick={close} className="px-3 py-2.5 rounded-lg text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
-                + New Sourcing Event
+                {t("+ New Sourcing Event")}
               </Link>
             </SignedIn>
           </div>

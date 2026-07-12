@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Zap, Factory, Star, ClipboardList, Search, Plus, ArrowRight, Loader2 } from "lucide-react";
+import { useT } from "@/components/LanguageProvider";
 
 type EventRow = {
   id: number; title: string; category: string; status: string;
@@ -23,6 +24,7 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string;
 };
 
 export default function Dashboard() {
+  const t = useT();
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export default function Dashboard() {
             const stillWorking = d.some((e: EventRow) => STATUS_CONFIG[e.status]?.working);
             if (stillWorking) timer = setTimeout(load, 5000);
           } else {
-            setError(d?.error || "Failed to load events");
+            setError(d?.error || t("Failed to load events"));
           }
           setLoading(false);
         })
@@ -67,24 +69,24 @@ export default function Dashboard() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Sourcing Dashboard</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("Sourcing Dashboard")}</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Monitor active procurement events and AI-driven supplier intelligence
+            {t("Monitor active procurement events and AI-driven supplier intelligence")}
           </p>
         </div>
         <Link href="/events/new" className="btn-primary">
           <Plus className="w-4 h-4" />
-          New Sourcing Event
+          {t("New Sourcing Event")}
         </Link>
       </div>
 
       {/* KPI bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Active Events",      value: stats.active,     sub: `${stats.total} total events`,        Icon: Zap,           color: "text-blue-600",   iconColor: "text-blue-500" },
-          { label: "Suppliers Identified",value: stats.suppliers,  sub: "across all events",                  Icon: Factory,       color: "text-slate-900",  iconColor: "text-slate-400" },
-          { label: "Short Listed",       value: stats.shortlisted, sub: "approved for RFI",                  Icon: Star,          color: "text-amber-600",  iconColor: "text-amber-500" },
-          { label: "Total Events",       value: stats.total,       sub: "all time",                           Icon: ClipboardList, color: "text-slate-600",  iconColor: "text-slate-400" },
+          { label: t("Active Events"),      value: stats.active,     sub: t("{total} total events", { total: stats.total }),        Icon: Zap,           color: "text-blue-600",   iconColor: "text-blue-500" },
+          { label: t("Suppliers Identified"),value: stats.suppliers,  sub: t("across all events"),                  Icon: Factory,       color: "text-slate-900",  iconColor: "text-slate-400" },
+          { label: t("Short Listed"),       value: stats.shortlisted, sub: t("approved for RFI"),                  Icon: Star,          color: "text-amber-600",  iconColor: "text-amber-500" },
+          { label: t("Total Events"),       value: stats.total,       sub: t("all time"),                           Icon: ClipboardList, color: "text-slate-600",  iconColor: "text-slate-400" },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div className="flex items-center justify-between mb-2">
@@ -100,7 +102,7 @@ export default function Dashboard() {
       {/* Events */}
       {error ? (
         <div className="card p-10 text-center">
-          <h2 className="text-base font-bold text-red-600 mb-1">Couldn&apos;t load events</h2>
+          <h2 className="text-base font-bold text-red-600 mb-1">{t("Couldn't load events")}</h2>
           <p className="text-sm text-slate-500">{error}</p>
         </div>
       ) : loading ? (
@@ -117,29 +119,29 @@ export default function Dashboard() {
           <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto mb-4">
             <Search className="w-7 h-7 text-blue-600" />
           </div>
-          <h2 className="text-lg font-bold text-slate-700 mb-2">No sourcing events yet</h2>
+          <h2 className="text-lg font-bold text-slate-700 mb-2">{t("No sourcing events yet")}</h2>
           <p className="text-sm text-slate-400 max-w-sm mx-auto mb-6">
-            Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.
+            {t("Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.")}
           </p>
           <Link href="/events/new" className="btn-primary">
-            Initiate First Sourcing Event
+            {t("Initiate First Sourcing Event")}
           </Link>
         </div>
       ) : (
         <div className="card overflow-hidden">
           <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-700">Sourcing Events</h2>
-            <span className="text-xs text-slate-400">{events.length} event{events.length !== 1 ? "s" : ""}</span>
+            <h2 className="text-sm font-bold text-slate-700">{t("Sourcing Events")}</h2>
+            <span className="text-xs text-slate-400">{events.length === 1 ? t("{count} event", { count: events.length }) : t("{count} events", { count: events.length })}</span>
           </div>
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Event</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">Category</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Status</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">Pipeline</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">Spend</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">Initiated</th>
+                <th className="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Event")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">{t("Category")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Status")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">{t("Pipeline")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">{t("Spend")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">{t("Initiated")}</th>
                 <th className="px-4 py-3 w-20" />
               </tr>
             </thead>
@@ -151,7 +153,7 @@ export default function Dashboard() {
                     <td className="px-6 py-4">
                       <div className="font-semibold text-slate-900 text-sm">{event.title}</div>
                       {event.wave_count > 0 && (
-                        <div className="text-xs text-slate-400 mt-0.5">{event.wave_count} discovery wave{event.wave_count !== 1 ? "s" : ""} completed</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{event.wave_count === 1 ? t("{count} discovery wave completed", { count: event.wave_count }) : t("{count} discovery waves completed", { count: event.wave_count })}</div>
                       )}
                     </td>
                     <td className="px-4 py-4 hidden md:table-cell">
@@ -164,18 +166,18 @@ export default function Dashboard() {
                         ) : (
                           <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
                         )}
-                        <span className={`badge ${cfg.badge}`}>{cfg.label}</span>
+                        <span className={`badge ${cfg.badge}`}>{t(cfg.label)}</span>
                         {cfg.working && (
-                          <span className="text-[11px] font-medium text-blue-600 hidden sm:inline">AI working…</span>
+                          <span className="text-[11px] font-medium text-blue-600 hidden sm:inline">{t("AI working…")}</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden lg:table-cell">
                       <div className="text-sm text-slate-700 font-medium">{event.supplier_count || 0}
-                        <span className="font-normal text-slate-400"> found</span>
+                        <span className="font-normal text-slate-400"> {t("found")}</span>
                       </div>
                       {(event.shortlisted_count || 0) > 0 && (
-                        <div className="text-xs text-amber-600 font-medium">{event.shortlisted_count} shortlisted</div>
+                        <div className="text-xs text-amber-600 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>
                       )}
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
@@ -191,7 +193,7 @@ export default function Dashboard() {
                         href={`/events/${event.id}`}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        Open <ArrowRight className="w-3 h-3" />
+                        {t("Open")} <ArrowRight className="w-3 h-3" />
                       </Link>
                     </td>
                   </tr>
