@@ -141,7 +141,9 @@ export default function NewEventPage() {
       });
       if (!res.ok) throw new Error("Failed to create sourcing event");
       const event = await res.json();
-      router.push(`/events/${event.id}`);
+      // autostart=1 → the event page kicks off the first discovery wave itself,
+      // so the user doesn't have to click "Launch Discovery" after creating.
+      router.push(`/events/${event.id}?autostart=1`);
     } catch (err) {
       alert(String(err));
       setLoading(false);

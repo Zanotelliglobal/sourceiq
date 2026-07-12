@@ -760,6 +760,7 @@ export default function EventPage() {
   const [sortBy, setSortBy]     = useState<"score" | "name" | "wave">("score");
   const [usage, setUsage]       = useState<{ cost_usd: number; total_tokens: number; web_searches: number } | null>(null);
   const logsRef = useRef<HTMLDivElement>(null);
+  const autostartedRef = useRef(false);
 
   const loadData = useCallback(async () => {
     const res  = await fetch(`/api/sourcing-events/${id}`);
@@ -840,6 +841,20 @@ export default function EventPage() {
       setLiveAgents(prev => prev.map(a => ({ ...a, status: "complete" })));
     }
   }
+
+  // Auto-launch the first discovery wave when arriving straight from event
+  // creation (?autostart=1), so users don't have to click "Launch Discovery"
+  // themselves. Guarded to fire once, and only for a fresh event with no waves.
+  useEffect(() => {
+    if (autostartedRef.current) return;
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("autostart") !== "1") return;
+    if (loading || !event) return;
+    if (running || (event.wave_count ?? 0) > 0 || suppliers.length > 0) return;
+    autostartedRef.current = true;
+    void runWave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, event, running, suppliers.length]);
 
   async function moveStage(supplierId: number, stage: string) {
     await fetch("/api/qualify", {
