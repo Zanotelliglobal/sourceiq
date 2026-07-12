@@ -82,12 +82,37 @@ export async function POST(req: NextRequest) {
   const data = payload?.data ?? payload;
   const recipient = extractRecipient(data?.to);
   const token = parseReplyToken(recipient);
-  const replyBody: string =
+  const fromAddress = extractRecipient(data?.from) || "";
+
+  // Resend's `email.received` webhook carries METADATA ONLY — no body, headers,
+  // or attachments (keeps the payload small for serverless). We must fetch the
+  // full message from the Received Emails API using the email id. Older/other
+  // provider shapes may inline the body, so prefer inline when present.
+  let replyBody: string =
     (typeof data?.text === "string" && data.text) ||
     (typeof data?.stripped_text === "string" && data.stripped_text) ||
     (typeof data?.html === "string" && data.html.replace(/<[^>]+>/g, " ")) ||
     "";
-  const fromAddress = extractRecipient(data?.from) || "";
+  const emailId: string | null =
+    (typeof data?.email_id === "string" && data.email_id) ||
+    (typeof data?.id === "string" && data.id) ||
+    null;
+  if (!replyBody && emailId && process.env.RESEND_API_KEY) {
+    try {
+      const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+      });
+      if (r.ok) {
+        const full = (await r.json()) as { text?: string; html?: string };
+        replyBody =
+          (typeof full.text === "string" && full.text) ||
+          (typeof full.html === "string" && full.html.replace(/<[^>]+>/g, " ")) ||
+          "";
+      }
+    } catch {
+      // Non-fatal: fall through with an empty body; the raw event is still logged.
+    }
+  }
 
   if (!token) {
     // No routable token — acknowledge so the provider doesn't retry, but do nothing.
