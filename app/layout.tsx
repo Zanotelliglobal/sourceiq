@@ -81,6 +81,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </header>
 
           <main className="flex-1"><AppShell>{children}</AppShell></main>
+
+          {/* App-wide footer — keeps legal pages reachable from any screen. */}
+          <footer className="border-t border-slate-200/80 mt-auto">
+            <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-xs text-slate-400">© {new Date().getFullYear()} SourceIQ. AI-powered supplier intelligence.</p>
+              <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
+                <Link href="/legal/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</Link>
+                <Link href="/legal/terms" className="hover:text-slate-900 transition-colors">Terms of Service</Link>
+              </div>
+            </div>
+          </footer>
         </div>
       </body>
     </html>
