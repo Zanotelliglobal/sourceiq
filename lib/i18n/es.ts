@@ -280,4 +280,5 @@ export const es: Record<string, string> = {
   "Recipients preview": "Vista previa de destinatarios",
   "+ {n} more": "+ {n} más",
   "Send to {n} suppliers": "Enviar a {n} proveedores",
+  "Subscribe to Pro to create unlimited sourcing events, run multi-wave discovery, and deploy live outreach.": "Suscríbase a Pro para crear eventos de sourcing ilimitados, ejecutar discovery multi-ola y desplegar outreach en vivo.",
 };

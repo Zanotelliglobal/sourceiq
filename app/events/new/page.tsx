@@ -74,6 +74,8 @@ export default function NewEventPage() {
   const [autoDetected, setAutoDetected] = useState(false); // category came from AI, not a manual click
   const [confidence, setConfidence] = useState<number | null>(null);
   const [classifyFailed, setClassifyFailed] = useState(false); // auto-detect errored → prompt manual pick
+  const [showUpgrade, setShowUpgrade] = useState(false); // trial ended / no active plan (402)
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryTouchedRef = useRef(false); // user manually picked → stop auto-overriding
 
@@ -141,6 +143,13 @@ export default function NewEventPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries }),
       });
+      // Billing gate: trial ended or no active plan → guide the user to upgrade
+      // instead of surfacing an opaque failure.
+      if (res.status === 402) {
+        setShowUpgrade(true);
+        setLoading(false);
+        return;
+      }
       if (!res.ok) throw new Error(t("Failed to create sourcing event"));
       const event = await res.json();
       // autostart=1 → the event page kicks off the first discovery wave itself,
@@ -149,6 +158,19 @@ export default function NewEventPage() {
     } catch (err) {
       alert(String(err));
       setLoading(false);
+    }
+  }
+
+  async function startCheckout() {
+    setUpgradeBusy(true);
+    try {
+      const r = await fetch("/api/stripe/checkout", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || !d.url) throw new Error(d.error || t("Request failed"));
+      window.location.href = d.url;
+    } catch {
+      // Fall back to the full billing page if checkout can't start inline.
+      router.push("/billing");
     }
   }
 
@@ -485,6 +507,33 @@ export default function NewEventPage() {
 
         </form>
       </div>
+
+      {/* Upgrade gate — shown when event creation is blocked by billing (402) */}
+      {showUpgrade && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" role="dialog" aria-modal="true" onClick={() => !upgradeBusy && setShowUpgrade(false)}>
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 animate-slide-in" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-slate-900">{t("Your free trial has ended.")}</h3>
+                <button onClick={() => setShowUpgrade(false)} disabled={upgradeBusy} aria-label={t("Cancel")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+              <p className="text-sm text-slate-500 leading-relaxed mb-5">
+                {t("Subscribe to Pro to create unlimited sourcing events, run multi-wave discovery, and deploy live outreach.")}
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <Link href="/billing" className="btn-secondary py-2">{t("Manage subscription")}</Link>
+                <button onClick={startCheckout} disabled={upgradeBusy} className="btn-primary py-2">
+                  {upgradeBusy ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t("Redirecting…")}</>
+                  ) : (
+                    <><Sparkles className="w-3.5 h-3.5" /> {t("Subscribe to Pro")}</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -28,6 +28,22 @@ export default function Dashboard() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [trial, setTrial] = useState<{ status: string; trial_ends_at: string | null; active: boolean } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/billing/status")
+      .then(r => r.json())
+      .then(d => setTrial(d))
+      .catch(() => {});
+  }, []);
+
+  // Compact trial signal for the header: days remaining, or an ended prompt.
+  const trialBadge = (() => {
+    if (!trial || !trial.trial_ends_at || (trial.status !== "trial" && trial.status !== "trialing")) return null;
+    const ms = new Date(trial.trial_ends_at).getTime() - Date.now();
+    if (ms <= 0) return { ended: true, days: 0 };
+    return { ended: false, days: Math.ceil(ms / 86_400_000) };
+  })();
 
   useEffect(() => {
     let cancelled = false;
@@ -74,10 +90,30 @@ export default function Dashboard() {
             {t("Monitor active procurement events and AI-driven supplier intelligence")}
           </p>
         </div>
-        <Link href="/events/new" className="btn-primary">
-          <Plus className="w-4 h-4" />
-          {t("New Sourcing Event")}
-        </Link>
+        <div className="flex items-center gap-3">
+          {trialBadge && (
+            <Link
+              href="/billing"
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                trialBadge.ended
+                  ? "text-red-700 bg-red-50 border-red-100 hover:bg-red-100"
+                  : trialBadge.days <= 3
+                    ? "text-amber-700 bg-amber-50 border-amber-100 hover:bg-amber-100"
+                    : "text-blue-700 bg-blue-50 border-blue-100 hover:bg-blue-100"
+              }`}
+            >
+              {trialBadge.ended
+                ? t("Your free trial has ended.")
+                : trialBadge.days === 1
+                  ? t("{days} day left in your free trial.", { days: trialBadge.days })
+                  : t("{days} days left in your free trial.", { days: trialBadge.days })}
+            </Link>
+          )}
+          <Link href="/events/new" className="btn-primary">
+            <Plus className="w-4 h-4" />
+            {t("New Sourcing Event")}
+          </Link>
+        </div>
       </div>
 
       {/* KPI bar */}
