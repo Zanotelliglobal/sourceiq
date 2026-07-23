@@ -83,6 +83,13 @@ export function unsubscribeUrl(token: string): string | null {
   return `${base.replace(/\/$/, "")}/api/unsubscribe?t=${encodeURIComponent(token)}`;
 }
 
+/** Public branded RFI response-form URL for a supplier's reply token. */
+export function rfiUrl(token: string): string | null {
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  if (!base || !token) return null;
+  return `${base.replace(/\/$/, "")}/supplier/rfi?t=${encodeURIComponent(token)}`;
+}
+
 /** Append the legally-required unsubscribe + postal-address footer to a body. */
 export function withComplianceFooter(body: string, token: string): string {
   const url = unsubscribeUrl(token);

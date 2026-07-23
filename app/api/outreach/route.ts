@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact } from "@/lib/agents";
-import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders } from "@/lib/mail";
+import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
@@ -113,7 +113,13 @@ export async function POST(req: NextRequest) {
           // Send ONLY the localized body — a dual-language email with an "[EN]"
           // separator block is a classic spam signal. The English translation is
           // still logged below for the dashboard, just not sent to the supplier.
-          const rfiBody = withComplianceFooter(email.body, replyToken);
+          // Offer a one-click branded web form as an alternative to replying by
+          // email. Suppliers who prefer a structured response land on /supplier/rfi.
+          const formUrl = rfiUrl(replyToken);
+          const bodyWithCta = formUrl
+            ? `${email.body}\n\nPrefer a quick web form? You can respond in one minute here:\n${formUrl}`
+            : email.body;
+          const rfiBody = withComplianceFooter(bodyWithCta, replyToken);
           let delivery;
           try {
             delivery = await sendEmail({

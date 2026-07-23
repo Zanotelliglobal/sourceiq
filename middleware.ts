@@ -14,6 +14,10 @@ const isPublic = createRouteMatcher([
   "/api/inbound(.*)",
   "/api/stripe/webhook(.*)",
   "/api/unsubscribe(.*)",
+  // Supplier-facing RFI response form + its submit endpoint. Suppliers have no
+  // session; authorized by an unguessable per-supplier reply token.
+  "/supplier(.*)",
+  "/api/supplier-response(.*)",
 ]);
 
 // DEV-ONLY: when DEV_AUTH_BYPASS=1 (and not in production), skip route
