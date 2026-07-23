@@ -113,10 +113,18 @@ function tryParse<T>(s: string | null, fallback: T): T {
 async function readEventStream(
   body: ReadableStream<Uint8Array>,
   onEvent: (msg: Record<string, unknown>) => void,
+  signal?: AbortSignal,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+
+  // Abort the reader when the caller cancels, so the loop unblocks promptly.
+  const onAbort = () => { void reader.cancel().catch(() => {}); };
+  if (signal) {
+    if (signal.aborted) { void reader.cancel().catch(() => {}); return; }
+    signal.addEventListener("abort", onAbort, { once: true });
+  }
 
   const flushLine = (line: string) => {
     const trimmed = line.replace(/\r$/, "");
@@ -127,6 +135,7 @@ async function readEventStream(
     catch { /* ignore malformed/partial payloads */ }
   };
 
+  try {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -140,6 +149,12 @@ async function readEventStream(
   // Flush any trailing complete line left in the buffer at stream end.
   buffer += decoder.decode();
   if (buffer.length) flushLine(buffer);
+  } catch (err) {
+    // Reader cancellation surfaces as an AbortError — swallow it, rethrow others.
+    if (!(err instanceof DOMException && err.name === "AbortError")) throw err;
+  } finally {
+    if (signal) signal.removeEventListener("abort", onAbort);
+  }
 }
 
 // ─── Score bar ────────────────────────────────────────────────────────────────
@@ -899,6 +914,33 @@ export default function EventPage() {
   const logsRef = useRef<HTMLDivElement>(null);
   const autostartedRef = useRef(false);
 
+  // Toasts — transient user-facing notifications (errors, confirmations, undo).
+  type Toast = { id: number; kind: "error" | "success" | "info"; msg: string; action?: { label: string; run: () => void } };
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastSeq = useRef(0);
+  const dismissToast = useCallback((tid: number) => setToasts(prev => prev.filter(x => x.id !== tid)), []);
+  const pushToast = useCallback((kind: Toast["kind"], msg: string, action?: Toast["action"]) => {
+    const tid = ++toastSeq.current;
+    setToasts(prev => [...prev, { id: tid, kind, msg, action }]);
+    // Errors and undo prompts linger longer; plain info fades quickly.
+    const ttl = action ? 8000 : kind === "error" ? 6000 : 3500;
+    setTimeout(() => setToasts(prev => prev.filter(x => x.id !== tid)), ttl);
+    return tid;
+  }, []);
+
+  // Abort controller for the in-flight discovery/outreach stream, so the user
+  // can stop a running wave. Cleared once the run settles.
+  const abortRef = useRef<AbortController | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const stopRun = useCallback(() => {
+    if (!abortRef.current) return;
+    setStopping(true);
+    abortRef.current.abort();
+    addLogRef.current?.("⏹  Stopping — no further suppliers will be contacted.");
+  }, []);
+  // addLog is defined below; keep a ref so stopRun (declared first) can call it.
+  const addLogRef = useRef<((msg: string) => void) | null>(null);
+
   const loadData = useCallback(async () => {
     const res  = await fetch(`/api/sourcing-events/${id}`);
     const data = await res.json();
@@ -916,6 +958,7 @@ export default function EventPage() {
 
   const addLog = (msg: string) =>
     setLogs(prev => [...prev.slice(-149), `${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}  ${msg}`]);
+  addLogRef.current = addLog;
 
   function handleStreamEvent(msg: Record<string, unknown>) {
     const type = msg.type as string;
@@ -952,28 +995,46 @@ export default function EventPage() {
       if (u) { setUsage(u); addLog(`💰 Run cost so far: $${u.cost_usd.toFixed(2)} · ${(u.total_tokens/1000).toFixed(0)}k tokens · ${u.web_searches} web searches`); }
       setEvent(e => e ? { ...e, wave_count: msg.wave as number, status: "reviewing" } : e);
     }
-    if (type === "error") addLog(`ERR ${msg.message}`);
+    if (type === "error") { addLog(`ERR ${msg.message}`); pushToast("error", String(msg.message || t("Discovery failed"))); }
   }
 
   async function runWave() {
     setRunning(true);
+    setStopping(false);
     setLogs([]);
     setLiveAgents([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
     const nextWave = (event?.wave_count ?? 0) + 1;
     addLog(`Initialising Wave ${nextWave}...`);
     try {
       const res = await fetch("/api/orchestrate", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: id, wave: nextWave }),
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({}));
-        addLog(`ERR discovery failed (${res.status})${err.error ? ` — ${err.error}` : ""}`);
+        const detail = err.error ? ` — ${err.error}` : "";
+        addLog(`ERR discovery failed (${res.status})${detail}`);
+        pushToast("error", t("Discovery failed") + detail);
       } else {
-        await readEventStream(res.body, handleStreamEvent);
+        await readEventStream(res.body, handleStreamEvent, controller.signal);
+        if (controller.signal.aborted) pushToast("info", t("Discovery stopped."));
       }
       await loadData();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        addLog("⏹  Discovery stopped by user.");
+        pushToast("info", t("Discovery stopped."));
+      } else {
+        addLog(`ERR discovery failed: ${String(err)}`);
+        pushToast("error", t("Discovery failed"));
+      }
+      await loadData().catch(() => {});
     } finally {
+      abortRef.current = null;
+      setStopping(false);
       setRunning(false);
       setLiveAgents(prev => prev.map(a => ({ ...a, status: "complete" })));
     }
@@ -993,13 +1054,33 @@ export default function EventPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, event, running, suppliers.length]);
 
-  async function moveStage(supplierId: number, stage: string) {
-    await fetch("/api/qualify", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "move_stage", supplier_id: supplierId, stage }),
-    });
+  async function moveStage(supplierId: number, stage: string, opts?: { silent?: boolean }) {
+    const prevStage = suppliers.find(s => s.id === supplierId)?.funnel_stage;
+    // Optimistic update; revert if the request fails.
     setSuppliers(prev => prev.map(s => s.id === supplierId ? { ...s, funnel_stage: stage } : s));
     if (selected?.id === supplierId) setSelected(s => s ? { ...s, funnel_stage: stage } : s);
+    try {
+      const res = await fetch("/api/qualify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "move_stage", supplier_id: supplierId, stage }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!opts?.silent && prevStage && prevStage !== stage) {
+        const label = STAGES.find(x => x.key === stage)?.label ?? stage;
+        pushToast("success", t("Moved to {stage}", { stage: t(label) }), {
+          label: t("Undo"),
+          run: () => { void moveStage(supplierId, prevStage, { silent: true }); },
+        });
+      }
+    } catch (err) {
+      // Revert the optimistic change and tell the user.
+      if (prevStage) {
+        setSuppliers(prev => prev.map(s => s.id === supplierId ? { ...s, funnel_stage: prevStage } : s));
+        if (selected?.id === supplierId) setSelected(s => s ? { ...s, funnel_stage: prevStage } : s);
+      }
+      addLog(`ERR could not move supplier: ${String(err)}`);
+      pushToast("error", t("Could not update stage. Please try again."));
+    }
   }
 
   function handleOutreachSent(supplierId: number) {
@@ -1013,23 +1094,30 @@ export default function EventPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "send_followup", supplier_id: s.id }),
       });
-      const d = await res.json();
-      if (d.warning) addLog(`⚠  Follow-up drafted for ${s.name} — ${d.warning}`);
-      else addLog(`   Follow-up ${d.delivery?.mode === "live" ? "sent" : "drafted"} for ${s.name}`);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      if (d.warning) { addLog(`⚠  Follow-up drafted for ${s.name} — ${d.warning}`); pushToast("info", String(d.warning)); }
+      else { addLog(`   Follow-up ${d.delivery?.mode === "live" ? "sent" : "drafted"} for ${s.name}`); pushToast("success", t("Follow-up sent to {name}", { name: s.name })); }
     } catch (err) {
       addLog(`ERR follow-up failed: ${String(err)}`);
+      pushToast("error", t("Could not send follow-up to {name}.", { name: s.name }));
     }
   }
 
   async function shortlistResponders() {
-    const res = await fetch("/api/qualify", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "shortlist_responders", event_id: Number(id) }),
-    });
-    const d = await res.json();
-    if (d.success) {
+    try {
+      const res = await fetch("/api/qualify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "shortlist_responders", event_id: Number(id) }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
       setSuppliers(prev => prev.map(s => s.funnel_stage === "responded" ? { ...s, funnel_stage: "shortlisted" } : s));
       addLog(`⭐  Shortlisted ${d.moved} responder${d.moved === 1 ? "" : "s"}.`);
+      pushToast("success", t("Shortlisted {n} responders", { n: d.moved }));
+    } catch (err) {
+      addLog(`ERR shortlist failed: ${String(err)}`);
+      pushToast("error", t("Could not shortlist responders. Please try again."));
     }
   }
 
@@ -1071,7 +1159,7 @@ export default function EventPage() {
     if (type === "usage") {
       setUsage({ cost_usd: msg.cost_usd as number, total_tokens: msg.total_tokens as number, web_searches: msg.web_searches as number });
     }
-    if (type === "supplier_error") addLog(`ERR ${msg.message}`);
+    if (type === "supplier_error") { addLog(`ERR ${msg.message}`); pushToast("error", String(msg.message)); }
     if (type === "campaign_complete") {
       addLog(
         msg.live
@@ -1079,26 +1167,44 @@ export default function EventPage() {
           : `Campaign complete — ${msg.sent} contacted · ${msg.positive} positive · ${msg.declined} declined`
       );
     }
-    if (type === "error") addLog(`ERR ${msg.message}`);
+    if (type === "error") { addLog(`ERR ${msg.message}`); pushToast("error", String(msg.message || t("Outreach failed"))); }
   }
 
   async function runCampaign() {
     setCampaigning(true);
+    setStopping(false);
     setLiveAgents([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
     addLog(t("Deploying outreach agent across the Long List..."));
     try {
       const res = await fetch("/api/outreach", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: id }),
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({}));
-        addLog(`ERR outreach failed (${res.status})${err.error ? ` — ${err.error}` : ""}`);
+        const detail = err.error ? ` — ${err.error}` : "";
+        addLog(`ERR outreach failed (${res.status})${detail}`);
+        pushToast("error", t("Outreach failed") + detail);
       } else {
-        await readEventStream(res.body, handleCampaignEvent);
+        await readEventStream(res.body, handleCampaignEvent, controller.signal);
+        if (controller.signal.aborted) pushToast("info", t("Outreach stopped."));
       }
       await loadData();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        addLog("⏹  Outreach stopped by user.");
+        pushToast("info", t("Outreach stopped."));
+      } else {
+        addLog(`ERR outreach failed: ${String(err)}`);
+        pushToast("error", t("Outreach failed"));
+      }
+      await loadData().catch(() => {});
     } finally {
+      abortRef.current = null;
+      setStopping(false);
       setCampaigning(false);
     }
   }
@@ -1215,6 +1321,16 @@ export default function EventPage() {
               ) : (
                 <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> {t("Auto-Outreach ({n})", { n: longListCount })}</>
               )}
+            </button>
+          )}
+          {busy && (
+            <button
+              onClick={stopRun}
+              disabled={stopping}
+              className="w-full justify-center mt-2 py-2 inline-flex items-center gap-1.5 rounded-lg text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" strokeWidth={2} /></svg>
+              {stopping ? t("Stopping...") : t("Stop")}
             </button>
           )}
           <p className="text-[10px] text-slate-400 mt-2 leading-snug">
@@ -1488,6 +1604,38 @@ export default function EventPage() {
           onConfirm={() => { setConfirmCampaign(false); void runCampaign(); }}
         />
       )}
+
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 z-[80] flex flex-col gap-2 w-full max-w-sm pointer-events-none" aria-live="assertive" aria-atomic="false">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            role={toast.kind === "error" ? "alert" : "status"}
+            className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg animate-slide-in ${
+              toast.kind === "error"   ? "bg-red-50 border-red-200 text-red-800" :
+              toast.kind === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
+                                         "bg-slate-800 border-slate-700 text-white"
+            }`}
+          >
+            <span className="text-sm leading-snug flex-1">{toast.msg}</span>
+            {toast.action && (
+              <button
+                onClick={() => { toast.action!.run(); dismissToast(toast.id); }}
+                className="text-xs font-bold underline underline-offset-2 hover:opacity-80 flex-shrink-0"
+              >
+                {toast.action.label}
+              </button>
+            )}
+            <button
+              onClick={() => dismissToast(toast.id)}
+              aria-label={t("Dismiss")}
+              className="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
