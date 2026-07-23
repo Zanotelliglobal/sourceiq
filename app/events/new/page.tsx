@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Brain, Search, Scale, Lightbulb, ChevronRight, Sparkles, Check, X, EyeOff, Hand } from "lucide-react";
@@ -78,6 +78,13 @@ export default function NewEventPage() {
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryTouchedRef = useRef(false); // user manually picked → stop auto-overriding
+
+  useEffect(() => {
+    if (!showUpgrade) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !upgradeBusy) setShowUpgrade(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [showUpgrade, upgradeBusy]);
 
   const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }));
   const toggleCountry = (c: string) =>

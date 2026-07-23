@@ -194,7 +194,20 @@
 @media (prefers-reduced-motion: reduce) {
   .aurora { animation: none !important; }
   .animate-rise { opacity: 1; animation: none !important; }
+  .animate-slide-in { animation: none !important; }
+  .shimmer { animation: none !important; }
+  .score-bar-fill { transition: none !important; }
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* Visible keyboard focus indicator */
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Don't show the outline for mouse users who click into an already-styled dialog */
+[role="dialog"]:focus:not(:focus-visible) { outline: none; }
 
 .shimmer {
   background: linear-gradient(90deg, #f0f4f8 25%, #e2e8f0 50%, #f0f4f8 75%);

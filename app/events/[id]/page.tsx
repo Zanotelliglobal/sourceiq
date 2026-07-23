@@ -147,12 +147,39 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-3">
       <span className="text-xs text-slate-500 w-40 flex-shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden" role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
         <div className={`h-full rounded-full ${SCORE_STYLE(value)}`} style={{ width: `${value}%` }} />
       </div>
       <span className="text-xs font-bold text-slate-700 w-6 text-right">{value}</span>
     </div>
   );
+}
+
+// Shared modal accessibility: Esc-to-close, initial focus into the dialog, a
+// lightweight focus trap so keyboard users can't tab out, and focus restoration
+// to the previously focused element on close. Returns a ref for the dialog node.
+function useModalA11y(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const node = ref.current;
+    node?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
+      if (e.key === "Tab" && node) {
+        const f = node.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        );
+        if (f.length === 0) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); previouslyFocused?.focus?.(); };
+  }, [onClose]);
+  return ref;
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
@@ -172,12 +199,19 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   const stage   = STAGE_STYLE[supplier.funnel_stage] || STAGE_STYLE.long_list;
   const [showReplyEn, setShowReplyEn] = useState(false);
   const replyForeign = response?.language && response.language.toLowerCase() !== "english";
+  const dialogRef = useModalA11y(onClose);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl flex flex-col animate-slide-in">
-
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={supplier.name}
+        className="relative w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl flex flex-col animate-slide-in outline-none"
+      >
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-start justify-between gap-3 z-10">
           <div>
@@ -434,10 +468,19 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
   const mailtoHref =
     `mailto:${encodeURIComponent(supplier.contact_email || "")}` +
     `?subject=${encodeURIComponent(activeSubject)}&body=${encodeURIComponent(activeBody)}`;
+  const dialogRef = useModalA11y(onClose);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={anonymous ? t("Anonymous RFI Outreach") : t("RFI Outreach")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
         <div className="p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -654,6 +697,7 @@ function BriefModal({ event, onClose, onSaved }: {
     (event.target_countries || "").split(",").map(c => c.trim()).filter(Boolean)
   );
   const [saving, setSaving] = useState(false);
+  const dialogRef = useModalA11y(onClose);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const toggle = (c: string) => setCountries(p => p.includes(c) ? p.filter(x => x !== c) : [...p, c]);
@@ -674,8 +718,16 @@ function BriefModal({ event, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={() => !saving && onClose()}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Scouting Brief")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
           <div>
             <h3 className="font-bold text-slate-900">{t("Scouting Brief")}</h3>
@@ -1204,7 +1256,7 @@ export default function EventPage() {
           <div className="px-3 py-2 border-b border-slate-100">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t("Activity Log")}</span>
           </div>
-          <div ref={logsRef} className="overflow-y-auto p-3 space-y-0.5 max-h-56 lg:max-h-none lg:flex-1">
+          <div ref={logsRef} role="log" aria-live="polite" aria-label={t("Activity Log")} className="overflow-y-auto p-3 space-y-0.5 max-h-56 lg:max-h-none lg:flex-1">
             {logs.length === 0 ? (
               <p className="text-[10px] text-slate-400 text-center pt-4">{t("Log appears here during discovery")}</p>
             ) : logs.map((l, i) => (
