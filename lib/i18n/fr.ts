@@ -295,4 +295,10 @@ export const fr: Record<string, string> = {
   "Could not shortlist responders. Please try again.": "Impossible de présélectionner les répondants. Veuillez réessayer.",
   "Follow-up sent to {name}": "Relance envoyée à {name}",
   "Could not send follow-up to {name}.": "Impossible d'envoyer la relance à {name}.",
+  "History": "Historique",
+  "Activity History": "Historique d'activité",
+  "Who did what, and when — an append-only governance record": "Qui a fait quoi, et quand — un registre de gouvernance en ajout seul",
+  "Could not load activity history.": "Impossible de charger l'historique d'activité.",
+  "Loading…": "Chargement…",
+  "No activity recorded yet.": "Aucune activité enregistrée pour le moment.",
 };

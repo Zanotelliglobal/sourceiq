@@ -697,6 +697,91 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
 }
 
 // ─── Brief editor modal ───────────────────────────────────────────────────────
+// ── Governance audit trail ──────────────────────────────────────────────────
+// Read-only history of governance-relevant actions on this event. Fetched once
+// when opened (not on every poll) to avoid Clerk actor-resolution rate pressure.
+type AuditEntry = { id: number; action: string; summary: string; actor: string; created_at: string };
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diff = Math.max(0, Date.now() - then);
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function AuditModal({ eventId, onClose }: { eventId: number; onClose: () => void }) {
+  const t = useT();
+  const dialogRef = useModalA11y(onClose);
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/audit?event_id=${eventId}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (alive) setEntries(data.entries || []);
+      } catch {
+        if (alive) setError(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [eventId]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Activity History")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
+        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+          <div>
+            <h3 className="font-bold text-slate-900">{t("Activity History")}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{t("Who did what, and when — an append-only governance record")}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-6">
+          {error ? (
+            <p className="text-sm text-red-600 text-center py-6">{t("Could not load activity history.")}</p>
+          ) : entries === null ? (
+            <p className="text-sm text-slate-400 text-center py-6">{t("Loading…")}</p>
+          ) : entries.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-6">{t("No activity recorded yet.")}</p>
+          ) : (
+            <ol className="relative border-l border-slate-200 ml-2 space-y-4">
+              {entries.map(e => (
+                <li key={e.id} className="ml-4">
+                  <div className="absolute -left-1.5 w-3 h-3 rounded-full bg-slate-300 border-2 border-white" />
+                  <div className="text-sm text-slate-800">{e.summary}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    <span className="font-medium text-slate-500">{e.actor}</span> · {relativeTime(e.created_at)}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BriefModal({ event, onClose, onSaved }: {
   event: Event; onClose: () => void; onSaved: (e: Event) => void;
 }) {
@@ -909,6 +994,7 @@ export default function EventPage() {
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [outreachTarget, setOutreachTarget] = useState<Supplier | null>(null);
   const [editingBrief, setEditingBrief] = useState(false);
+  const [showAudit, setShowAudit] = useState(false);
   const [sortBy, setSortBy]     = useState<"score" | "name" | "wave">("score");
   const [usage, setUsage]       = useState<{ cost_usd: number; total_tokens: number; web_searches: number } | null>(null);
   const logsRef = useRef<HTMLDivElement>(null);
@@ -1399,6 +1485,13 @@ export default function EventPage() {
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   {t("Edit Brief")}
                 </button>
+                <button
+                  onClick={() => setShowAudit(true)}
+                  className="text-xs font-semibold text-slate-600 hover:text-slate-800 border border-slate-200 hover:border-slate-300 bg-slate-50 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  {t("History")}
+                </button>
               </div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className="text-xs text-slate-500">{event.category}</span>
@@ -1592,6 +1685,10 @@ export default function EventPage() {
           onClose={() => setEditingBrief(false)}
           onSaved={(e) => setEvent(e)}
         />
+      )}
+
+      {showAudit && (
+        <AuditModal eventId={event.id} onClose={() => setShowAudit(false)} />
       )}
 
       {/* Bulk outreach confirmation */}

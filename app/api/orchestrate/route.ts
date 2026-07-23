@@ -13,6 +13,7 @@ import { scrapeSupplierContact } from "@/lib/contact";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
+import { logAudit } from "@/lib/audit";
 
 export const maxDuration = 300;
 
@@ -57,6 +58,12 @@ export async function POST(req: NextRequest) {
         // Update event status
         await db.prepare(`UPDATE sourcing_events SET status='scouting', wave_count=?, updated_at=datetime('now') WHERE id=?`)
           .run(waveNumber, event.id);
+
+        await logAudit({
+          orgId: ctx.orgId, eventId: event.id, actorId: ctx.userId,
+          action: "discovery.run", summary: `Launched discovery wave ${waveNumber}`,
+          metadata: { wave: waveNumber },
+        });
 
         send({ type: "wave_start", wave: waveNumber, message: `🧠 Orchestrator planning Wave ${waveNumber} strategy...` });
 

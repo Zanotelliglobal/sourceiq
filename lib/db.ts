@@ -255,7 +255,20 @@ async function initSchema(): Promise<void> {
       sent_at       TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id            BIGSERIAL PRIMARY KEY,
+      org_id        BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      event_id      BIGINT REFERENCES sourcing_events(id) ON DELETE CASCADE,
+      actor_id      TEXT,
+      action        TEXT NOT NULL,
+      summary       TEXT NOT NULL,
+      metadata      TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_suppliers_event ON suppliers(event_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id);
     CREATE INDEX IF NOT EXISTS idx_events_org ON sourcing_events(org_id);
     CREATE INDEX IF NOT EXISTS idx_usage_event ON token_usage(event_id);
     CREATE INDEX IF NOT EXISTS idx_usage_org ON token_usage(org_id);
@@ -347,6 +360,18 @@ export type AgentRun = {
   suppliers_found: number;
   started_at: string | null;
   completed_at: string | null;
+  created_at: string;
+};
+
+// An immutable record of a governance-relevant action taken in an org.
+export type AuditLog = {
+  id: number;
+  org_id: number;
+  event_id: number | null;
+  actor_id: string | null;
+  action: string;
+  summary: string;
+  metadata: string | null;
   created_at: string;
 };
 

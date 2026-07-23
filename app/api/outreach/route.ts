@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
+import { logAudit } from "@/lib/audit";
 
 export const maxDuration = 300;
 
@@ -65,6 +66,12 @@ export async function POST(req: NextRequest) {
 
       try {
         await db.prepare(`UPDATE sourcing_events SET status='outreach', updated_at=datetime('now') WHERE id=?`).run(event.id);
+        await logAudit({
+          orgId: ctx.orgId, eventId: event.id, actorId: ctx.userId,
+          action: "outreach.launch",
+          summary: `Launched ${live ? "LIVE" : "draft"} outreach to ${targets.length} suppliers`,
+          metadata: { count: targets.length, live, anonymous: event.outreach_anonymous },
+        });
         const status = mailStatus();
         send({
           type: "campaign_start",

@@ -5,6 +5,7 @@ import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
@@ -30,13 +31,29 @@ export async function POST(req: NextRequest) {
        WHERE event_id=? AND funnel_stage='responded'`
     ).run(event_id);
     const ids = (await db.prepare("SELECT id FROM suppliers WHERE event_id=? AND funnel_stage='shortlisted'").all(event_id) as { id: number }[]).map(r => r.id);
+    await logAudit({
+      orgId: ctx.orgId, eventId: Number(event_id), actorId: ctx.userId,
+      action: "responders.shortlist",
+      summary: `Shortlisted ${info.changes} responder${info.changes === 1 ? "" : "s"}`,
+      metadata: { moved: info.changes },
+    });
     return NextResponse.json({ success: true, moved: info.changes, shortlisted_ids: ids });
   }
 
   if (action === "move_stage") {
+    const before = await db.prepare("SELECT name, event_id, funnel_stage FROM suppliers WHERE id = ?").get(supplier_id) as
+      { name: string; event_id: number; funnel_stage: string | null } | undefined;
     await db.prepare("UPDATE suppliers SET funnel_stage = ? WHERE id = ?").run(stage, supplier_id);
     if (stage === "shortlisted") {
       await db.prepare("UPDATE suppliers SET buyer_approved_at = datetime('now') WHERE id = ?").run(supplier_id);
+    }
+    if (before) {
+      await logAudit({
+        orgId: ctx.orgId, eventId: Number(before.event_id), actorId: ctx.userId,
+        action: "supplier.stage_change",
+        summary: `Moved ${before.name} → ${stage}`,
+        metadata: { supplier_id, from: before.funnel_stage, to: stage },
+      });
     }
     return NextResponse.json({ success: true });
   }
@@ -151,6 +168,12 @@ export async function POST(req: NextRequest) {
 
     await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
       .run(supplier_id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
+    await logAudit({
+      orgId: ctx.orgId, eventId: Number(supplier.event_id), actorId: ctx.userId,
+      action: "followup.send",
+      summary: `Sent follow-up to ${supplier.name}`,
+      metadata: { supplier_id, live: isMailLive() },
+    });
     return NextResponse.json({ email, delivery, followup: true });
   }
 

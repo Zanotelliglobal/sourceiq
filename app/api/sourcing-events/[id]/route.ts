@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
@@ -50,5 +51,12 @@ export async function PATCH(
   const values = [...keys.map(k => body[k]), id];
   await db.prepare(`UPDATE sourcing_events SET ${fields}, updated_at = datetime('now') WHERE id = ?`).run(...values);
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(id);
+
+  await logAudit({
+    orgId: ctx.orgId, eventId: id, actorId: ctx.userId,
+    action: "event.update", summary: `Edited sourcing brief (${keys.join(", ")})`,
+    metadata: { fields: keys },
+  });
+
   return NextResponse.json(event);
 }

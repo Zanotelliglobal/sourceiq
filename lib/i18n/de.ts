@@ -295,4 +295,10 @@ export const de: Record<string, string> = {
   "Could not shortlist responders. Please try again.": "Antwortende konnten nicht in die Shortlist aufgenommen werden. Bitte erneut versuchen.",
   "Follow-up sent to {name}": "Follow-up an {name} gesendet",
   "Could not send follow-up to {name}.": "Follow-up an {name} konnte nicht gesendet werden.",
+  "History": "Verlauf",
+  "Activity History": "Aktivitätsverlauf",
+  "Who did what, and when — an append-only governance record": "Wer hat was wann getan — ein reiner Anhang-Governance-Datensatz",
+  "Could not load activity history.": "Aktivitätsverlauf konnte nicht geladen werden.",
+  "Loading…": "Wird geladen…",
+  "No activity recorded yet.": "Noch keine Aktivität erfasst.",
 };

@@ -295,4 +295,10 @@ export const es: Record<string, string> = {
   "Could not shortlist responders. Please try again.": "No se pudieron preseleccionar los respondedores. Inténtelo de nuevo.",
   "Follow-up sent to {name}": "Seguimiento enviado a {name}",
   "Could not send follow-up to {name}.": "No se pudo enviar el seguimiento a {name}.",
+  "History": "Historial",
+  "Activity History": "Historial de actividad",
+  "Who did what, and when — an append-only governance record": "Quién hizo qué y cuándo — un registro de gobernanza de solo adición",
+  "Could not load activity history.": "No se pudo cargar el historial de actividad.",
+  "Loading…": "Cargando…",
+  "No activity recorded yet.": "Aún no se ha registrado actividad.",
 };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
+import { logAudit } from "@/lib/audit";
 
 export async function GET() {
   const ctx = await getOrgContext();
@@ -65,6 +66,12 @@ export async function POST(req: NextRequest) {
     const event = await db
       .prepare("SELECT * FROM sourcing_events WHERE id = ?")
       .get(result.lastInsertRowid);
+
+    await logAudit({
+      orgId, eventId: Number(result.lastInsertRowid), actorId: ctx.userId,
+      action: "event.create", summary: `Created sourcing event "${title}"`,
+      metadata: { category, anonymous },
+    });
 
     return NextResponse.json(event, { status: 201 });
   } catch (err) {
