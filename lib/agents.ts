@@ -46,6 +46,7 @@ export type EnrichmentResult = {
 export type ClassificationResult = {
   category: string;      // must be one of the provided categories
   subcategory: string;   // a concise, specific sub-classification
+  title: string;         // short, clean event label (3-6 words)
   confidence: number;    // 0-100
 };
 
@@ -64,10 +65,13 @@ ${categories.map(c => `- ${c}`).join("\n")}
 
 Then propose a concise, specific SUBCATEGORY (2-5 words) that pinpoints the commodity within that category — e.g. "5-axis aluminum machining", "injection-molded medical housings", "corrugated retail packaging", "PCB assembly (SMT)". If nothing fits well, use category "Other".
 
+Also write a short, clean TITLE (3-6 words) for this sourcing event — the commodity itself, no filler. Strip phrases like "I am looking for a new supplier of". Title Case. Examples: "Calcium Carbonate for Paper", "Aluminum CNC Brackets", "Corrugated Retail Packaging", "Wire Harness Assemblies".
+
 Return JSON only:
 {
   "category": "exact category string from the list",
   "subcategory": "specific 2-5 word subcategory",
+  "title": "3-6 word clean event title",
   "confidence": 85
 }`;
 
@@ -84,10 +88,11 @@ Return JSON only:
     .join("");
 
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return { category: "Other", subcategory: "", confidence: 0 };
+  if (!match) return { category: "Other", subcategory: "", title: "", confidence: 0 };
   const parsed = JSON.parse(match[0]) as ClassificationResult;
   // Guard against the model drifting off-taxonomy.
   if (!categories.includes(parsed.category)) parsed.category = "Other";
+  if (typeof parsed.title !== "string") parsed.title = "";
   return parsed;
 }
 

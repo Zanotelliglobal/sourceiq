@@ -169,15 +169,17 @@ export default function NewEventPage() {
       // Infer the commodity category from the sentence (best-effort — never blocks).
       let category = "Other";
       let subcategory = "";
+      let cleanTitle = "";
       try {
         const res = await fetch("/api/classify", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ description: sentence, categories: CATEGORIES }),
         });
         if (res.ok) {
-          const r = await res.json() as { category?: string; subcategory?: string };
+          const r = await res.json() as { category?: string; subcategory?: string; title?: string };
           if (r.category) category = r.category;
           if (r.subcategory) subcategory = r.subcategory;
+          if (r.title) cleanTitle = r.title.trim();
         }
       } catch { /* fall back to "Other" — discovery still runs */ }
 
@@ -188,7 +190,8 @@ export default function NewEventPage() {
       const res = await fetch("/api/sourcing-events", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: sentence.slice(0, 80),
+          // Prefer the AI-generated clean title; fall back to the raw sentence.
+          title: cleanTitle || sentence.slice(0, 80),
           category, subcategory,
           description,
           requirements: sentence,
