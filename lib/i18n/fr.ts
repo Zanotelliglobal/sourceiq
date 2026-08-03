@@ -301,4 +301,11 @@ export const fr: Record<string, string> = {
   "Could not load activity history.": "Impossible de charger l'historique d'activité.",
   "Loading…": "Chargement…",
   "No activity recorded yet.": "Aucune activité enregistrée pour le moment.",
+  "What are you trying to source?": "Que cherchez-vous à sourcer ?",
+  "e.g. CNC-machined aluminum brackets, ~50k/year, alternate to a China supplier, EU preferred": "ex. supports en aluminium usinés CNC, ~50k/an, alternative à un fournisseur chinois, UE de préférence",
+  "One line is enough — we'll detect the category, region and incumbent, then start discovery automatically.": "Une ligne suffit — nous détectons la catégorie, la région et le fournisseur en place, puis lançons la découverte automatiquement.",
+  "Starting discovery…": "Lancement de la découverte…",
+  "Need to specify certs, volumes or tolerances? Use the advanced brief →": "Besoin de préciser certifications, volumes ou tolérances ? Utilisez le brief avancé →",
+  "Back to quick source": "Retour à la recherche rapide",
+  "Add a little more detail so we can find the right suppliers.": "Ajoutez un peu plus de détails pour que nous trouvions les bons fournisseurs.",
 };
