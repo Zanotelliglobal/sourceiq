@@ -9,19 +9,41 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = getDb();
+  // Effective status: a run only reaches its terminal status ('reviewing') on
+  // clean completion. If discovery is interrupted (serverless timeout, tab
+  // close, dropped connection) the row is left in a "working" state
+  // ('scouting'/'outreach') forever, so the dashboard shows a live spinner that
+  // never clears. Here we treat a working status with a stale `updated_at`
+  // (> 5 min of no writes) as interrupted: fall back to 'reviewing' if any
+  // suppliers were found, otherwise 'idle'. Genuinely-running events keep a
+  // fresh `updated_at` and are unaffected.
   const events = await db
     .prepare(
       `SELECT se.*,
         COUNT(s.id)::int as supplier_count,
-        COALESCE(SUM(CASE WHEN s.funnel_stage = 'shortlisted' THEN 1 ELSE 0 END),0)::int as shortlisted_count
+        COALESCE(SUM(CASE WHEN s.funnel_stage = 'shortlisted' THEN 1 ELSE 0 END),0)::int as shortlisted_count,
+        CASE
+          WHEN se.status IN ('scouting','outreach')
+               AND se.updated_at < now() - interval '5 minutes'
+          THEN CASE WHEN COUNT(s.id) > 0 THEN 'reviewing' ELSE 'idle' END
+          ELSE se.status
+        END as effective_status
        FROM sourcing_events se
        LEFT JOIN suppliers s ON s.event_id = se.id
        WHERE se.org_id = ?
        GROUP BY se.id
        ORDER BY se.created_at DESC`
     )
-    .all(ctx.orgId);
-  return NextResponse.json(events);
+    .all(ctx.orgId) as Array<Record<string, unknown> & { effective_status: string }>;
+
+  // Surface the derived status as `status` so the dashboard renders the honest
+  // (interruption-aware) state; keep the stored value under `raw_status`.
+  const normalized = events.map(({ effective_status, ...e }) => ({
+    ...e,
+    raw_status: e.status,
+    status: effective_status,
+  }));
+  return NextResponse.json(normalized);
 }
 
 export async function POST(req: NextRequest) {
