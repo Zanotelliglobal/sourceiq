@@ -70,6 +70,11 @@ export default function NewEventPage() {
     buyer_name: "", buyer_role: "", buyer_company: "",
   });
   const [countries, setCountries] = useState<string[]>([]);
+  // Quick Source: a single-line entry that infers everything and auto-launches
+  // discovery. The detailed form lives behind the "Advanced brief" toggle.
+  const [mode, setMode] = useState<"quick" | "advanced">("quick");
+  const [quickInput, setQuickInput] = useState("");
+  const [quickError, setQuickError] = useState<string | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [autoDetected, setAutoDetected] = useState(false); // category came from AI, not a manual click
   const [confidence, setConfidence] = useState<number | null>(null);
@@ -138,6 +143,69 @@ export default function NewEventPage() {
     setConfidence(null);
     set("category", c);
   };
+
+  // ── Quick Source parsing (client-side, best-effort) ──────────────────────
+  // Pull any country names the buyer mentioned out of the free-text sentence.
+  function parseCountries(sentence: string): string[] {
+    const lc = sentence.toLowerCase();
+    return ALL_COUNTRIES.filter(c => new RegExp(`\\b${c.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(lc));
+  }
+  // Pull a named incumbent ("alternate to X", "replace X", "currently use X").
+  function parseIncumbent(sentence: string): string {
+    const m = sentence.match(/\b(?:alternate(?:s)?\s+to|alternative\s+to|replace|replacing|currently\s+(?:use|using|sourcing\s+from)|second\s+source\s+for|instead\s+of)\s+([A-Z][\w&.\- ]{1,40}?)(?=[,.;]|\s+(?:in|for|with|and|preferred|based)\b|$)/i);
+    return m ? m[1].trim() : "";
+  }
+
+  async function handleQuickSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const sentence = quickInput.trim();
+    if (sentence.length < 12) {
+      setQuickError(t("Add a little more detail so we can find the right suppliers."));
+      return;
+    }
+    setQuickError(null);
+    setLoading(true);
+    try {
+      // Infer the commodity category from the sentence (best-effort — never blocks).
+      let category = "Other";
+      let subcategory = "";
+      try {
+        const res = await fetch("/api/classify", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: sentence, categories: CATEGORIES }),
+        });
+        if (res.ok) {
+          const r = await res.json() as { category?: string; subcategory?: string };
+          if (r.category) category = r.category;
+          if (r.subcategory) subcategory = r.subcategory;
+        }
+      } catch { /* fall back to "Other" — discovery still runs */ }
+
+      const parsedCountries = parseCountries(sentence);
+      const incumbent = parseIncumbent(sentence);
+      const description = incumbent ? `${sentence}\n\nIncumbent: ${incumbent}` : sentence;
+
+      const res = await fetch("/api/sourcing-events", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: sentence.slice(0, 80),
+          category, subcategory,
+          description,
+          requirements: sentence,
+          annual_spend: "",
+          target_countries: parsedCountries,
+          outreach_anonymous: "true",
+        }),
+      });
+      if (res.status === 402) { setShowUpgrade(true); setLoading(false); return; }
+      if (!res.ok) throw new Error(t("Failed to create sourcing event"));
+      const event = await res.json();
+      router.push(`/events/${event.id}?autostart=1`);
+    } catch (err) {
+      setQuickError(String(err));
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -242,7 +310,64 @@ export default function NewEventPage() {
           <p className="text-[11px] text-slate-400 mt-4">{t("Runs in 4 waves · discovers 40–60 suppliers · auto-scores against your requirements")}</p>
         </div>
 
+        {/* Quick Source — single-line entry, auto-launches discovery */}
+        {mode === "quick" && (
+          <form onSubmit={handleQuickSubmit} className="space-y-4">
+            <div>
+              <label className="label">{t("What are you trying to source?")}</label>
+              <textarea
+                autoFocus
+                rows={3}
+                className="input text-base resize-none"
+                placeholder={t("e.g. CNC-machined aluminum brackets, ~50k/year, alternate to a China supplier, EU preferred")}
+                value={quickInput}
+                onChange={e => { setQuickInput(e.target.value); if (quickError) setQuickError(null); }}
+                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleQuickSubmit(e as unknown as React.FormEvent); }}
+              />
+              <p className="text-xs text-slate-400 mt-1.5">
+                {t("One line is enough — we'll detect the category, region and incumbent, then start discovery automatically.")}
+              </p>
+              {quickError && <p className="text-xs text-red-500 mt-1.5">{quickError}</p>}
+            </div>
+            <button
+              type="submit"
+              disabled={loading || quickInput.trim().length < 12}
+              className="btn-primary w-full justify-center py-4 text-base"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {t("Starting discovery…")}
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                  </svg>
+                  {t("Launch AI Discovery")}
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("advanced")}
+              className="w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {t("Need to specify certs, volumes or tolerances? Use the advanced brief →")}
+            </button>
+          </form>
+        )}
+
         {/* Form */}
+        {mode === "advanced" && (
+        <>
+        <button
+          type="button"
+          onClick={() => setMode("quick")}
+          className="mb-5 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          ← {t("Back to quick source")}
+        </button>
         <form onSubmit={handleSubmit} className="space-y-7">
 
           {/* Event name */}
@@ -513,6 +638,8 @@ export default function NewEventPage() {
           </div>
 
         </form>
+        </>
+        )}
       </div>
 
       {/* Upgrade gate — shown when event creation is blocked by billing (402) */}
