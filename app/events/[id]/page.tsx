@@ -30,6 +30,11 @@ type SupplierResponse = {
   capacity_confirmed: string; lead_time: string; highlights: string[];
 };
 
+// One message in a supplier's revisitable outreach thread (GET /api/outreach-log).
+type OutreachLogEntry = {
+  id: number; direction: string; subject: string | null; body: string; sent_at: string;
+};
+
 type AgentRun = {
   id: number; agent_id: string; agent_type: string; agent_label: string;
   wave: number; status: string; message: string | null; suppliers_found: number;
@@ -216,6 +221,28 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   const [showReplyEn, setShowReplyEn] = useState(false);
   const replyForeign = response?.language && response.language.toLowerCase() !== "english";
   const dialogRef = useModalA11y(onClose);
+
+  // Revisitable outreach thread: every RFI/follow-up sent and every reply
+  // received for this supplier, oldest first. Self-fetched so the panel stays
+  // a drop-in presentational component driven only by the `supplier` prop.
+  const [thread, setThread] = useState<OutreachLogEntry[] | null>(null);
+  const [threadError, setThreadError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setThread(null);
+    setThreadError(false);
+    (async () => {
+      try {
+        const res = await fetch(`/api/outreach-log?supplier_id=${supplier.id}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (alive) setThread(data.entries || []);
+      } catch {
+        if (alive) setThreadError(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [supplier.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -411,6 +438,38 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               )}
             </div>
           )}
+
+          {/* Outreach thread — the full, revisitable correspondence history for
+              this supplier: every RFI/follow-up sent and every reply received,
+              oldest first. Self-fetched from /api/outreach-log on open. */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+              <Mail className="w-3 h-3" /> {t("Outreach History")}
+            </div>
+            {threadError ? (
+              <p className="text-sm text-red-600">{t("Could not load outreach history.")}</p>
+            ) : thread === null ? (
+              <p className="text-sm text-slate-400">{t("Loading…")}</p>
+            ) : thread.length === 0 ? (
+              <p className="text-sm text-slate-400 italic bg-slate-50 rounded-xl p-4 border border-slate-100">{t("No outreach sent yet.")}</p>
+            ) : (
+              <ol className="relative border-l border-slate-200 ml-2 space-y-3">
+                {thread.map(msg => (
+                  <li key={msg.id} className="ml-4">
+                    <div className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 border-white ${msg.direction === "inbound" ? "bg-emerald-400" : "bg-blue-400"}`} />
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${msg.direction === "inbound" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
+                        {msg.direction === "inbound" ? t("Received") : t("Sent")}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{relativeTime(msg.sent_at)}</span>
+                    </div>
+                    {msg.subject && <div className="text-xs font-semibold text-slate-700">{msg.subject}</div>}
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </div>
 
         {/* Action footer */}
