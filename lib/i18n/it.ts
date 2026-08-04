@@ -360,4 +360,10 @@ export const it: Record<string, string> = {
   "Estimated cost": "Costo stimato",
   "Upgrade plan": "Aggiorna piano",
   "Discovery is running in the background — results update live. Safe to leave or refresh this page.": "La ricerca è in corso in background — i risultati si aggiornano in tempo reale. Puoi lasciare o aggiornare questa pagina.",
+  "Macro-regions": "Macro-regioni",
+  "Add a region or area, e.g. Northern Italy, Bavaria…": "Aggiungi una regione o area, es. Nord Italia, Baviera…",
+  "Add": "Aggiungi",
+  "Ship-to destination": "Destinazione di consegna",
+  "Where must suppliers be able to deliver or export to? Agents will favour suppliers that can serve this market (e.g. a Chinese supplier that ships to Italy).": "Dove devono poter consegnare o esportare i fornitori? Gli agenti privilegeranno i fornitori in grado di servire questo mercato (es. un fornitore cinese che spedisce in Italia).",
+  "e.g. Italy, European Union, United States": "es. Italia, Unione Europea, Stati Uniti",
 };

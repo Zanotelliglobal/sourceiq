@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; category: string; subcategory: string | null; description: string;
     requirements: string; annual_spend: string; wave_count: number;
-    target_countries: string | null;
+    target_countries: string | null; ship_to: string | null;
   } | undefined;
 
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -38,6 +38,15 @@ export async function POST(req: NextRequest) {
   const waveNumber = wave || event.wave_count + 1;
   // Give the agents the specific subcategory when available — sharper searches.
   const categoryLabel = event.subcategory ? `${event.category} — ${event.subcategory}` : event.category;
+
+  // Ship-to serviceability: fold the destination market into the requirements
+  // text the scouts and qualifiers see, so suppliers that cannot deliver/export
+  // to it are penalised (a Chinese supplier that can't ship to Italy scores
+  // lower on geographic risk). Kept in the requirements string to avoid changing
+  // every agent signature.
+  const effectiveRequirements = event.ship_to
+    ? `${event.requirements}\n\nSHIP-TO REQUIREMENT: Suppliers MUST be able to deliver, ship, or export to: ${event.ship_to}. Strongly prefer suppliers with proven export capability and logistics to this destination. Penalise suppliers that only serve their domestic market and cannot serve ${event.ship_to}.`
+    : event.requirements;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -79,7 +88,7 @@ export async function POST(req: NextRequest) {
         // Run orchestrator to plan agents
         const plan = await runOrchestrator(
           categoryLabel, event.description,
-          event.requirements, event.annual_spend, waveNumber,
+          effectiveRequirements, event.annual_spend, waveNumber,
           event.target_countries || "",
           track("orchestrator")
         );
@@ -147,7 +156,7 @@ export async function POST(req: NextRequest) {
 
           let score;
           try {
-            score = await runQualifierAgent(s, categoryLabel, event.requirements, event.annual_spend, track("qualifier"));
+            score = await runQualifierAgent(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier"));
           } catch {
             score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit:60, quality_signals:60, geographic_risk:60, financial_stability:60, compliance_readiness:60 } };
           }
@@ -159,7 +168,7 @@ export async function POST(req: NextRequest) {
           const borderline = score.overall_score >= 60 && score.overall_score <= 82;
           if (groundingOn && (thinEvidence || borderline)) {
             try {
-              score = await runQualifierAgentGrounded(s, categoryLabel, event.requirements, event.annual_spend, track("qualifier"));
+              score = await runQualifierAgentGrounded(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier"));
             } catch { /* keep the cheap-pass score on failure */ }
           }
 
@@ -225,7 +234,7 @@ export async function POST(req: NextRequest) {
             found = await runScoutAgent(
               agent.type, agent.focus,
               categoryLabel, event.description,
-              event.requirements, event.annual_spend,
+              effectiveRequirements, event.annual_spend,
               waveNumber, avoidNames,
               event.target_countries || "",
               track("scout")

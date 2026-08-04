@@ -173,6 +173,9 @@ async function initSchema(): Promise<void> {
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS buyer_name TEXT;
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS buyer_role TEXT;
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS buyer_company TEXT;
+    -- Ship-to: the destination market suppliers must be able to deliver/export to
+    -- (e.g. "Italy", "EU"). Agents qualify supplier serviceability against this.
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS ship_to TEXT;
 
     CREATE TABLE IF NOT EXISTS suppliers (
       id            BIGSERIAL PRIMARY KEY,
@@ -215,6 +218,10 @@ async function initSchema(): Promise<void> {
     -- Anti-spam suppression: a supplier who unsubscribes is never emailed again.
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opted_out BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opted_out_at TIMESTAMPTZ;
+    -- Serviceability: markets/regions the supplier can deliver or export to, as
+    -- assessed by the qualifier against the event's ship-to destination.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS serviceable_regions TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS ships_to_target BOOLEAN;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
@@ -316,6 +323,7 @@ export type SourcingEvent = {
   annual_spend: string | null;
   timeline: string | null;
   target_countries: string | null;
+  ship_to: string | null;
   outreach_anonymous: boolean;
   buyer_name: string | null;
   buyer_role: string | null;

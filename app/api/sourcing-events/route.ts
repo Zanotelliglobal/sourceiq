@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { title, category, subcategory, description, requirements, annual_spend, target_countries,
-    outreach_anonymous, buyer_name, buyer_role, buyer_company } = body;
+    ship_to, outreach_anonymous, buyer_name, buyer_role, buyer_company } = body;
 
   if (!title || !category || !description || !requirements) {
     return NextResponse.json(
@@ -92,6 +92,8 @@ export async function POST(req: NextRequest) {
   }
 
   const countries = Array.isArray(target_countries) ? target_countries.join(", ") : (target_countries || null);
+  // Ship-to destination market suppliers must be able to deliver/export to.
+  const shipTo = Array.isArray(ship_to) ? ship_to.join(", ") : (ship_to || null);
 
   // Outreach identity: default anonymous unless the buyer explicitly opts to disclose.
   const anonymous = !(outreach_anonymous === false || outreach_anonymous === "false");
@@ -105,10 +107,10 @@ export async function POST(req: NextRequest) {
   try {
     const result = await db
       .prepare(
-        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, target_countries, outreach_anonymous, buyer_name, buyer_role, buyer_company)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, target_countries, ship_to, outreach_anonymous, buyer_name, buyer_role, buyer_company)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, countries, anonymous, bName, bRole, bCompany);
+      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, countries, shipTo, anonymous, bName, bRole, bCompany);
 
     const event = await db
       .prepare("SELECT * FROM sourcing_events WHERE id = ?")

@@ -42,6 +42,14 @@ const GEOGRAPHIES = [
   "Japan", "South Korea", "Taiwan", "Brazil",
 ];
 
+// Macro-regions: broad areas the buyer can target instead of (or alongside)
+// individual countries. These are free-text hints passed to the scout agents.
+const MACRO_REGIONS = [
+  "Europe", "European Union", "Nordics", "Eastern Europe",
+  "North America", "Latin America", "Asia", "Southeast Asia",
+  "Middle East", "Africa", "Oceania",
+];
+
 // Full country list for the "add more" dropdown.
 const ALL_COUNTRIES = [
   "Argentina", "Australia", "Austria", "Bangladesh", "Belgium", "Brazil", "Bulgaria",
@@ -70,6 +78,10 @@ export default function NewEventPage() {
     buyer_name: "", buyer_role: "", buyer_company: "",
   });
   const [countries, setCountries] = useState<string[]>([]);
+  // Free-text region entry (e.g. "Northern Italy", "Bavaria") and the ship-to
+  // destination market suppliers must be able to deliver/export to.
+  const [regionInput, setRegionInput] = useState("");
+  const [shipTo, setShipTo] = useState("");
   // Quick Source: a single-line entry that infers everything and auto-launches
   // discovery. The detailed form lives behind the "Advanced brief" toggle.
   const [mode, setMode] = useState<"quick" | "advanced">("quick");
@@ -219,7 +231,7 @@ export default function NewEventPage() {
         : form.description;
       const res = await fetch("/api/sourcing-events", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries }),
+        body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries, ship_to: shipTo || null }),
       });
       // Billing gate: trial ended or no active plan → guide the user to upgrade
       // instead of surfacing an opaque failure.
@@ -485,6 +497,54 @@ export default function NewEventPage() {
                 );
               })}
             </div>
+            {/* Macro-regions: target a whole area instead of listing countries */}
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2">{t("Macro-regions")}</p>
+            <div className="flex flex-wrap gap-2">
+              {MACRO_REGIONS.map(c => {
+                const active = countries.includes(c);
+                return (
+                  <button
+                    key={c} type="button"
+                    onClick={() => toggleCountry(c)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      active
+                        ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-600/20"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-1">{active && <Check className="w-3 h-3" />}{t(c)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Free-text region: micro-regions or areas (e.g. "Northern Italy") */}
+            <div className="mt-3 flex gap-2">
+              <input
+                className="input flex-1"
+                value={regionInput}
+                onChange={e => setRegionInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const v = regionInput.trim();
+                    if (v && !countries.includes(v)) { setCountries(prev => [...prev, v]); setRegionInput(""); }
+                  }
+                }}
+                placeholder={t("Add a region or area, e.g. Northern Italy, Bavaria…")}
+              />
+              <button
+                type="button"
+                className="btn-secondary px-3"
+                onClick={() => {
+                  const v = regionInput.trim();
+                  if (v && !countries.includes(v)) { setCountries(prev => [...prev, v]); setRegionInput(""); }
+                }}
+              >
+                {t("Add")}
+              </button>
+            </div>
+
             {/* Dropdown for any other country */}
             <div className="mt-3">
               <select
@@ -499,10 +559,10 @@ export default function NewEventPage() {
               </select>
             </div>
 
-            {/* Selected countries added via dropdown (not already shown as quick picks) */}
-            {countries.filter(c => !GEOGRAPHIES.includes(c)).length > 0 && (
+            {/* Selected regions/countries added via dropdown, macro chips, or free text */}
+            {countries.filter(c => !GEOGRAPHIES.includes(c) && !MACRO_REGIONS.includes(c)).length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
-                {countries.filter(c => !GEOGRAPHIES.includes(c)).map(c => (
+                {countries.filter(c => !GEOGRAPHIES.includes(c) && !MACRO_REGIONS.includes(c)).map(c => (
                   <span key={c} className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg">
                     {c}
                     <button type="button" onClick={() => toggleCountry(c)} className="hover:text-blue-200"><X className="w-3 h-3" /></button>
@@ -516,6 +576,23 @@ export default function NewEventPage() {
                 {t("Agents will prioritise: {countries}", { countries: countries.join(", ") })}
               </p>
             )}
+          </div>
+
+          {/* Ship-to destination — serviceability qualification */}
+          <div>
+            <label className="label">
+              {t("Ship-to destination")}
+              <span className="font-normal text-slate-400"> {t("— optional")}</span>
+            </label>
+            <p className="text-xs text-slate-400 mb-2.5">
+              {t("Where must suppliers be able to deliver or export to? Agents will favour suppliers that can serve this market (e.g. a Chinese supplier that ships to Italy).")}
+            </p>
+            <input
+              className="input"
+              value={shipTo}
+              onChange={e => setShipTo(e.target.value)}
+              placeholder={t("e.g. Italy, European Union, United States")}
+            />
           </div>
 
           {/* Outreach identity — anonymous vs. disclosed (per event) */}
