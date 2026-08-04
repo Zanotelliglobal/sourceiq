@@ -359,4 +359,5 @@ export const es: Record<string, string> = {
   "Tokens used": "Tokens utilizados",
   "Estimated cost": "Coste estimado",
   "Upgrade plan": "Mejorar plan",
+  "Discovery is running in the background — results update live. Safe to leave or refresh this page.": "La búsqueda se ejecuta en segundo plano — los resultados se actualizan en vivo. Puedes salir o actualizar esta página.",
 };

@@ -13,13 +13,25 @@ export async function GET(
 
   const db = getDb();
   const id = Number(params.id);
-  const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(id) as { org_id?: number } | undefined;
+  const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(id) as (Record<string, unknown> & { org_id?: number; status?: string; updated_at?: string }) | undefined;
   // Return 404 (not 403) for other tenants' events so we don't leak existence.
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const suppliers = await db.prepare(
     "SELECT * FROM suppliers WHERE event_id = ? ORDER BY ai_score DESC, created_at ASC"
-  ).all(id);
+  ).all(id) as Record<string, unknown>[];
+
+  // Effective status: a working run ('scouting'/'outreach') whose row hasn't been
+  // written to in > 5 min was interrupted (serverless timeout, disconnect on
+  // refresh) and will never reach its terminal state. Downgrade it so the client
+  // stops polling — 'reviewing' if any suppliers were found, else 'idle'. This
+  // mirrors the list endpoint's interruption-aware logic.
+  if (event.status === "scouting" || event.status === "outreach") {
+    const updatedMs = event.updated_at ? new Date(event.updated_at as string).getTime() : 0;
+    if (updatedMs && Date.now() - updatedMs > 5 * 60_000) {
+      event.status = suppliers.length > 0 ? "reviewing" : "idle";
+    }
+  }
 
   const agents = await db.prepare(
     "SELECT * FROM agent_runs WHERE event_id = ? ORDER BY wave ASC, created_at ASC"

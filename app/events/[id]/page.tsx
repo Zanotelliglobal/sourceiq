@@ -1038,6 +1038,23 @@ export default function EventPage() {
   }, [id]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Server-side discovery is running (persisted status), regardless of whether
+  // THIS tab holds the live SSE stream. After a refresh the fetch is aborted but
+  // the agents keep working server-side and persisting suppliers to the DB.
+  const serverWorking = event?.status === "scouting" || event?.status === "outreach";
+
+  // Resilient live view: when a run is in progress server-side but this tab
+  // isn't the one streaming it (fresh page load, refresh mid-run, or a run
+  // launched from another device), poll the DB so newly-found suppliers appear
+  // live and survive reloads — instead of the page going static until re-entry.
+  useEffect(() => {
+    if (running) return;        // local SSE stream already delivering live updates
+    if (!serverWorking) return; // nothing running server-side
+    const timer = setInterval(() => { void loadData(); }, 4000);
+    return () => clearInterval(timer);
+  }, [running, serverWorking, loadData]);
+
   useEffect(() => {
     if (logsRef.current) logsRef.current.scrollTop = logsRef.current.scrollHeight;
   }, [logs]);
@@ -1379,14 +1396,14 @@ export default function EventPage() {
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t("Agent Control")}</span>
-            {running && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />}
+            {(running || serverWorking) && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />}
           </div>
           <button
             onClick={runWave}
-            disabled={busy}
+            disabled={busy || serverWorking}
             className="btn-cta w-full justify-center mt-2 py-2"
           >
-            {running ? (
+            {running || serverWorking ? (
               <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("Running...")}</>
             ) : suppliers.length === 0 ? (
               <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> {t("Launch Discovery")}</>
@@ -1418,6 +1435,12 @@ export default function EventPage() {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" strokeWidth={2} /></svg>
               {stopping ? t("Stopping...") : t("Stop")}
             </button>
+          )}
+          {serverWorking && !running && (
+            <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-[10px] font-medium text-blue-700 leading-snug">
+              <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0 mt-0.5" />
+              {t("Discovery is running in the background — results update live. Safe to leave or refresh this page.")}
+            </div>
           )}
           <p className="text-[10px] text-slate-400 mt-2 leading-snug">
             {longListCount > 0
@@ -1616,7 +1639,7 @@ export default function EventPage() {
 
         {/* Table */}
         <div className="flex-1 overflow-y-auto overflow-x-auto">
-          {suppliers.length === 0 && !running ? (
+          {suppliers.length === 0 && !running && !serverWorking ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-12">
               <Factory className="w-12 h-12 text-slate-300 mb-4" strokeWidth={1.5} />
               <h2 className="text-lg font-bold text-slate-700 mb-2">{t("Ready to initiate market intelligence")}</h2>
@@ -1638,7 +1661,7 @@ export default function EventPage() {
                 </tr>
               </thead>
               <tbody>
-                {running && suppliers.length === 0 && (
+                {(running || serverWorking) && suppliers.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                       <div className="flex items-center justify-center gap-2">
