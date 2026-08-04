@@ -88,7 +88,9 @@ export default function Dashboard() {
             // Keep refreshing while any agent is actively working, so the
             // spinner clears (and pipeline counts update) once discovery ends.
             const stillWorking = d.some((e: EventRow) => STATUS_CONFIG[e.status]?.working);
-            if (stillWorking) timer = setTimeout(load, 5000);
+            // Poll a little faster while agents are running so the supplier
+            // count visibly ticks up live rather than in slow 5s jumps.
+            if (stillWorking) timer = setTimeout(load, 4000);
           } else {
             setError(d?.error || t("Failed to load events"));
           }
@@ -327,8 +329,9 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden lg:table-cell">
-                      <div className="text-sm text-slate-700 font-medium">{event.supplier_count || 0}
-                        <span className="font-normal text-slate-400"> {t("found")}</span>
+                      <div className="text-sm text-slate-700 font-medium flex items-center gap-1.5">
+                        {cfg.working && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" title={t("Discovering live")} />}
+                        <span>{event.supplier_count || 0}<span className="font-normal text-slate-400"> {t("found")}</span></span>
                       </div>
                       {(event.shortlisted_count || 0) > 0 && (
                         <div className="text-xs text-amber-600 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>

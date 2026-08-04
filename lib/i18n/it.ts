@@ -318,4 +318,6 @@ export const it: Record<string, string> = {
   "updated {time}": "aggiornato {time}",
   "{count} wave": "{count} ondata",
   "{count} waves": "{count} ondate",
+  "Discovering live": "Ricerca in tempo reale",
+  "{n} found so far": "{n} trovati finora",
 };

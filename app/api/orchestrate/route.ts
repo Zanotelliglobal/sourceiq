@@ -45,6 +45,15 @@ export async function POST(req: NextRequest) {
       const send = (data: object) => {
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); } catch {}
       };
+
+      // Defeat proxy/browser buffering so each supplier streams to the client
+      // the instant it is found (rather than arriving in one burst at the end):
+      //  1. an initial ~2KB comment padding forces the first flush, and
+      //  2. a periodic keep-alive comment keeps the pipe flushing between events.
+      controller.enqueue(encoder.encode(`: ${" ".repeat(2048)}\n\n`));
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(encoder.encode(`: keep-alive\n\n`)); } catch {}
+      }, 15000);
       // Record token usage per stage, then push a running cost total to the UI.
       const track = (stage: string) => (u: unknown) => {
         void (async () => {
@@ -276,6 +285,7 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         send({ type: "error", message: String(err) });
       } finally {
+        clearInterval(heartbeat);
         controller.close();
       }
     }

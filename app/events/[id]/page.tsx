@@ -1575,6 +1575,12 @@ export default function EventPage() {
             ))}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {running && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-100 whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                {t("{n} found so far", { n: suppliers.length })}
+              </span>
+            )}
             {(stageCounts["responded"] ?? 0) > 0 && (
               <button
                 onClick={shortlistResponders}
