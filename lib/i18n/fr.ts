@@ -382,4 +382,6 @@ export const fr: Record<string, string> = {
   "Billing & plan": "Facturation et forfait",
   "View your subscription, usage, and invoices": "Consultez votre abonnement, votre utilisation et vos factures",
   "Get help from our team": "Obtenez de l'aide de notre équipe",
+  "Upgrade to export": "Passez à un forfait pour exporter",
+  "Exporting is available on paid plans.": "L'export est disponible sur les forfaits payants.",
 };

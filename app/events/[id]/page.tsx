@@ -997,8 +997,19 @@ export default function EventPage() {
   const [showAudit, setShowAudit] = useState(false);
   const [sortBy, setSortBy]     = useState<"score" | "name" | "wave">("score");
   const [usage, setUsage]       = useState<{ cost_usd: number; total_tokens: number; web_searches: number } | null>(null);
+  // Whether the org's plan permits exporting (CSV). Free tiers see an upgrade
+  // prompt instead of the export button.
+  const [canExport, setCanExport] = useState(true);
   const logsRef = useRef<HTMLDivElement>(null);
   const autostartedRef = useRef(false);
+
+  // Resolve export capability from the org's plan once on mount.
+  useEffect(() => {
+    fetch("/api/usage")
+      .then(r => r.json())
+      .then(d => { if (d?.limits) setCanExport(Boolean(d.limits.export)); })
+      .catch(() => {});
+  }, []);
 
   // Toasts — transient user-facing notifications (errors, confirmations, undo).
   type Toast = { id: number; kind: "error" | "success" | "info"; msg: string; action?: { label: string; run: () => void } };
@@ -1623,16 +1634,29 @@ export default function EventPage() {
               </button>
             ))}
             {suppliers.length > 0 && (
-              <button
-                onClick={exportCsv}
-                title={t("Export the current list to CSV")}
-                className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                </svg>
-                {t("Export CSV")}
-              </button>
+              canExport ? (
+                <button
+                  onClick={exportCsv}
+                  title={t("Export the current list to CSV")}
+                  className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  {t("Export CSV")}
+                </button>
+              ) : (
+                <Link
+                  href="/billing"
+                  title={t("Exporting is available on paid plans.")}
+                  className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-all whitespace-nowrap"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  {t("Upgrade to export")}
+                </Link>
+              )
             )}
           </div>
         </div>
