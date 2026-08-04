@@ -16,12 +16,15 @@
     "@clerk/nextjs": "^5.7.6",
     "@neondatabase/serverless": "^1.1.0",
     "@types/ws": "^8.18.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.23.0",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
     "stripe": "^22.3.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20",

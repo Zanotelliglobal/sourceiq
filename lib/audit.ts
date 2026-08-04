@@ -14,7 +14,8 @@ export type AuditAction =
   | "outreach.launch"
   | "supplier.stage_change"
   | "responders.shortlist"
-  | "followup.send";
+  | "followup.send"
+  | "suppliers.export";
 
 export async function logAudit(input: {
   orgId: number;

@@ -1001,6 +1001,8 @@ export default function EventPage() {
   // Whether the org's plan permits exporting (CSV). Free tiers see an upgrade
   // prompt instead of the export button.
   const [canExport, setCanExport] = useState(true);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
   const autostartedRef = useRef(false);
 
@@ -1011,6 +1013,16 @@ export default function EventPage() {
       .then(d => { if (d?.limits) setCanExport(Boolean(d.limits.export)); })
       .catch(() => {});
   }, []);
+
+  // Close the export format menu on any outside click.
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    function onClick(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [exportMenuOpen]);
 
   // Toasts — transient user-facing notifications (errors, confirmations, undo).
   type Toast = { id: number; kind: "error" | "success" | "info"; msg: string; action?: { label: string; run: () => void } };
@@ -1347,47 +1359,121 @@ export default function EventPage() {
     STAGES.map(s => [s.key, s.key === "all" ? suppliers.length : suppliers.filter(x => x.funnel_stage === s.key).length])
   );
 
-  // Export the currently-filtered supplier list to a CSV the buyer can open in Excel.
+  // ── Supplier exports (CSV / Excel / PDF) ──────────────────────────────────
+  // All three formats share one column definition so the columns/order stay in
+  // sync, and all operate on `filtered` — i.e. the current stage-filtered view.
+  const listVal = (raw: string | null) => tryParse<string[]>(raw, []).join("; ");
+  const exportCols: { header: string; get: (s: Supplier) => unknown }[] = [
+    { header: "Name",            get: s => s.name },
+    { header: "Country",         get: s => s.country },
+    { header: "City",            get: s => s.city },
+    { header: "AI Score",        get: s => s.ai_score },
+    { header: "Funnel Stage",    get: s => STAGES.find(x => x.key === s.funnel_stage)?.label || s.funnel_stage },
+    { header: "Outreach Status", get: s => s.outreach_status },
+    { header: "Contact Email",   get: s => s.contact_email },
+    { header: "Contact Page",    get: s => s.contact_url },
+    { header: "Phone",           get: s => s.contact_phone },
+    { header: "LinkedIn",        get: s => s.contact_linkedin },
+    { header: "Website",         get: s => s.website },
+    { header: "Employees",       get: s => s.employees },
+    { header: "Annual Revenue",  get: s => s.annual_revenue },
+    { header: "Founded",         get: s => s.founded },
+    { header: "Capabilities",    get: s => listVal(s.capabilities) },
+    { header: "Certifications",  get: s => listVal(s.certifications) },
+    { header: "Wave",            get: s => s.wave },
+    { header: "Description",     get: s => s.description },
+  ];
+
+  const exportSlug = (event?.title || "suppliers").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "suppliers";
+  const exportFilename = (ext: string) => `${exportSlug}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // Best-effort audit record of the export (format + count + active filter).
+  const logExport = (format: "csv" | "xlsx" | "pdf") => {
+    void fetch("/api/audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_id: Number(id), format, count: filtered.length, stage: stageFilter }),
+    }).catch(() => {});
+  };
+
   const exportCsv = () => {
     const cell = (v: unknown) => {
       const str = v == null ? "" : String(v);
       return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
     };
-    const listVal = (raw: string | null) => tryParse<string[]>(raw, []).join("; ");
-    const cols: { header: string; get: (s: Supplier) => unknown }[] = [
-      { header: "Name",            get: s => s.name },
-      { header: "Country",         get: s => s.country },
-      { header: "City",            get: s => s.city },
-      { header: "AI Score",        get: s => s.ai_score },
-      { header: "Funnel Stage",    get: s => STAGES.find(x => x.key === s.funnel_stage)?.label || s.funnel_stage },
-      { header: "Outreach Status", get: s => s.outreach_status },
-      { header: "Contact Email",   get: s => s.contact_email },
-      { header: "Contact Page",    get: s => s.contact_url },
-      { header: "Phone",           get: s => s.contact_phone },
-      { header: "LinkedIn",        get: s => s.contact_linkedin },
-      { header: "Website",         get: s => s.website },
-      { header: "Employees",       get: s => s.employees },
-      { header: "Annual Revenue",  get: s => s.annual_revenue },
-      { header: "Founded",         get: s => s.founded },
-      { header: "Capabilities",    get: s => listVal(s.capabilities) },
-      { header: "Certifications",  get: s => listVal(s.certifications) },
-      { header: "Wave",            get: s => s.wave },
-      { header: "Description",     get: s => s.description },
-    ];
     const rows = [
-      cols.map(c => cell(c.header)).join(","),
-      ...filtered.map(s => cols.map(c => cell(c.get(s))).join(",")),
+      exportCols.map(c => cell(c.header)).join(","),
+      ...filtered.map(s => exportCols.map(c => cell(c.get(s))).join(",")),
     ];
-    const blob = new Blob(["﻿" + rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const slug = (event?.title || "suppliers").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-    a.href = url;
-    a.download = `${slug || "suppliers"}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(new Blob(["﻿" + rows.join("\r\n")], { type: "text/csv;charset=utf-8;" }), exportFilename("csv"));
+    logExport("csv");
+  };
+
+  // Excel: same columns/order as CSV. SheetJS is loaded on demand so it never
+  // ships in the initial bundle.
+  const exportXlsx = async () => {
+    const XLSX = await import("xlsx");
+    const aoa = [
+      exportCols.map(c => c.header),
+      ...filtered.map(s => exportCols.map(c => { const v = c.get(s); return v == null ? "" : v; })),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Suppliers");
+    XLSX.writeFile(wb, exportFilename("xlsx"));
+    logExport("xlsx");
+  };
+
+  // PDF: a readable, branded table with the key columns (company, country,
+  // score, contact) respecting the active stage filter. jsPDF + autotable are
+  // loaded on demand.
+  const exportPdf = async () => {
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const stageLabelRaw = STAGES.find(s => s.key === stageFilter)?.label || "All";
+    const stageLabel = stageFilter === "all" ? t("All stages") : t(stageLabelRaw);
+
+    doc.setFontSize(16);
+    doc.setTextColor(15, 23, 42);
+    doc.text("SourceIQ", 40, 40);
+    doc.setFontSize(12);
+    doc.setTextColor(71, 85, 105);
+    doc.text(event?.title || t("Supplier list"), 40, 58);
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`${t("Filter")}: ${stageLabel}  ·  ${filtered.length} ${t("suppliers")}  ·  ${new Date().toISOString().slice(0, 10)}`, 40, 72);
+
+    const contactOf = (s: Supplier) => s.contact_email || s.contact_url || s.contact_phone || s.website || "—";
+    autoTable(doc, {
+      startY: 86,
+      head: [[t("Company"), t("Country"), t("Score"), t("Stage"), t("Contact")]],
+      body: filtered.map(s => [
+        s.name,
+        [s.city, s.country].filter(Boolean).join(", "),
+        s.ai_score == null ? "—" : String(s.ai_score),
+        t(STAGES.find(x => x.key === s.funnel_stage)?.label || s.funnel_stage),
+        contactOf(s),
+      ]),
+      styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak", textColor: [30, 41, 59] },
+      headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: { 0: { cellWidth: 200 }, 2: { halign: "center", cellWidth: 40 }, 4: { cellWidth: 220 } },
+      margin: { left: 40, right: 40 },
+    });
+
+    doc.save(exportFilename("pdf"));
+    logExport("pdf");
   };
 
   const shortlisted = suppliers.filter(s => s.funnel_stage === "shortlisted").length;
@@ -1639,16 +1725,41 @@ export default function EventPage() {
             ))}
             {suppliers.length > 0 && (
               canExport ? (
-                <button
-                  onClick={exportCsv}
-                  title={t("Export the current list to CSV")}
-                  className="ml-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                  </svg>
-                  {t("Export CSV")}
-                </button>
+                <div className="relative ml-1" ref={exportMenuRef}>
+                  <button
+                    onClick={() => setExportMenuOpen(o => !o)}
+                    title={t("Export the current list")}
+                    aria-haspopup="menu"
+                    aria-expanded={exportMenuOpen}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    {t("Export")}
+                    <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {exportMenuOpen && (
+                    <div role="menu" className="absolute right-0 mt-1 w-36 rounded-lg border border-slate-200 bg-white shadow-lg z-20 py-1">
+                      {([
+                        { key: "csv" as const, label: t("Export CSV"), run: exportCsv },
+                        { key: "xlsx" as const, label: t("Export Excel"), run: exportXlsx },
+                        { key: "pdf" as const, label: t("Export PDF"), run: exportPdf },
+                      ]).map(opt => (
+                        <button
+                          key={opt.key}
+                          role="menuitem"
+                          onClick={() => { setExportMenuOpen(false); void opt.run(); }}
+                          className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <Link
                   href="/billing"
