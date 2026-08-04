@@ -58,6 +58,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Signature verification failed: ${String(err)}` }, { status: 400 });
   }
 
+  // Idempotency: Stripe may redeliver events. Record the event id first; if it's
+  // already present we've handled it — ack without reprocessing.
+  const idemDb = getDb();
+  const fresh = await idemDb
+    .prepare(
+      `INSERT INTO webhook_events (id, source) VALUES (?, 'stripe')
+       ON CONFLICT (id) DO NOTHING RETURNING id`
+    )
+    .get(event.id) as { id?: string } | undefined;
+  if (!fresh?.id) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {

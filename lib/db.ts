@@ -266,6 +266,19 @@ async function initSchema(): Promise<void> {
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS webhook_events (
+      id            TEXT PRIMARY KEY,
+      source        TEXT NOT NULL,
+      processed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      bucket        TEXT NOT NULL,
+      window_start  TIMESTAMPTZ NOT NULL,
+      count         INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (bucket, window_start)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_suppliers_event ON suppliers(event_id);
     CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
     CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id);

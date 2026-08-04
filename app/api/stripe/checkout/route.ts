@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { getOrgContext } from "@/lib/tenant";
 import { getStripe, isBillingConfigured, resolvePriceId } from "@/lib/billing";
 import { getTier, type Cadence, type TierKey } from "@/lib/plans";
+import { rateLimit } from "@/lib/ratelimit";
 
 const CADENCES = new Set<Cadence>(["weekly", "monthly", "yearly"]);
 
@@ -14,6 +15,15 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isBillingConfigured()) {
     return NextResponse.json({ error: "Billing is not configured" }, { status: 503 });
+  }
+
+  // Throttle checkout starts per org to blunt abuse / accidental loops.
+  const rl = await rateLimit("checkout", String(ctx.orgId), 10, 60);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again shortly." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
   }
 
   // Resolve the selected tier × cadence from the request body. Default to the

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { checkEventLimit } from "@/lib/usage";
+import { rateLimit, clientIp } from "@/lib/ratelimit";
 import { logAudit } from "@/lib/audit";
 
 export async function GET() {
@@ -54,6 +55,20 @@ export async function POST(req: NextRequest) {
   // Billing gate: block new events unless the org has an active plan or trial.
   const gate = requireActiveSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
+
+  // Anti-abuse: cap event creation per org and per source IP. The per-IP cap
+  // blunts multi-account trial farming from a single machine.
+  const [orgRl, ipRl] = await Promise.all([
+    rateLimit("event-create", String(ctx.orgId), 20, 3600),
+    rateLimit("event-create-ip", clientIp(), 30, 3600),
+  ]);
+  if (!orgRl.ok || !ipRl.ok) {
+    const retryAfter = Math.max(orgRl.retryAfter, ipRl.retryAfter);
+    return NextResponse.json(
+      { error: "Too many events created recently. Please try again later.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
+  }
 
   // Tier quota: block new events once the org exhausts its monthly allowance.
   const db = getDb();
