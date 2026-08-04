@@ -459,6 +459,18 @@ export type AuditLog = {
   created_at: string;
 };
 
+// One message (outbound RFI/follow-up or inbound supplier reply) in a
+// supplier's outreach correspondence. Together, all rows for a supplier_id
+// form its revisitable outreach thread — see lib/outreach-log.ts.
+export type OutreachLog = {
+  id: number;
+  supplier_id: number;
+  direction: string; // 'inbound' | 'outbound'
+  subject: string | null;
+  body: string;
+  sent_at: string;
+};
+
 // Organizations carry the billing/tenancy state.
 export type Organization = {
   id: number;
