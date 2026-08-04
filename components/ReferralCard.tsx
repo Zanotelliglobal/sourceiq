@@ -35,6 +35,14 @@ export default function ReferralCard() {
       await navigator.clipboard.writeText(stats.link);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
+      // Report the quick-start checklist's "share your referral link" task —
+      // best-effort; the checklist card just won't reflect it until next load
+      // if this fails.
+      fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: "share_referral" }),
+      }).catch(() => {});
     } catch {
       /* clipboard unavailable */
     }

@@ -11,7 +11,16 @@ import { getDb, type Organization } from "@/lib/db";
 
 // Bonus events granted to BOTH the referrer and the referred org when a referral
 // converts (referred org subscribes). Added on top of the plan's monthly limit.
+// Single source of truth — this is the only place the reward-per-conversion
+// value is defined; tune here only.
 export const REFERRAL_BONUS_EVENTS = 3;
+
+// Anti-abuse: max number of conversions a single referrer org can be rewarded
+// for. Prevents referral-farming (e.g. an org spinning up many throwaway
+// "referred" orgs to harvest bonus events). The referred org's own signup
+// bonus is never capped — they earned it by converting; only the REFERRER's
+// bonus for that specific conversion is subject to this cap.
+export const REFERRAL_REWARD_CAP_PER_ORG = 10;
 
 // Human-friendly code: uppercase, no ambiguous chars (0/O, 1/I/L), 7 chars.
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -83,9 +92,27 @@ export async function attributeReferral(newOrgId: number, code: string | null | 
   }
 }
 
+/**
+ * Pure decision helper: should the referrer receive a reward for one more
+ * conversion, given how many the referrer has already been rewarded for?
+ * Extracted so it's unit-testable without touching the DB.
+ */
+export function referrerRewardDecision(
+  priorRewardedCount: number,
+  cap: number = REFERRAL_REWARD_CAP_PER_ORG
+): boolean {
+  return priorRewardedCount < cap;
+}
+
 // Convert a pending referral for the referred org into a reward: mark it
-// rewarded and grant bonus events to both parties. Idempotent — only a single
-// pending row transitions, so repeated webhook deliveries won't double-reward.
+// rewarded and grant bonus events. Idempotent — only a single pending row
+// transitions, so repeated webhook deliveries won't double-reward.
+//
+// The referred org always gets its conversion bonus — it earned that by
+// subscribing. The referrer's bonus for this conversion is skipped once
+// they've hit REFERRAL_REWARD_CAP_PER_ORG total rewarded referrals, so the
+// referral is still marked 'rewarded' (it won't be retried) but no further
+// bonus_events accrue to the referrer beyond the cap.
 export async function rewardReferral(referredOrgId: number): Promise<void> {
   try {
     const db = getDb();
@@ -102,8 +129,22 @@ export async function rewardReferral(referredOrgId: number): Promise<void> {
     if (!ref) return; // no pending referral, or already rewarded
 
     await db
-      .prepare("UPDATE organizations SET bonus_events = bonus_events + ?, updated_at = now() WHERE id IN (?, ?)")
-      .run(REFERRAL_BONUS_EVENTS, ref.referrer_org_id, ref.referred_org_id);
+      .prepare("UPDATE organizations SET bonus_events = bonus_events + ?, updated_at = now() WHERE id = ?")
+      .run(REFERRAL_BONUS_EVENTS, ref.referred_org_id);
+
+    const countRow = (await db
+      .prepare(
+        `SELECT COUNT(*)::int AS c FROM referrals
+          WHERE referrer_org_id = ? AND status = 'rewarded' AND referred_org_id <> ?`
+      )
+      .get(ref.referrer_org_id, ref.referred_org_id)) as { c: number } | undefined;
+    const priorRewardedCount = Number(countRow?.c ?? 0);
+
+    if (referrerRewardDecision(priorRewardedCount)) {
+      await db
+        .prepare("UPDATE organizations SET bonus_events = bonus_events + ?, updated_at = now() WHERE id = ?")
+        .run(REFERRAL_BONUS_EVENTS, ref.referrer_org_id);
+    }
   } catch {
     /* best-effort — never break the billing webhook */
   }

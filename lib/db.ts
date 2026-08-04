@@ -156,6 +156,10 @@ async function initSchema(): Promise<void> {
     ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bonus_events INTEGER NOT NULL DEFAULT 0;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_org_referral_code ON organizations(referral_code) WHERE referral_code IS NOT NULL;
 
+    -- Quick-start checklist progress: a JSON object of {taskKey: isoTimestamp}
+    -- recording when each onboarding task was completed. See lib/onboarding.ts.
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS checklist_progress TEXT NOT NULL DEFAULT '{}';
+
     CREATE TABLE IF NOT EXISTS sourcing_events (
       id            BIGSERIAL PRIMARY KEY,
       org_id        BIGINT NOT NULL DEFAULT 1 REFERENCES organizations(id) ON DELETE CASCADE,
@@ -449,6 +453,7 @@ export type Organization = {
   referral_code: string | null;
   referred_by: number | null;
   bonus_events: number;
+  checklist_progress: string;
   created_at: string;
   updated_at: string;
 };
