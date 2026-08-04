@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureException } from "@/lib/observability";
 
 // Catastrophic fallback — replaces the root layout when even it fails to render.
 // Must ship its own <html>/<body>; the LanguageProvider/theme are unavailable here,
@@ -13,7 +14,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Global error boundary:", error);
+    captureException(error, { source: "global-error-boundary", digest: error.digest });
   }, [error]);
 
   return (

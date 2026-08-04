@@ -5,6 +5,7 @@ import { requireActiveSubscription } from "@/lib/billing";
 import { checkEventLimit } from "@/lib/usage";
 import { rateLimit, clientIp } from "@/lib/ratelimit";
 import { logAudit } from "@/lib/audit";
+import { captureException, trackEvent } from "@/lib/observability";
 
 export async function GET() {
   const ctx = await getOrgContext();
@@ -122,9 +123,11 @@ export async function POST(req: NextRequest) {
       metadata: { category, anonymous },
     });
 
+    trackEvent("event.created", { orgId, eventId: Number(result.lastInsertRowid), category, hasShipTo: Boolean(shipTo) });
+
     return NextResponse.json(event, { status: 201 });
   } catch (err) {
-    console.error("[sourcing-events POST] insert failed:", err);
+    captureException(err, { source: "sourcing-events.POST", orgId });
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

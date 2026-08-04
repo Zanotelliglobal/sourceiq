@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { captureException } from "@/lib/observability";
 
 // Route-level error boundary — catches render/data errors on app pages
 // without taking down the whole shell.
@@ -13,8 +14,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Surfaced to the observability provider (Sentry) once wired up (#14).
-    console.error("App error boundary:", error);
+    captureException(error, { source: "app-error-boundary", digest: error.digest });
   }, [error]);
 
   return (
