@@ -13,21 +13,35 @@ type EventRow = {
   supplier_count: number; shortlisted_count: number;
 };
 
+// Clean a legacy raw-sentence title for display (new events already get a
+// concise AI-generated title). Strips common Quick-Source lead-ins like
+// "I am looking for a new supplier of…" and capitalizes the result.
+function cleanTitle(raw: string): string {
+  const original = (raw || "").trim();
+  let s = original;
+  s = s.replace(/^(i\s*['’]?\s*a?m\s+)?(currently\s+)?(looking\s+(?:for|to\s+source)|searching\s+for|in\s+search\s+of|we\s+(?:are\s+)?(?:looking\s+for|need|require|want)|i\s+(?:need|want|require)|need|want|seeking|source|sourcing)\s+/i, "");
+  s = s.replace(/^(?:a\s+new\s+|a\s+|an\s+|new\s+|our\s+|the\s+)?(?:supplier|vendor|manufacturer|source|provider)s?\s+(?:of|for)\s+/i, "");
+  s = s.replace(/^(?:of|for)\s+/i, "");
+  s = s.trim();
+  if (!s) s = original;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // Compact relative time (e.g. "3h ago", "2d ago") for the last-activity signal.
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, t: (k: string, v?: Record<string, string | number>) => string): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
   const s = Math.floor((Date.now() - then) / 1000);
-  if (s < 60) return "just now";
+  if (s < 60) return t("just now");
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t("{n}m ago", { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return t("{n}h ago", { n: h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
+  if (d < 30) return t("{n}d ago", { n: d });
   const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.floor(mo / 12)}y ago`;
+  if (mo < 12) return t("{n}mo ago", { n: mo });
+  return t("{n}y ago", { n: Math.floor(mo / 12) });
 }
 
 // `working: true` marks statuses where an AI agent is actively running — these
@@ -302,14 +316,14 @@ export default function Dashboard() {
                     onClick={() => router.push(`/events/${event.id}`)}
                     className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
                   >
-                    <td className="px-6 py-4 max-w-0">
-                      <div className="font-semibold text-slate-900 text-sm truncate">{event.title}</div>
+                    <td className="px-6 py-4">
+                      <div className="font-semibold text-slate-900 text-sm truncate max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] xl:max-w-[360px]">{cleanTitle(event.title)}</div>
                       <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
                         {event.wave_count > 0 && (
                           <span>{event.wave_count === 1 ? t("{count} wave", { count: event.wave_count }) : t("{count} waves", { count: event.wave_count })}</span>
                         )}
                         {event.wave_count > 0 && <span className="text-slate-300">·</span>}
-                        <span>{t("updated {time}", { time: relativeTime(event.updated_at || event.created_at) })}</span>
+                        <span>{t("updated {time}", { time: relativeTime(event.updated_at || event.created_at, t) })}</span>
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden md:table-cell">

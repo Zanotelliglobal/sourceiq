@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, PlusCircle, CreditCard, LifeBuoy } from "lucide-react";
 import type { ComponentType } from "react";
+import { useT } from "@/components/LanguageProvider";
 
 // Persistent left sidebar for the dashboard/app surface (MASTER.md: Layout).
 // Shown ≥1024px on app routes only; marketing + auth pages render children bare
@@ -24,6 +25,7 @@ function useIsAppRoute(pathname: string): boolean {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const pathname = usePathname() || "/";
   const isApp = useIsAppRoute(pathname);
 
@@ -47,7 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <Icon className="w-[18px] h-[18px]" />
-                {label}
+                {t(label)}
               </Link>
             );
           })}
@@ -58,7 +60,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
           >
             <LifeBuoy className="w-[18px] h-[18px]" />
-            Support
+            {t("Support")}
           </a>
         </div>
       </aside>

@@ -320,4 +320,12 @@ export const de: Record<string, string> = {
   "{count} waves": "{count} Wellen",
   "Discovering live": "Live-Suche",
   "{n} found so far": "{n} bisher gefunden",
+  "New Event": "Neues Ereignis",
+  "Support": "Support",
+  "just now": "gerade eben",
+  "{n}m ago": "vor {n} Min.",
+  "{n}h ago": "vor {n} Std.",
+  "{n}d ago": "vor {n} T.",
+  "{n}mo ago": "vor {n} Mon.",
+  "{n}y ago": "vor {n} J.",
 };

@@ -320,4 +320,12 @@ export const es: Record<string, string> = {
   "{count} waves": "{count} oleadas",
   "Discovering live": "Descubriendo en vivo",
   "{n} found so far": "{n} encontrados hasta ahora",
+  "New Event": "Nuevo evento",
+  "Support": "Soporte",
+  "just now": "ahora mismo",
+  "{n}m ago": "hace {n} min",
+  "{n}h ago": "hace {n} h",
+  "{n}d ago": "hace {n} d",
+  "{n}mo ago": "hace {n} meses",
+  "{n}y ago": "hace {n} años",
 };
