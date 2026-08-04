@@ -354,4 +354,9 @@ export const es: Record<string, string> = {
   "For occasional sourcing with exports and a small team.": "Para sourcing ocasional con exportaciones y un equipo pequeño.",
   "Unlimited discovery depth plus live supplier outreach.": "Profundidad de búsqueda ilimitada más contacto directo con proveedores.",
   "Unlimited everything for high-volume procurement teams.": "Todo ilimitado para equipos de compras de alto volumen.",
+  "Usage this month": "Uso este mes",
+  "Sourcing events": "Eventos de sourcing",
+  "Tokens used": "Tokens utilizados",
+  "Estimated cost": "Coste estimado",
+  "Upgrade plan": "Mejorar plan",
 };

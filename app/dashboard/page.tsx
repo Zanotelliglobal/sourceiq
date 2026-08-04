@@ -72,13 +72,29 @@ export default function Dashboard() {
   const [sortKey, setSortKey] = useState<SortKey>("activity");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [trial, setTrial] = useState<{ status: string; trial_ends_at: string | null; active: boolean } | null>(null);
+  const [usage, setUsage] = useState<{
+    tier: string; tier_name: string; unlimited: number;
+    events_this_month: number; events_remaining: number | null;
+    tokens_used: number; cost_usd: number;
+    limits: { eventsPerMonth: number };
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/billing/status")
       .then(r => r.json())
       .then(d => setTrial(d))
       .catch(() => {});
+    fetch("/api/usage")
+      .then(r => r.json())
+      .then(d => { if (!d?.error) setUsage(d); })
+      .catch(() => {});
   }, []);
+
+  // Human-readable token count (e.g. 12.4K, 3.1M) for the usage meter.
+  const fmtTokens = (n: number) =>
+    n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K`
+    : String(n);
 
   // Compact trial signal for the header: days remaining, or an ended prompt.
   const trialBadge = (() => {
@@ -216,6 +232,38 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Usage meter: current-month consumption vs the org's plan limits */}
+      {usage && (
+        <div className="card px-4 sm:px-6 py-4 mb-8 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+          <div className="flex items-center gap-2">
+            <span className="badge badge-blue">{t(usage.tier_name)}</span>
+            <span className="text-xs text-slate-400">{t("Usage this month")}</span>
+          </div>
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div>
+              <div className="text-sm font-bold text-slate-900">
+                {usage.events_this_month}
+                <span className="font-normal text-slate-400"> / {usage.limits.eventsPerMonth === usage.unlimited ? t("Unlimited") : usage.limits.eventsPerMonth}</span>
+              </div>
+              <div className="text-xs text-slate-400">{t("Sourcing events")}</div>
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900">{fmtTokens(usage.tokens_used)}</div>
+              <div className="text-xs text-slate-400">{t("Tokens used")}</div>
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900">${usage.cost_usd.toFixed(2)}</div>
+              <div className="text-xs text-slate-400">{t("Estimated cost")}</div>
+            </div>
+          </div>
+          {usage.events_remaining !== null && usage.events_remaining <= 1 && (
+            <Link href="/billing" className="text-xs font-semibold text-blue-700 hover:underline whitespace-nowrap">
+              {t("Upgrade plan")}
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Events */}
       {error ? (

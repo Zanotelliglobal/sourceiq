@@ -1,4 +1,6 @@
 import { getDb } from "@/lib/db";
+import type { Organization } from "@/lib/db";
+import { getTier, UNLIMITED, type Tier, type TierLimits } from "@/lib/plans";
 type Db = ReturnType<typeof getDb>;
 
 // ─── TOKEN ACCOUNTING ─────────────────────────────────────────────────────────
@@ -130,6 +132,71 @@ export async function usageSummary(db: Db, eventId: number): Promise<UsageSummar
     total_tokens: totals.input_tokens + totals.output_tokens + totals.cache_read_tokens + totals.cache_write_tokens,
     by_stage,
   };
+}
+
+// ─── TIER LIMITS & METERING ───────────────────────────────────────────────────
+// Resolves the plan a tenant is effectively on and measures its consumption
+// against that tier's limits, so paid actions can be gated per plan.
+
+/** The plan an org is effectively entitled to right now. */
+export function effectiveTier(org: Organization): Tier {
+  const byPlan = getTier(org.plan);
+  if (byPlan) return byPlan;
+  // Trials get generous (Premium) limits; anything unrecognized falls to Free.
+  if (org.subscription_status === "trialing" || org.plan === "trial") return getTier("premium")!;
+  return getTier("free")!;
+}
+
+export type TierUsage = {
+  tier: Tier;
+  limits: TierLimits;
+  events_this_month: number;
+  tokens_used: number;
+  cost_usd: number;
+  events_remaining: number | null; // null = unlimited
+};
+
+/** Current-month consumption for an org measured against its effective tier. */
+export async function getTierUsage(db: Db, org: Organization): Promise<TierUsage> {
+  const tier = effectiveTier(org);
+
+  const evtRow = await db.prepare(
+    `SELECT COUNT(*) AS c FROM sourcing_events
+      WHERE org_id = ? AND created_at >= date_trunc('month', now())`
+  ).get(org.id) as Record<string, unknown> | undefined;
+  const eventsThisMonth = Number(evtRow?.c ?? 0);
+
+  const tokRow = await db.prepare(
+    `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
+            COALESCE(SUM(cost_usd), 0)                     AS cost
+       FROM token_usage
+      WHERE org_id = ? AND created_at >= date_trunc('month', now())`
+  ).get(org.id) as Record<string, unknown> | undefined;
+
+  const limit = tier.limits.eventsPerMonth;
+  const eventsRemaining = limit === UNLIMITED ? null : Math.max(0, limit - eventsThisMonth);
+
+  return {
+    tier,
+    limits: tier.limits,
+    events_this_month: eventsThisMonth,
+    tokens_used: Number(tokRow?.tokens ?? 0),
+    cost_usd: Number(tokRow?.cost ?? 0),
+    events_remaining: eventsRemaining,
+  };
+}
+
+export type EventLimitCheck = { ok: true } | { ok: false; reason: string; limit: number; used: number };
+
+/** Whether the org may create another sourcing event this month under its tier. */
+export async function checkEventLimit(db: Db, org: Organization): Promise<EventLimitCheck> {
+  const usage = await getTierUsage(db, org);
+  const limit = usage.limits.eventsPerMonth;
+  if (limit === UNLIMITED) return { ok: true };
+  if (usage.events_this_month >= limit) {
+    return { ok: false, reason: "event_limit_reached", limit, used: usage.events_this_month };
+  }
+  return { ok: true };
 }
 
 export type OrgUsageSummary = {

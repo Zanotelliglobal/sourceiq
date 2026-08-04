@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
+import { checkEventLimit } from "@/lib/usage";
 import { logAudit } from "@/lib/audit";
 
 export async function GET() {
@@ -54,6 +55,16 @@ export async function POST(req: NextRequest) {
   const gate = requireActiveSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
+  // Tier quota: block new events once the org exhausts its monthly allowance.
+  const db = getDb();
+  const quota = await checkEventLimit(db, ctx.org);
+  if (!quota.ok) {
+    return NextResponse.json(
+      { error: `Monthly event limit reached (${quota.used}/${quota.limit}). Upgrade your plan for more.`, code: "event_limit_reached", limit: quota.limit, used: quota.used },
+      { status: 402 }
+    );
+  }
+
   const body = await req.json();
   const { title, category, subcategory, description, requirements, annual_spend, target_countries,
     outreach_anonymous, buyer_name, buyer_role, buyer_company } = body;
@@ -76,7 +87,6 @@ export async function POST(req: NextRequest) {
   // Tenant scoping: the event belongs to the caller's resolved organization.
   const orgId = ctx.orgId;
 
-  const db = getDb();
   try {
     const result = await db
       .prepare(
