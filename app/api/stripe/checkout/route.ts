@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getOrgContext } from "@/lib/tenant";
-import { getStripe, isBillingConfigured } from "@/lib/billing";
+import { getStripe, isBillingConfigured, resolvePriceId } from "@/lib/billing";
+import { getTier, type Cadence, type TierKey } from "@/lib/plans";
+
+const CADENCES = new Set<Cadence>(["weekly", "monthly", "yearly"]);
 
 // Starts a Stripe Checkout session for the caller's org and returns the URL.
 // The client redirects the browser to `url`. On success/cancel Stripe sends the
@@ -13,7 +16,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Billing is not configured" }, { status: 503 });
   }
 
-  const priceId = process.env.STRIPE_PRICE_ID!;
+  // Resolve the selected tier × cadence from the request body. Default to the
+  // Pro/monthly slot (which also covers the legacy single-price deployment).
+  const body = (await req.json().catch(() => ({}))) as { tier?: string; cadence?: string };
+  const tierKey = (body.tier || "pro") as TierKey;
+  const cadence = (body.cadence || "monthly") as Cadence;
+
+  const tier = getTier(tierKey);
+  if (!tier || tierKey === "free") {
+    return NextResponse.json({ error: "Invalid plan selected" }, { status: 400 });
+  }
+  if (!CADENCES.has(cadence)) {
+    return NextResponse.json({ error: "Invalid billing cadence" }, { status: 400 });
+  }
+
+  const priceId = resolvePriceId(tierKey, cadence);
+  if (!priceId) {
+    return NextResponse.json(
+      { error: `This plan is not available yet (missing price for ${tierKey}/${cadence}).` },
+      { status: 503 },
+    );
+  }
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
   const stripe = getStripe();
   const db = getDb();
@@ -35,10 +58,11 @@ export async function POST(req: NextRequest) {
     return stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
-      line_items: [{ price: priceId, quantity: 1 }],
-      // The webhook is the source of truth; metadata lets it find our org row.
-      subscription_data: { metadata: { org_id: String(ctx!.orgId) } },
-      metadata: { org_id: String(ctx!.orgId) },
+      line_items: [{ price: priceId!, quantity: 1 }],
+      // The webhook is the source of truth; metadata lets it find our org row
+      // and record which tier/cadence was purchased.
+      subscription_data: { metadata: { org_id: String(ctx!.orgId), tier: tierKey, cadence } },
+      metadata: { org_id: String(ctx!.orgId), tier: tierKey, cadence },
       success_url: `${appUrl}/dashboard?checkout=success`,
       cancel_url: `${appUrl}/billing?checkout=cancelled`,
       allow_promotion_codes: true,

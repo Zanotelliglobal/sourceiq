@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getDb } from "@/lib/db";
 import { getStripe, isBillingConfigured } from "@/lib/billing";
+import { getTier } from "@/lib/plans";
 
 // Stripe webhook — the single source of truth for subscription state.
 // Stripe POSTs signed events here; we verify the signature, then mirror the
@@ -19,8 +20,10 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
 
   const status = sub.status; // active | trialing | past_due | canceled | ...
-  // "canceled"/"unpaid"/"incomplete_expired" all revoke access via the gate.
-  const plan = status === "canceled" ? "trial" : "pro";
+  // Record the purchased tier from checkout metadata (falls back to "pro" for
+  // legacy single-price subscriptions). "canceled" drops back to trial/free.
+  const tierKey = getTier(sub.metadata?.tier || "")?.key || "pro";
+  const plan = status === "canceled" ? "trial" : tierKey;
 
   const set = `subscription_status = ?, plan = ?, stripe_subscription_id = ?, stripe_customer_id = COALESCE(stripe_customer_id, ?), updated_at = now()`;
 

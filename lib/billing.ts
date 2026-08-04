@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import type { Organization } from "@/lib/db";
+import { TIERS, CADENCES, priceIdFor, type TierKey, type Cadence } from "@/lib/plans";
 
 // ─── BILLING (Stripe) ─────────────────────────────────────────────────────────
 // Flat subscription tiers. An org may create/run sourcing work only while it is
@@ -17,26 +18,32 @@ export function getStripe(): Stripe {
   return stripe;
 }
 
+// Any configured Stripe price (per-tier env var, or the legacy single-price
+// STRIPE_PRICE_ID) means billing is live.
 export function isBillingConfigured(): boolean {
-  return !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_PRICE_ID;
+  if (!process.env.STRIPE_SECRET_KEY) return false;
+  if (process.env.STRIPE_PRICE_ID) return true; // legacy single-tier fallback
+  for (const tier of TIERS) {
+    for (const { key: cadence } of CADENCES) {
+      if (priceIdFor(tier.key, cadence)) return true;
+    }
+  }
+  return false;
 }
 
-// Plans exposed to customers. Extend as you add tiers.
-export type Plan = {
-  key: string;
-  name: string;
-  priceEnv: string;      // env var holding the Stripe price id
-  blurb: string;
-};
-
-export const PLANS: Plan[] = [
-  {
-    key: "pro",
-    name: "Pro",
-    priceEnv: "STRIPE_PRICE_ID",
-    blurb: "Unlimited sourcing events, multi-wave discovery, and live outreach.",
-  },
-];
+/**
+ * Resolve the Stripe price id for a (tier × cadence). Falls back to the legacy
+ * STRIPE_PRICE_ID for the Pro/monthly slot so existing deployments keep working
+ * until the new per-tier prices are set.
+ */
+export function resolvePriceId(tier: TierKey, cadence: Cadence): string | null {
+  const configured = priceIdFor(tier, cadence);
+  if (configured) return configured;
+  if (tier === "pro" && cadence === "monthly" && process.env.STRIPE_PRICE_ID) {
+    return process.env.STRIPE_PRICE_ID;
+  }
+  return null;
+}
 
 // Subscription statuses that grant access.
 const ACTIVE_STATUSES = new Set(["active", "trialing", "past_due"]);
