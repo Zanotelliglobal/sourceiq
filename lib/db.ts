@@ -273,6 +273,22 @@ async function initSchema(): Promise<void> {
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- In-app notification feed. Org-scoped (any member sees the org's feed) with
+    -- a single read/unread flag per row. Populated on key events: discovery
+    -- complete, supplier reply, outreach delivery failure. Email delivery is a
+    -- best-effort side-channel (see lib/notifications.ts), not stored here.
+    CREATE TABLE IF NOT EXISTS notifications (
+      id            BIGSERIAL PRIMARY KEY,
+      org_id        BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      event_id      BIGINT REFERENCES sourcing_events(id) ON DELETE CASCADE,
+      type          TEXT NOT NULL,
+      title         TEXT NOT NULL,
+      body          TEXT,
+      url           TEXT,
+      read          BOOLEAN NOT NULL DEFAULT false,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS webhook_events (
       id            TEXT PRIMARY KEY,
       source        TEXT NOT NULL,
@@ -293,6 +309,7 @@ async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_usage_event ON token_usage(event_id);
     CREATE INDEX IF NOT EXISTS idx_usage_org ON token_usage(org_id);
     CREATE INDEX IF NOT EXISTS idx_agentruns_event ON agent_runs(event_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_org ON notifications(org_id, read, created_at DESC);
   `;
   // HTTP driver runs one statement per request — execute each in order.
   for (const stmt of splitStatements(ddl)) {

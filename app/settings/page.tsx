@@ -6,6 +6,7 @@ import { User, Building2, Globe, CreditCard, LifeBuoy } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import TeamSettings from "@/components/TeamSettings";
+import NotificationSettings from "@/components/NotificationSettings";
 
 // Central account/settings hub for the app surface. Groups the identity controls
 // (Clerk user + org), language preference, and billing/support entry points that
@@ -56,6 +57,9 @@ export default function SettingsPage() {
 
         {/* Team & seats */}
         <TeamSettings />
+
+        {/* Email notifications */}
+        <NotificationSettings />
 
         {/* Language */}
         <div className="card px-5 py-4 flex items-center justify-between gap-4">

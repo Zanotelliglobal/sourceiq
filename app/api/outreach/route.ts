@@ -7,6 +7,7 @@ import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
+import { notify } from "@/lib/notifications";
 
 export const maxDuration = 300;
 
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
             : `📨 DRAFT outreach (simulation) — no real emails sent (${status.reason}). Engaging ${targets.length} suppliers...`,
         });
 
-        let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0;
+        let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0, failed = 0;
 
         for (const s of targets) {
           // 0 ── Contact discovery: resolve the best reachable channel if we have no email.
@@ -137,6 +138,7 @@ export async function POST(req: NextRequest) {
               headers: unsubscribeHeaders(replyToken),
             });
           } catch (err) {
+            failed++;
             send({ type: "supplier_error", supplier_id: s.id, message: `Send failed: ${String(err)}` });
             continue;
           }
@@ -203,6 +205,19 @@ export async function POST(req: NextRequest) {
 
         await db.prepare(`UPDATE sourcing_events SET status='reviewing', updated_at=datetime('now') WHERE id=?`).run(event.id);
         send({ type: "campaign_complete", live, sent, positive, declined, awaiting, skipped });
+
+        // Notify the org if any outreach couldn't be delivered (hard send errors
+        // or, in live mode, suppliers skipped for a missing/invalid address).
+        const undelivered = failed + (live ? skipped : 0);
+        if (undelivered > 0) {
+          await notify({
+            orgId: ctx.orgId, type: "outreach_failure", eventId: event.id,
+            title: `Outreach delivery issue`,
+            body: `${undelivered} supplier${undelivered === 1 ? "" : "s"} could not be contacted. Check their email addresses and retry.`,
+            url: `/events/${event.id}`,
+            emailUserId: ctx.userId,
+          });
+        }
       } catch (err) {
         send({ type: "error", message: String(err) });
       } finally {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runReplyClassifierAgent } from "@/lib/agents";
 import { recordUsage } from "@/lib/usage";
+import { notify } from "@/lib/notifications";
 
 // ─── SUPPLIER RFI RESPONSE ENDPOINT ───────────────────────────────────────────
 // Backs the branded /supplier/rfi web form. Suppliers who received an RFI can
@@ -16,7 +17,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 type SupplierRow = {
-  id: number; event_id: number; name: string; country: string;
+  id: number; event_id: number; org_id: number; name: string; country: string;
   contact_email: string | null; funnel_stage: string; outreach_status: string;
   opted_out: boolean | null; response_detail: string | null;
   category: string; requirements: string; annual_spend: string | null;
@@ -28,7 +29,7 @@ async function loadByToken(token: string | null): Promise<SupplierRow | undefine
   if (!token) return undefined;
   const db = getDb();
   return await db.prepare(`
-    SELECT s.id, s.event_id, s.name, s.country, s.contact_email, s.funnel_stage,
+    SELECT s.id, s.event_id, se.org_id, s.name, s.country, s.contact_email, s.funnel_stage,
            s.outreach_status, s.opted_out, s.response_detail,
            se.category, se.requirements, se.annual_spend, se.outreach_anonymous,
            se.buyer_name, se.buyer_role, se.buyer_company
@@ -126,6 +127,14 @@ export async function POST(req: NextRequest) {
     await db.prepare(
       `UPDATE suppliers SET outreach_status='responded', supplier_responded_at=datetime('now'), funnel_stage=? WHERE id=?`
     ).run(fallbackPositive ? "responded" : "declined", s.id);
+    if (fallbackPositive) {
+      await notify({
+        orgId: s.org_id, type: "supplier_reply", eventId: s.event_id,
+        title: `${s.name} responded`,
+        body: `${s.name} (${s.country}) submitted an RFI response.`,
+        url: `/events/${s.event_id}`,
+      });
+    }
     return NextResponse.json({ ok: true, classified: false, error: String(err) });
   }
 
@@ -148,6 +157,15 @@ export async function POST(req: NextRequest) {
   await db.prepare(
     `UPDATE suppliers SET outreach_status='responded', supplier_responded_at=datetime('now'), funnel_stage=? WHERE id=?`
   ).run(qualifies ? "responded" : "declined", s.id);
+
+  await notify({
+    orgId: s.org_id, type: "supplier_reply", eventId: s.event_id,
+    title: `${s.name} responded`,
+    body: qualifies
+      ? `${s.name} (${s.country}) is interested and cleared the qualification gate.`
+      : `${s.name} (${s.country}) submitted an RFI response.`,
+    url: `/events/${s.event_id}`,
+  });
 
   return NextResponse.json({ ok: true, classified: true, interested: cls.interested, sentiment: cls.sentiment });
 }

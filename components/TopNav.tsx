@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import MobileMenu from "@/components/MobileMenu";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import NotificationBell from "@/components/NotificationBell";
 import { useT } from "@/components/LanguageProvider";
 
 export default function TopNav() {
@@ -46,6 +47,7 @@ export default function TopNav() {
           </div>
           <LanguageSwitcher />
           <SignedIn>
+            <NotificationBell />
             <Link href="/events/new" className="btn-primary py-2 hidden sm:inline-flex">
               <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>

@@ -14,6 +14,7 @@ import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
+import { notify } from "@/lib/notifications";
 
 export const maxDuration = 300;
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
-    id: number; org_id: number; category: string; subcategory: string | null; description: string;
+    id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
     requirements: string; annual_spend: string; wave_count: number;
     target_countries: string | null; ship_to: string | null;
   } | undefined;
@@ -290,6 +291,18 @@ export async function POST(req: NextRequest) {
         const totalSuppliers = Number((await db.prepare("SELECT COUNT(*)::int as c FROM suppliers WHERE event_id=?").get(event.id) as {c:number}).c);
         const finalUsage = await usageSummary(db, event.id);
         send({ type: "wave_complete", wave: waveNumber, new_suppliers: newSuppliers, total_suppliers: totalSuppliers, usage: finalUsage });
+
+        // Notify: discovery wave finished. In-app for the org + optional email to
+        // the user who launched it (best-effort — never blocks the response).
+        await notify({
+          orgId: ctx.orgId,
+          type: "discovery_complete",
+          title: `Discovery complete — ${event.title}`,
+          body: `Wave ${waveNumber} found ${newSuppliers} new supplier${newSuppliers === 1 ? "" : "s"} (${totalSuppliers} total). Ready to review.`,
+          url: `/events/${event.id}`,
+          eventId: event.id,
+          emailUserId: ctx.userId,
+        });
 
       } catch (err) {
         send({ type: "error", message: String(err) });

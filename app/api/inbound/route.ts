@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { parseReplyToken } from "@/lib/mail";
 import { runReplyClassifierAgent } from "@/lib/agents";
 import { recordUsage } from "@/lib/usage";
+import { notify } from "@/lib/notifications";
 
 export const maxDuration = 120;
 
@@ -121,11 +122,11 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
   const supplier = await db.prepare(`
-    SELECT s.*, se.category, se.requirements
+    SELECT s.*, se.org_id, se.category, se.requirements
     FROM suppliers s JOIN sourcing_events se ON se.id = s.event_id
     WHERE s.reply_token = ?
   `).get(token) as {
-    id: number; event_id: number; name: string; country: string;
+    id: number; event_id: number; org_id: number; name: string; country: string;
     category: string; requirements: string;
   } | undefined;
 
@@ -174,6 +175,19 @@ export async function POST(req: NextRequest) {
       .run(supplier.id);
   }
   // Auto-replies (OOO/bounces) leave the funnel stage untouched — still awaiting a real reply.
+
+  // Notify the org of a genuine inbound reply (skip auto-replies/bounces).
+  if (!cls.is_auto_reply) {
+    const positive = cls.interested && cls.sentiment === "positive";
+    await notify({
+      orgId: supplier.org_id, type: "supplier_reply", eventId: supplier.event_id,
+      title: `${supplier.name} replied`,
+      body: positive
+        ? `${supplier.name} (${supplier.country}) is interested and cleared the qualification gate.`
+        : `${supplier.name} (${supplier.country}) sent a reply.`,
+      url: `/events/${supplier.event_id}`,
+    });
+  }
 
   return NextResponse.json({
     ok: true,
