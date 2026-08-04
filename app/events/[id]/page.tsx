@@ -8,6 +8,7 @@ import {
   Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown,
 } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
+import FunnelExplainer from "@/components/FunnelExplainer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
@@ -1555,6 +1556,9 @@ export default function EventPage() {
               ))}
             </div>
           </div>
+
+          {/* First-run funnel explainer — dismissible, persisted per user */}
+          <FunnelExplainer />
 
           {/* Funnel progression bar */}
           {suppliers.length > 0 && (

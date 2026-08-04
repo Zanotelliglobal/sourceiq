@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown, Trash2, Layers } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
+import OnboardingChecklist from "@/components/OnboardingChecklist";
 
 type EventRow = {
   id: number; title: string; category: string; status: string;
@@ -309,6 +310,9 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {/* First-run guided checklist — auto-hides once the first event exists or on dismissal */}
+      {!loading && !error && <OnboardingChecklist hasEvents={events.length > 0} />}
 
       {/* KPI bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
