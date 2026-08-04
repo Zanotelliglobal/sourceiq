@@ -72,3 +72,31 @@ export async function PATCH(
 
   return NextResponse.json(event);
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const ctx = await getOrgContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const db = getDb();
+  const id = Number(params.id);
+  const owner = await db.prepare("SELECT org_id, title FROM sourcing_events WHERE id = ?").get(id) as { org_id?: number; title?: string } | undefined;
+  // 404 (not 403) for other tenants' events so we don't leak existence.
+  if (!owner || Number(owner.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Child rows (suppliers, agent_runs, token_usage, audit_log) all have
+  // ON DELETE CASCADE, so deleting the event removes them atomically.
+  await db.prepare("DELETE FROM sourcing_events WHERE id = ?").run(id);
+
+  // Log with eventId: null — the event row (and its cascaded audit rows) is gone,
+  // so referencing its id would violate the audit_log → sourcing_events FK.
+  await logAudit({
+    orgId: ctx.orgId, eventId: null, actorId: ctx.userId,
+    action: "event.delete", summary: `Deleted sourcing event "${owner.title ?? id}"`,
+    metadata: { deleted_event_id: id },
+  });
+
+  return NextResponse.json({ ok: true });
+}

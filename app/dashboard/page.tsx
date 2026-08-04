@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown } from "lucide-react";
+import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown, Trash2, Layers } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 
 type EventRow = {
@@ -71,6 +71,8 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("activity");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [groupByCategory, setGroupByCategory] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [trial, setTrial] = useState<{ status: string; trial_ends_at: string | null; active: boolean } | null>(null);
   const [usage, setUsage] = useState<{
     tier: string; tier_name: string; unlimited: number;
@@ -167,6 +169,100 @@ export default function Dashboard() {
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  // Delete an event after confirmation. Optimistically drops it from the list;
+  // reloads on failure so the UI never diverges from the server.
+  const handleDelete = async (event: EventRow, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(t("Delete “{title}”? This permanently removes the event and all its suppliers.", { title: cleanTitle(event.title) }))) return;
+    setDeletingId(event.id);
+    try {
+      const res = await fetch(`/api/sourcing-events/${event.id}`, { method: "DELETE" });
+      if (res.ok) setEvents(prev => prev.filter(x => x.id !== event.id));
+      else alert(t("Couldn't delete this event. Please try again."));
+    } catch {
+      alert(t("Couldn't delete this event. Please try again."));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Group visible events by category for the clustered view.
+  const grouped = useMemo(() => {
+    const map = new Map<string, EventRow[]>();
+    for (const e of visible) {
+      const key = (e.category || t("Uncategorised")).trim() || t("Uncategorised");
+      (map.get(key) ?? map.set(key, []).get(key)!).push(e);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [visible, t]);
+
+  // A single event row — shared by the flat and grouped (clustered) views.
+  const renderRow = (event: EventRow) => {
+    const cfg = STATUS_CONFIG[event.status] || STATUS_CONFIG.idle;
+    return (
+      <tr
+        key={event.id}
+        onClick={() => router.push(`/events/${event.id}`)}
+        className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
+      >
+        <td className="px-6 py-4">
+          <div className="font-semibold text-slate-900 text-sm truncate max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] xl:max-w-[360px]">{cleanTitle(event.title)}</div>
+          <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+            {event.wave_count > 0 && (
+              <span>{event.wave_count === 1 ? t("{count} wave", { count: event.wave_count }) : t("{count} waves", { count: event.wave_count })}</span>
+            )}
+            {event.wave_count > 0 && <span className="text-slate-300">·</span>}
+            <span>{t("updated {time}", { time: relativeTime(event.updated_at || event.created_at, t) })}</span>
+          </div>
+        </td>
+        <td className="px-4 py-4 hidden md:table-cell">
+          <span className="text-sm text-slate-600">{event.category}</span>
+        </td>
+        <td className="px-4 py-4">
+          <div className="flex items-center gap-2">
+            {cfg.working ? (
+              <Loader2 className="w-3.5 h-3.5 flex-shrink-0 text-blue-500 animate-spin" strokeWidth={2.5} />
+            ) : (
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+            )}
+            <span className={`badge ${cfg.badge}`}>{t(cfg.label)}</span>
+            {cfg.working && (
+              <span className="text-[11px] font-medium text-blue-600 hidden sm:inline">{t("AI working…")}</span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-4 hidden lg:table-cell">
+          <div className="text-sm text-slate-700 font-medium flex items-center gap-1.5">
+            {cfg.working && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" title={t("Discovering live")} />}
+            <span>{event.supplier_count || 0}<span className="font-normal text-slate-400"> {t("found")}</span></span>
+          </div>
+          {(event.shortlisted_count || 0) > 0 && (
+            <div className="text-xs text-amber-600 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>
+          )}
+        </td>
+        <td className="px-4 py-4 hidden xl:table-cell">
+          <span className="text-xs text-slate-400">
+            {new Date(event.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+        </td>
+        <td className="px-4 py-4 text-right whitespace-nowrap">
+          <button
+            onClick={e => handleDelete(event, e)}
+            disabled={deletingId === event.id}
+            title={t("Delete event")}
+            aria-label={t("Delete event")}
+            className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            {deletingId === event.id
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Trash2 className="w-4 h-4" />}
+          </button>
+          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors inline-block ml-1" />
+        </td>
+      </tr>
+    );
   };
 
   const FILTERS: { key: StatusFilter; label: string }[] = [
@@ -326,6 +422,18 @@ export default function Dashboard() {
                     {f.label}
                   </button>
                 ))}
+                <button
+                  onClick={() => setGroupByCategory(v => !v)}
+                  title={t("Group by category")}
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                    groupByCategory
+                      ? "bg-violet-50 text-violet-700 border-violet-200"
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  {t("Group by category")}
+                </button>
               </div>
             </div>
           </div>
@@ -340,7 +448,6 @@ export default function Dashboard() {
                     {t("Pipeline")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "pipeline" ? "text-blue-500" : "text-slate-300"}`} />
                   </button>
                 </th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">{t("Spend")}</th>
                 <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">
                   <button onClick={() => toggleSort("initiated")} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
                     {t("Initiated")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "initiated" ? "text-blue-500" : "text-slate-300"}`} />
@@ -352,67 +459,24 @@ export default function Dashboard() {
             <tbody className="divide-y divide-slate-100">
               {visible.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-400">
+                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-400">
                     {t("No events match your search.")}
                   </td>
                 </tr>
-              ) : visible.map(event => {
-                const cfg = STATUS_CONFIG[event.status] || STATUS_CONFIG.idle;
-                return (
-                  <tr
-                    key={event.id}
-                    onClick={() => router.push(`/events/${event.id}`)}
-                    className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-900 text-sm truncate max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] xl:max-w-[360px]">{cleanTitle(event.title)}</div>
-                      <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
-                        {event.wave_count > 0 && (
-                          <span>{event.wave_count === 1 ? t("{count} wave", { count: event.wave_count }) : t("{count} waves", { count: event.wave_count })}</span>
-                        )}
-                        {event.wave_count > 0 && <span className="text-slate-300">·</span>}
-                        <span>{t("updated {time}", { time: relativeTime(event.updated_at || event.created_at, t) })}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 hidden md:table-cell">
-                      <span className="text-sm text-slate-600">{event.category}</span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        {cfg.working ? (
-                          <Loader2 className="w-3.5 h-3.5 flex-shrink-0 text-blue-500 animate-spin" strokeWidth={2.5} />
-                        ) : (
-                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
-                        )}
-                        <span className={`badge ${cfg.badge}`}>{t(cfg.label)}</span>
-                        {cfg.working && (
-                          <span className="text-[11px] font-medium text-blue-600 hidden sm:inline">{t("AI working…")}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 hidden lg:table-cell">
-                      <div className="text-sm text-slate-700 font-medium flex items-center gap-1.5">
-                        {cfg.working && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" title={t("Discovering live")} />}
-                        <span>{event.supplier_count || 0}<span className="font-normal text-slate-400"> {t("found")}</span></span>
-                      </div>
-                      {(event.shortlisted_count || 0) > 0 && (
-                        <div className="text-xs text-amber-600 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 hidden xl:table-cell">
-                      <span className="text-sm text-slate-500">{event.annual_spend || "—"}</span>
-                    </td>
-                    <td className="px-4 py-4 hidden xl:table-cell">
-                      <span className="text-xs text-slate-400">
-                        {new Date(event.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-right">
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors inline-block" />
-                    </td>
-                  </tr>
-                );
-              })}
+              ) : groupByCategory ? (
+                grouped.map(([category, rows]) => (
+                  <Fragment key={category}>
+                    <tr className="bg-slate-50/70">
+                      <td colSpan={6} className="px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        {category} <span className="text-slate-400 font-semibold">· {rows.length}</span>
+                      </td>
+                    </tr>
+                    {rows.map(renderRow)}
+                  </Fragment>
+                ))
+              ) : (
+                visible.map(renderRow)
+              )}
             </tbody>
           </table>
         </div>

@@ -25,7 +25,10 @@ export default function TopNav() {
               BETA
             </span>
           </Link>
-          <nav className="hidden md:flex items-center gap-1">
+          {/* Section links live in the left sidebar on desktop (≥lg); this
+              top-nav group only fills the md gap where the sidebar is hidden,
+              so we don't duplicate the same links on large screens. */}
+          <nav className="hidden md:flex lg:hidden items-center gap-1">
             <Link href="/dashboard" className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all">
               {t("Dashboard")}
             </Link>

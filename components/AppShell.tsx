@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PlusCircle, CreditCard, LifeBuoy } from "lucide-react";
+import { LayoutDashboard, PlusCircle, CreditCard, Settings, LifeBuoy } from "lucide-react";
 import type { ComponentType } from "react";
 import { useT } from "@/components/LanguageProvider";
 
@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; Icon: ComponentType<{ className?: stri
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard, match: p => p === "/dashboard" },
   { href: "/events/new", label: "New Event", Icon: PlusCircle, match: p => p === "/events/new" },
   { href: "/billing", label: "Billing", Icon: CreditCard, match: p => p.startsWith("/billing") },
+  { href: "/settings", label: "Settings", Icon: Settings, match: p => p.startsWith("/settings") },
 ];
 
 // The /events/[id] workspace runs its own full-height control panel, so it opts
@@ -21,6 +22,7 @@ function useIsAppRoute(pathname: string): boolean {
   if (pathname === "/dashboard") return true;
   if (pathname === "/events/new") return true;
   if (pathname === "/billing" || pathname.startsWith("/billing/")) return true;
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return true;
   return false;
 }
 

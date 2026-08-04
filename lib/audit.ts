@@ -9,6 +9,7 @@ import { getDb, type AuditLog } from "@/lib/db";
 export type AuditAction =
   | "event.create"
   | "event.update"
+  | "event.delete"
   | "discovery.run"
   | "outreach.launch"
   | "supplier.stage_change"
