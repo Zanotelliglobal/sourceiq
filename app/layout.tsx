@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import AppShell from "@/components/AppShell";
 import TopNav from "@/components/TopNav";
 import SiteFooter from "@/components/SiteFooter";
+import CookieConsent from "@/components/CookieConsent";
 import { LanguageProvider } from "@/components/LanguageProvider";
 
 // UI/marketing face — professional but approachable (top-ranked B2B/enterprise pairing).
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="flex-1"><AppShell>{children}</AppShell></main>
             <SiteFooter />
           </div>
+          <CookieConsent />
         </LanguageProvider>
       </body>
     </html>

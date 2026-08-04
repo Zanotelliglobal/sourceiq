@@ -328,4 +328,6 @@ export const de: Record<string, string> = {
   "{n}d ago": "vor {n} T.",
   "{n}mo ago": "vor {n} Mon.",
   "{n}y ago": "vor {n} J.",
+  "We use essential cookies to run SourceIQ and optional analytics to improve it.": "Wir verwenden essenzielle Cookies für den Betrieb von SourceIQ und optionale Analysen zur Verbesserung.",
+  "Accept": "Akzeptieren",
 };
