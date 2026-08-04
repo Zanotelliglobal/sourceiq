@@ -1,0 +1,41 @@
+name: CI
+
+# Quality gate: typecheck, unit tests, and a production build on every push and
+# pull request targeting main/develop. Keeps the P0/P1 launch work from
+# regressing as new features land.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholder values so the build compiles without real secrets. Routes
+          # are runtime-dynamic (ƒ) and don't touch these at build time; Clerk and
+          # the DB driver only need well-formed strings to satisfy module init.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2ktcGxhY2Vob2xkZXItMDAk
+          CLERK_SECRET_KEY: sk_test_ci_placeholder
+          DATABASE_URL: postgres://user:pass@localhost:5432/db
+          ANTHROPIC_API_KEY: sk-ant-ci-placeholder
