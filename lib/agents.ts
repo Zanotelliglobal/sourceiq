@@ -3,6 +3,30 @@ import { scrapeSupplierContact } from "./contact";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ─── AGENT MODEL ASSIGNMENTS ──────────────────────────────────────────────────
+// Latency right-sizing: not every agent needs Opus. Plain structured
+// classification/extraction runs on Haiku; language-sensitive drafting and the
+// grounded (web-search) verifiers run on Sonnet; live discovery scouting and the
+// top-level orchestrator stay on Opus, where reasoning quality is the product.
+//
+// HARD CONSTRAINT: Haiku 4.5 supports neither adaptive thinking nor the `effort`
+// param (each returns HTTP 400). Any agent that uses `thinking: {type:"adaptive"}`
+// with web_search MUST run on Sonnet 4.6 or Opus — never Haiku. Today those are
+// the scout (kept on Opus), the grounded qualifier and the contact finder (Sonnet).
+export const AGENT_MODELS = {
+  classifier: "claude-haiku-4-5",         // plain JSON category classification
+  orchestrator: "claude-opus-4-7",        // low-volume, once-per-wave search-strategy planning
+  scout: "claude-opus-4-7",               // live discovery — the core product value (adaptive thinking + web_search)
+  qualifier: "claude-haiku-4-5",          // plain JSON scoring against a fixed rubric
+  qualifierGrounded: "claude-sonnet-4-6", // adaptive thinking + web_search (cannot be Haiku)
+  enricher: "claude-haiku-4-5",           // plain structured enrichment fields
+  contactFinder: "claude-sonnet-4-6",     // adaptive thinking + web_search (cannot be Haiku)
+  outreach: "claude-sonnet-4-6",          // drafts emails in the supplier's local language — fidelity matters
+  followUp: "claude-sonnet-4-6",          // localized follow-up drafting
+  supplierResponse: "claude-haiku-4-5",   // demo-mode reply simulation (low stakes)
+  replyClassifier: "claude-haiku-4-5",    // structured classification of a real inbound reply
+} as const;
+
 // Optional token-usage reporter. Routes pass this to record real cost per call.
 export type UsageCb = (u: any) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -76,7 +100,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.classifier,
     max_tokens: 300,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -139,7 +163,7 @@ Return JSON only:
 Include 5-7 agents in the array.`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.orchestrator,
     max_tokens: 1000,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -254,7 +278,7 @@ Your FINAL message must contain ONLY the JSON array (after you have finished sea
 
   while (guard++ < 8) {
     const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
-      model: "claude-opus-4-7",
+      model: AGENT_MODELS.scout,
       max_tokens: 16000,
       thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 12 }],
@@ -322,7 +346,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.qualifier,
     max_tokens: 800,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -393,7 +417,7 @@ Return JSON only (after any searches):
   // Resume the pause_turn loop until the model finishes its turn.
   for (let i = 0; i < 6; i++) {
     response = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: AGENT_MODELS.qualifierGrounded,
       max_tokens: 3000,
       thinking: { type: "adaptive" },
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
@@ -444,7 +468,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.enricher,
     max_tokens: 500,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -516,7 +540,7 @@ Your FINAL message must be ONLY this JSON:
 
   while (guard++ < 6) {
     const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
-      model: "claude-opus-4-7",
+      model: AGENT_MODELS.contactFinder,
       max_tokens: 4000,
       thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
@@ -667,7 +691,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.outreach,
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -716,7 +740,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.followUp,
     max_tokens: 900,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -789,7 +813,7 @@ Return JSON only:
 If responded=false, still return the object with sentiment "negative", empty reply and reply_en, and empty highlights.`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.supplierResponse,
     max_tokens: 1200,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -857,7 +881,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.replyClassifier,
     max_tokens: 1200,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
