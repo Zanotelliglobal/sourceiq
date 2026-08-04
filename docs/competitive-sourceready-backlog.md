@@ -124,6 +124,7 @@ contact-unlock paywall** — "contacts included" is our positioning wedge.
 | 6.4 | Fill the abandoned $49–99 pricing middle (they jump $25→$299) | 4 | S | pure pricing/packaging |
 | 6.5 | ~~Contact-unlock paywall~~ | — | — | **intentionally skipped** — anti-pattern for us |
 | 6.6 | Tiered plans (Free/mid/Pro/Custom) | — | — | **already shipped** — `lib/plans.ts` TIERS (their point 38) |
+| 6.7 | Granular per-user/per-feature credit usage ledger (filterable, sortable audit table: user, feature, credits used, billing date) | 3 | S | extends 6.1; usage is already tracked — likely UI-only over existing data |
 
 > Their point 45 (workspace concept) is **already satisfied** by SourceIQ's Clerk **organizations** —
 > multi-user tenant with its own event pool. No new work; noted for completeness.
@@ -164,19 +165,44 @@ generation, and inline enrichment — all reclaimable.
 
 ---
 
+## Epic 9 — Buyer workspace profile & outreach personalization
+
+New surface, not covered above. SourceReady lets the buyer describe **themselves** (a company
+profile) and their **sourcing preferences** ("Enrich info"), then reuses that context to personalize
+AI-drafted outreach via a knowledge base, structured question templates, and merge-field email
+templates. SourceIQ's scout/outreach agents currently run off a per-event brief alone — none of this
+buyer-level context persists across events or feeds back into agent prompts.
+
+> Source: teardown of `Settings → Workspace` (Company info + Enrich info), `Settings → Inquiry`
+> (Knowledge bases, Question templates, Email templates). `Settings → Subscription`'s credit-usage
+> ledger is folded into **6.7** above. `Settings → Members` (Invite/roles) needs **no new work** —
+> already satisfied by Clerk's organization membership UI, same as the Epic 6 workspace note.
+
+| # | Feature | Impact | Effort | Notes |
+|---|---------|--------|--------|-------|
+| 9.1 | Buyer company profile (name, type, description, customer base, employee count, website, intro doc) | 2 | S | context fields only; cheap, low standalone value |
+| 9.2 | "Enrich info" — preferred supplier locations, main competitors, supplier preferences fed into the scout prompt | 5 | S | ★ direct personalization lever — org-level settings → better-targeted scouting, zero extra agent calls |
+| 9.3 | Knowledge base auto-included in AI-generated outreach messages/replies | 3 | M | improves outreach & reply-draft quality; needs storage + retrieval into prompts |
+| 9.4 | Reusable question templates (Required/Optional, scoped to all-suppliers vs. new-suppliers) | 4 | M | turns outreach into structured RFQ collection; feeds the reply-classifier/scoring pipeline |
+| 9.5 | Reusable email templates (merge fields, per-segment, "default for me") | 3 | M | outreach message customization; template *editing* Pro-gated like theirs (ties to 6.3) |
+
+---
+
 ## Recommended sequencing
 
 1. **Epic 8.1–8.2 (latency quick wins)** — model right-sizing + effort tuning; near-zero risk, days
    of work, immediately felt. Highest leverage given speed is the top complaint.
-2. **Epic 1 (credibility layer)** — highest impact/effort ratio; makes results look pro; unblocks
-   filtering (Epic 3). Start with 1.1–1.6.
+2. **Epic 1 (credibility layer) + Epic 9.2 ("Enrich info" → scout prompt)** — highest impact/effort
+   ratio; makes results look pro and better-targeted; unblocks filtering (Epic 3). Start with 1.1–1.6.
 3. **Epic 2 (persistent projects)** — retention; mostly UI over data we already have.
 4. **Epic 7 (growth flywheel)** — cheap, compounds; hardens shipped #18/#19.
 5. **Epic 8.3–8.4 (defer enrichment + progressive streaming)** — bigger perceived-speed win.
 6. **Epic 3 (filtering)** — depends on Epic 1's structured fields.
-7. **Epic 6.4 (pricing middle)** — trivial, high leverage; do opportunistically.
+7. **Epic 6.4 (pricing middle)** + **Epic 6.7 (usage ledger)** — trivial, high leverage; do opportunistically.
 8. **Epic 8.7 (supplier cache)** + **Epic 4 (Product object)** — larger architectural bets.
-9. **Epic 5** — polish, fold in opportunistically.
+9. **Epic 9.3–9.5 (knowledge base + question/email templates)** — outreach quality; depends on the
+   existing outreach funnel, not on Epic 1.
+10. **Epic 5** — polish, fold in opportunistically.
 
 ## First batch to file as GitHub issues
 
@@ -184,3 +210,6 @@ generation, and inline enrichment — all reclaimable.
 - **Issue B** — Epic 2.1–2.3: events as persistent projects (list + shortlist + threads)
 - **Issue C** — Epic 7.1 + 7.3: quick-start activation checklist + referral cap
 - **Issue D** — Epic 8.1–8.2: latency quick wins (per-agent model right-sizing + effort tuning)
+- **Issue E (proposed, not yet filed)** — Epic 9.2: inject buyer "Enrich info" (preferred regions /
+  competitors to avoid / supplier preferences) into the scout prompt — ★ highest impact/effort ratio
+  in the new epic, pairs naturally with Issue A's follow-up work
