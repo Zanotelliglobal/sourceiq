@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { getDb } from "@/lib/db";
 import { getStripe, isBillingConfigured } from "@/lib/billing";
 import { getTier } from "@/lib/plans";
+import { rewardReferral } from "@/lib/referrals";
 
 // Stripe webhook — the single source of truth for subscription state.
 // Stripe POSTs signed events here; we verify the signature, then mirror the
@@ -27,12 +28,23 @@ async function syncSubscription(sub: Stripe.Subscription) {
 
   const set = `subscription_status = ?, plan = ?, stripe_subscription_id = ?, stripe_customer_id = COALESCE(stripe_customer_id, ?), updated_at = now()`;
 
+  let resolvedOrgId = orgId;
   if (orgId) {
     await db.prepare(`UPDATE organizations SET ${set} WHERE id = ?`)
       .run(status, plan, sub.id, customerId ?? null, orgId);
   } else if (customerId) {
     await db.prepare(`UPDATE organizations SET ${set} WHERE stripe_customer_id = ?`)
       .run(status, plan, sub.id, customerId, customerId);
+    const row = (await db
+      .prepare("SELECT id FROM organizations WHERE stripe_customer_id = ?")
+      .get(customerId)) as { id: number } | undefined;
+    resolvedOrgId = row ? Number(row.id) : null;
+  }
+
+  // A referred org converting to a paid plan is the qualifying event: reward
+  // both parties. Idempotent (only a single pending referral transitions).
+  if (resolvedOrgId && status === "active") {
+    await rewardReferral(resolvedOrgId);
   }
 }
 

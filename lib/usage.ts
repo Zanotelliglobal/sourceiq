@@ -153,8 +153,19 @@ export type TierUsage = {
   events_this_month: number;
   tokens_used: number;
   cost_usd: number;
+  bonus_events: number;        // extra monthly events earned via referrals
+  effective_limit: number | null; // plan limit + bonus (null = unlimited)
   events_remaining: number | null; // null = unlimited
 };
+
+/**
+ * The effective monthly event allowance for an org: the plan's base limit plus
+ * any referral bonus events. Returns UNLIMITED unchanged.
+ */
+export function effectiveEventLimit(org: Organization, baseLimit: number): number {
+  if (baseLimit === UNLIMITED) return UNLIMITED;
+  return baseLimit + Math.max(0, Number(org.bonus_events ?? 0));
+}
 
 /** Current-month consumption for an org measured against its effective tier. */
 export async function getTierUsage(db: Db, org: Organization): Promise<TierUsage> {
@@ -173,7 +184,8 @@ export async function getTierUsage(db: Db, org: Organization): Promise<TierUsage
       WHERE org_id = ? AND created_at >= date_trunc('month', now())`
   ).get(org.id) as Record<string, unknown> | undefined;
 
-  const limit = tier.limits.eventsPerMonth;
+  const baseLimit = tier.limits.eventsPerMonth;
+  const limit = effectiveEventLimit(org, baseLimit);
   const eventsRemaining = limit === UNLIMITED ? null : Math.max(0, limit - eventsThisMonth);
 
   return {
@@ -182,6 +194,8 @@ export async function getTierUsage(db: Db, org: Organization): Promise<TierUsage
     events_this_month: eventsThisMonth,
     tokens_used: Number(tokRow?.tokens ?? 0),
     cost_usd: Number(tokRow?.cost ?? 0),
+    bonus_events: Math.max(0, Number(org.bonus_events ?? 0)),
+    effective_limit: limit === UNLIMITED ? null : limit,
     events_remaining: eventsRemaining,
   };
 }
@@ -191,8 +205,9 @@ export type EventLimitCheck = { ok: true } | { ok: false; reason: string; limit:
 /** Whether the org may create another sourcing event this month under its tier. */
 export async function checkEventLimit(db: Db, org: Organization): Promise<EventLimitCheck> {
   const usage = await getTierUsage(db, org);
-  const limit = usage.limits.eventsPerMonth;
-  if (limit === UNLIMITED) return { ok: true };
+  const baseLimit = usage.limits.eventsPerMonth;
+  if (baseLimit === UNLIMITED) return { ok: true };
+  const limit = effectiveEventLimit(org, baseLimit);
   if (usage.events_this_month >= limit) {
     return { ok: false, reason: "event_limit_reached", limit, used: usage.events_this_month };
   }

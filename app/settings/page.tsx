@@ -7,6 +7,7 @@ import { useT } from "@/components/LanguageProvider";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import TeamSettings from "@/components/TeamSettings";
 import NotificationSettings from "@/components/NotificationSettings";
+import ReferralCard from "@/components/ReferralCard";
 
 // Central account/settings hub for the app surface. Groups the identity controls
 // (Clerk user + org), language preference, and billing/support entry points that
@@ -60,6 +61,9 @@ export default function SettingsPage() {
 
         {/* Email notifications */}
         <NotificationSettings />
+
+        {/* Referrals */}
+        <ReferralCard />
 
         {/* Language */}
         <div className="card px-5 py-4 flex items-center justify-between gap-4">

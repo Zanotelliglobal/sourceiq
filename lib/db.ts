@@ -148,6 +148,14 @@ async function initSchema(): Promise<void> {
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Referral growth loop: each org has a shareable code, may be attributed to
+    -- one referrer at creation, and can accrue bonus event credits when a
+    -- referral converts. See lib/referrals.ts for the attribution/reward logic.
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS referral_code TEXT;
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS referred_by BIGINT REFERENCES organizations(id) ON DELETE SET NULL;
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bonus_events INTEGER NOT NULL DEFAULT 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_org_referral_code ON organizations(referral_code) WHERE referral_code IS NOT NULL;
+
     CREATE TABLE IF NOT EXISTS sourcing_events (
       id            BIGSERIAL PRIMARY KEY,
       org_id        BIGINT NOT NULL DEFAULT 1 REFERENCES organizations(id) ON DELETE CASCADE,
@@ -289,6 +297,20 @@ async function initSchema(): Promise<void> {
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- One row per successful referral attribution. referred_org_id is UNIQUE so
+    -- an org can only ever be attributed to a single referrer (one attribution per
+    -- org). status moves pending -> rewarded when the referred org converts.
+    CREATE TABLE IF NOT EXISTS referrals (
+      id              BIGSERIAL PRIMARY KEY,
+      referrer_org_id BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      referred_org_id BIGINT NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+      code            TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      reward_events   INTEGER NOT NULL DEFAULT 0,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      rewarded_at     TIMESTAMPTZ
+    );
+
     CREATE TABLE IF NOT EXISTS webhook_events (
       id            TEXT PRIMARY KEY,
       source        TEXT NOT NULL,
@@ -310,6 +332,7 @@ async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_usage_org ON token_usage(org_id);
     CREATE INDEX IF NOT EXISTS idx_agentruns_event ON agent_runs(event_id);
     CREATE INDEX IF NOT EXISTS idx_notifications_org ON notifications(org_id, read, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_org_id);
   `;
   // HTTP driver runs one statement per request — execute each in order.
   for (const stmt of splitStatements(ddl)) {
@@ -423,6 +446,9 @@ export type Organization = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   trial_ends_at: string | null;
+  referral_code: string | null;
+  referred_by: number | null;
+  bonus_events: number;
   created_at: string;
   updated_at: string;
 };

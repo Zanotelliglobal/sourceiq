@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 // Public routes that must NOT require a Clerk session:
 //   • the marketing/landing page and auth pages
@@ -29,6 +30,20 @@ const DEV_BYPASS =
 export default clerkMiddleware((auth, req) => {
   if (!DEV_BYPASS && !isPublic(req)) {
     auth().protect();
+  }
+
+  // Referral capture: a `?ref=CODE` on any request stashes the code in a cookie
+  // (30 days) so it survives sign-up and is read at org creation for attribution.
+  const ref = req.nextUrl.searchParams.get("ref");
+  if (ref) {
+    const res = NextResponse.next();
+    res.cookies.set("siq_ref", ref.trim().toUpperCase().slice(0, 16), {
+      maxAge: 60 * 60 * 24 * 30,
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+    });
+    return res;
   }
 });
 

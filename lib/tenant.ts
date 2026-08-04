@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getDb, type Organization } from "@/lib/db";
 import { atLeast, mapClerkRole, type OrgRole } from "@/lib/roles";
+import { attributeReferral } from "@/lib/referrals";
 
 // ─── TENANCY / ORG RESOLUTION ─────────────────────────────────────────────────
 // Every authenticated request maps to exactly one SourceIQ organization row,
@@ -49,7 +51,7 @@ export async function getOrgContext(): Promise<OrgContext | null> {
 
   if (!org) {
     const name = clerkOrgKey.startsWith("user_") ? "Personal Workspace" : "Organization";
-    await db
+    const ins = await db
       .prepare(
         `INSERT INTO organizations (clerk_org_id, name, plan, subscription_status, trial_ends_at)
          VALUES (?, ?, 'trial', 'trialing', now() + interval '14 days')
@@ -59,6 +61,17 @@ export async function getOrgContext(): Promise<OrgContext | null> {
     org = (await db
       .prepare("SELECT * FROM organizations WHERE clerk_org_id = ?")
       .get(clerkOrgKey)) as Organization;
+
+    // Referral attribution: only for orgs we actually just created (not a
+    // concurrent insert we lost the race on). Best-effort — never blocks.
+    if (ins.changes > 0 && org) {
+      try {
+        const ref = cookies().get("siq_ref")?.value;
+        if (ref) await attributeReferral(Number(org.id), ref);
+      } catch {
+        /* best-effort */
+      }
+    }
   }
 
   // Postgres returns BIGINT/BIGSERIAL columns as strings (JS numbers can't
