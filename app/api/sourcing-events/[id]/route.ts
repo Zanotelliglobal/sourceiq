@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { usageSummary } from "@/lib/usage";
-import { getOrgContext } from "@/lib/tenant";
+import { getOrgContext, requireRole } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 
 export async function GET(
@@ -79,6 +79,9 @@ export async function DELETE(
 ) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Deleting an event is destructive — restrict to admins/owners.
+  const denied = requireRole(ctx, "admin");
+  if (denied) return denied;
 
   const db = getDb();
   const id = Number(params.id);

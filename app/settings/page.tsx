@@ -5,6 +5,7 @@ import { UserButton, useUser, useOrganization } from "@clerk/nextjs";
 import { User, Building2, Globe, CreditCard, LifeBuoy } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import TeamSettings from "@/components/TeamSettings";
 
 // Central account/settings hub for the app surface. Groups the identity controls
 // (Clerk user + org), language preference, and billing/support entry points that
@@ -52,6 +53,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* Team & seats */}
+        <TeamSettings />
 
         {/* Language */}
         <div className="card px-5 py-4 flex items-center justify-between gap-4">

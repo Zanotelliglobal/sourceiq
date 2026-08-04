@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getOrgContext } from "@/lib/tenant";
+import { getOrgContext, requireRole } from "@/lib/tenant";
 import { getStripe, isBillingConfigured, resolvePriceId } from "@/lib/billing";
 import { getTier, type Cadence, type TierKey } from "@/lib/plans";
 import { rateLimit } from "@/lib/ratelimit";
@@ -13,6 +13,9 @@ const CADENCES = new Set<Cadence>(["weekly", "monthly", "yearly"]);
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Billing is an admin/owner action — members can't start a subscription.
+  const denied = requireRole(ctx, "admin");
+  if (denied) return denied;
   if (!isBillingConfigured()) {
     return NextResponse.json({ error: "Billing is not configured" }, { status: 503 });
   }

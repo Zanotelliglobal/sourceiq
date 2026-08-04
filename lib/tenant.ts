@@ -1,5 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 import { getDb, type Organization } from "@/lib/db";
+import { atLeast, mapClerkRole, type OrgRole } from "@/lib/roles";
 
 // ─── TENANCY / ORG RESOLUTION ─────────────────────────────────────────────────
 // Every authenticated request maps to exactly one SourceIQ organization row,
@@ -11,7 +13,9 @@ import { getDb, type Organization } from "@/lib/db";
 export type OrgContext = {
   orgId: number;          // internal organizations.id
   clerkOrgKey: string;    // clerk org id, or user_<id> for personal orgs
+  clerkOrgId: string | null; // the real Clerk org id, or null for personal workspaces
   userId: string;
+  role: OrgRole;          // caller's role within the org (owner/admin/member)
   org: Organization;
 };
 
@@ -27,10 +31,14 @@ const DEV_BYPASS =
   process.env.NODE_ENV !== "production" && process.env.DEV_AUTH_BYPASS === "1";
 
 export async function getOrgContext(): Promise<OrgContext | null> {
-  const { userId, orgId: clerkOrgId } = DEV_BYPASS
-    ? { userId: "dev_user", orgId: null as string | null }
+  const { userId, orgId: clerkOrgId, orgRole } = DEV_BYPASS
+    ? { userId: "dev_user", orgId: null as string | null, orgRole: null as string | null }
     : auth();
   if (!userId) return null;
+
+  // Resolve the caller's role: personal workspaces have a sole owner; inside a
+  // Clerk org the role comes from the session's org role claim.
+  const role = mapClerkRole(orgRole, Boolean(clerkOrgId));
 
   const clerkOrgKey = clerkOrgId ?? `user_${userId}`;
   const db = getDb();
@@ -56,7 +64,20 @@ export async function getOrgContext(): Promise<OrgContext | null> {
   // Postgres returns BIGINT/BIGSERIAL columns as strings (JS numbers can't
   // safely hold 64-bit ints). Coerce to a number so downstream tenancy checks
   // like `Number(event.org_id) === ctx.orgId` compare number-to-number.
-  return { orgId: Number(org.id), clerkOrgKey, userId, org };
+  return { orgId: Number(org.id), clerkOrgKey, clerkOrgId: clerkOrgId ?? null, userId, role, org };
+}
+
+/**
+ * Route guard: returns a 403 NextResponse when the caller's role is below `min`,
+ * or null when the caller is authorized. Usage:
+ *   const denied = requireRole(ctx, "admin"); if (denied) return denied;
+ */
+export function requireRole(ctx: OrgContext, min: OrgRole): NextResponse | null {
+  if (atLeast(ctx.role, min)) return null;
+  return NextResponse.json(
+    { error: "You don't have permission to do this.", code: "forbidden", requiredRole: min },
+    { status: 403 },
+  );
 }
 
 /**

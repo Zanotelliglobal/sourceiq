@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrgContext } from "@/lib/tenant";
+import { getOrgContext, requireRole } from "@/lib/tenant";
 import { getStripe, isBillingConfigured } from "@/lib/billing";
 
 // Opens the Stripe Billing Portal so a customer can manage/cancel their
@@ -8,6 +8,8 @@ import { getStripe, isBillingConfigured } from "@/lib/billing";
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = requireRole(ctx, "admin");
+  if (denied) return denied;
   if (!isBillingConfigured()) {
     return NextResponse.json({ error: "Billing is not configured" }, { status: 503 });
   }

@@ -44,12 +44,17 @@ export default function BillingPage() {
   const [cadence, setCadence] = useState<Cadence>("monthly");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [seats, setSeats] = useState<{ used: number; limit: number; unlimited: boolean } | null>(null);
 
   useEffect(() => {
     fetch("/api/billing/status")
       .then(r => r.json())
       .then(d => { setStatus(d); setLoading(false); })
       .catch(() => { setError(t("Could not load billing status.")); setLoading(false); });
+    fetch("/api/team")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d?.seats) setSeats(d.seats); })
+      .catch(() => {});
   }, []);
 
   async function checkout(tierKey: string) {
@@ -116,6 +121,13 @@ export default function BillingPage() {
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("Current Plan")}</div>
               <div className="text-xl font-bold text-slate-900 mt-1 capitalize">{status.plan || t("Free")}</div>
+              {seats && (
+                <p className="text-sm text-slate-500 mt-1">
+                  {seats.unlimited
+                    ? t("Unlimited seats")
+                    : `${seats.used} / ${seats.limit} ${t("seats")}`}
+                </p>
+              )}
               {trialMsg && (
                 <p className={`text-sm mt-1 ${status.active ? "text-slate-500" : "text-red-600 font-medium"}`}>{trialMsg}</p>
               )}
