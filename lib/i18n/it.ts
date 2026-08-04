@@ -51,6 +51,7 @@ export const it: Record<string, string> = {
   "Contacting...": "Contatto in corso...",
   "Copied": "Copiato",
   "Copy draft": "Copia bozza",
+  "Capability Tags": "Tag competenze",
   "Core Capabilities": "Competenze principali",
   "Could not load billing status.": "Impossibile caricare lo stato della fatturazione.",
   "Couldn't load events": "Impossibile caricare gli eventi",

@@ -51,6 +51,7 @@ export const de: Record<string, string> = {
   "Contacting...": "Kontaktaufnahme...",
   "Copied": "Kopiert",
   "Copy draft": "Entwurf kopieren",
+  "Capability Tags": "Kompetenz-Tags",
   "Core Capabilities": "Kernkompetenzen",
   "Could not load billing status.": "Abrechnungsstatus konnte nicht geladen werden.",
   "Couldn't load events": "Events konnten nicht geladen werden",

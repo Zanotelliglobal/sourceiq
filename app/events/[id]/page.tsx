@@ -15,6 +15,8 @@ type Supplier = {
   id: number; event_id: number; name: string; country: string; city: string | null;
   description: string; capabilities: string; certifications: string | null;
   employees: string | null; annual_revenue: string | null; founded: string | null;
+  business_type: string | null; employee_count: string | null; founded_year: number | null;
+  review_score: number | null; capability_tags: string | null;
   website: string | null; contact_email: string | null;
   contact_url: string | null; contact_phone: string | null; contact_linkedin: string | null;
   data_sources: string | null; scout_agent: string | null;
@@ -209,6 +211,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   const t = useT();
   const caps    = tryParse<string[]>(supplier.capabilities, []);
   const certs   = tryParse<string[]>(supplier.certifications, []);
+  const tags    = tryParse<string[]>(supplier.capability_tags, []);
   const breakdown = tryParse<Record<string, number>>(supplier.score_breakdown, {});
   const enrichment = tryParse<{ market_position?: string; key_risks?: string[]; key_strengths?: string[]; recommended_action?: string } | null>(supplier.enrichment, null);
   const response = tryParse<SupplierResponse | null>(supplier.response_detail, null);
@@ -270,9 +273,11 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {/* Quick facts */}
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Employees", v: supplier.employees },
+              { label: "Business Type", v: supplier.business_type },
+              { label: "Employees", v: supplier.employee_count ?? supplier.employees },
+              { label: "Rating", v: supplier.review_score !== null ? `★ ${supplier.review_score.toFixed(1)} / 5` : null },
               { label: "Est. Revenue", v: supplier.annual_revenue },
-              { label: "Founded", v: supplier.founded },
+              { label: "Founded", v: supplier.founded_year ?? supplier.founded },
               { label: "Website", v: supplier.website },
               { label: "Contact", v: supplier.contact_email },
               { label: "Contact Page", v: supplier.contact_url },
@@ -301,6 +306,18 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               <div className="flex flex-wrap gap-1.5">
                 {caps.map(c => (
                   <span key={c} className="text-xs bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-lg">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Capability tags — controlled-vocabulary highlights */}
+          {tags.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Capability Tags")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map(tag => (
+                  <span key={tag} className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-medium">{tag}</span>
                 ))}
               </div>
             </div>
@@ -595,6 +612,7 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
   const t = useT();
   const caps  = tryParse<string[]>(supplier.capabilities, []);
   const certs = tryParse<string[]>(supplier.certifications, []);
+  const tags  = tryParse<string[]>(supplier.capability_tags, []);
   const stage = STAGE_STYLE[supplier.funnel_stage] || STAGE_STYLE.long_list;
   const stageLabelRaw = STAGES.find(s => s.key === supplier.funnel_stage)?.label || "";
   const stageLabel = stageLabelRaw ? t(stageLabelRaw) : "";
@@ -635,7 +653,9 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
         </div>
         <div className="text-xs text-slate-400 mt-0.5 truncate">
           {[supplier.city, supplier.country].filter(Boolean).join(", ")}
-          {supplier.employees && <span className="ml-2">· {supplier.employees}</span>}
+          {supplier.business_type && <span className="ml-2">· {supplier.business_type}</span>}
+          {(supplier.employee_count ?? supplier.employees) && <span className="ml-2">· {supplier.employee_count ?? supplier.employees}</span>}
+          {supplier.review_score !== null && <span className="ml-2 text-amber-500">· ★ {supplier.review_score.toFixed(1)}</span>}
         </div>
       </td>
 
@@ -649,9 +669,18 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
         </div>
       </td>
 
-      {/* Capabilities — hidden on small */}
+      {/* Capability tags / capabilities — hidden on small */}
       <td className="px-3 py-3 hidden xl:table-cell max-w-xs">
-        <div className="text-xs text-slate-500 truncate">{caps.slice(0, 3).join(" · ")}</div>
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {tags.slice(0, 3).map(tag => (
+              <span key={tag} className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-1.5 py-0.5 rounded font-medium">{tag}</span>
+            ))}
+            {tags.length > 3 && <span className="text-[10px] text-slate-400">+{tags.length - 3}</span>}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-500 truncate">{caps.slice(0, 3).join(" · ")}</div>
+        )}
       </td>
 
       {/* Stage */}
