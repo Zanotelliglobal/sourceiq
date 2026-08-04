@@ -311,8 +311,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* First-run guided checklist — auto-hides once the first event exists or on dismissal */}
-      {!loading && !error && <OnboardingChecklist hasEvents={events.length > 0} />}
+      {/* Quick-start checklist — fetches its own per-org progress; hides once all tasks are done or dismissed */}
+      {!loading && !error && <OnboardingChecklist />}
 
       {/* KPI bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
