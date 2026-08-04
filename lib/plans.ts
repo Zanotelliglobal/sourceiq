@@ -4,11 +4,11 @@
 // logic all read from here so tiers stay consistent across the app.
 //
 // Stripe prices are NOT hard-coded — each (tier × cadence) resolves to an env var
-// holding the Stripe price id, e.g. STRIPE_PRICE_BASIC_MONTHLY. Create the 9 paid
+// holding the Stripe price id, e.g. STRIPE_PRICE_BASIC_MONTHLY. Create the 12 paid
 // prices in your Stripe dashboard and set the matching env vars. Missing env vars
 // simply hide that option (the tier can't be checked out until its price exists).
 
-export type TierKey = "free" | "basic" | "premium" | "pro";
+export type TierKey = "free" | "basic" | "growth" | "premium" | "pro";
 export type Cadence = "weekly" | "monthly" | "yearly";
 
 // Numeric limits use -1 to mean "unlimited".
@@ -48,6 +48,13 @@ export const TIERS: Tier[] = [
     blurb: "For occasional sourcing with exports and a small team.",
     monthlyEur: 49,
     limits: { eventsPerMonth: 5, wavesPerEvent: 3, suppliersPerEvent: 150, seats: 3, outreach: false, export: true },
+  },
+  {
+    key: "growth",
+    name: "Growth",
+    blurb: "Live supplier outreach for growing sourcing teams.",
+    monthlyEur: 89,
+    limits: { eventsPerMonth: 12, wavesPerEvent: 6, suppliersPerEvent: 400, seats: 5, outreach: true, export: true },
   },
   {
     key: "premium",

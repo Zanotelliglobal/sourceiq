@@ -47,6 +47,7 @@ describe("normalizeUsage", () => {
 describe("effectiveTier", () => {
   it("maps a recognized plan directly to its tier", () => {
     expect(effectiveTier(org("basic")).key).toBe("basic");
+    expect(effectiveTier(org("growth")).key).toBe("growth");
     expect(effectiveTier(org("pro")).key).toBe("pro");
     expect(effectiveTier(org("free")).key).toBe("free");
   });

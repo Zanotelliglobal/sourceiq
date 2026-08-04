@@ -101,7 +101,7 @@ export default function BillingPage() {
   const isActivePaid = status?.status === "active" || status?.status === "past_due";
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
+    <div className="max-w-6xl mx-auto px-6 py-10">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("Billing & Subscription")}</h1>
         <p className="text-sm text-slate-500 mt-1">{t("Manage your SourceIQ plan and payment details.")}</p>
@@ -173,8 +173,8 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Tier comparison grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Tier comparison grid — column count tracks TIERS.length, not hardcoded */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {TIERS.map(tier => (
               <TierCard
                 key={tier.key}
