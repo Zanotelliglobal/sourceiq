@@ -11,6 +11,13 @@ import {
 type ScoutSupplier = Awaited<ReturnType<typeof runScoutAgent>>[number];
 import { scrapeSupplierContact } from "@/lib/contact";
 import { recordUsage, usageSummary } from "@/lib/usage";
+import {
+  normalizeBusinessType,
+  normalizeEmployeeBand,
+  parseFoundedYear,
+  clampReviewScore,
+  filterCapabilityTags,
+} from "@/lib/taxonomy";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -201,12 +208,24 @@ export async function POST(req: NextRequest) {
           // Contacted → Responded → Short List is driven by the outreach campaign.
           const funnel_stage = "long_list";
 
+          // Structured supplier record (Epic 1): normalize the scout's output to
+          // the controlled vocabularies before insert, so stored values are always
+          // in-set. employee_count/founded_year fall back to parsing the legacy
+          // free-text employees/founded fields when the model didn't emit the
+          // structured version.
+          const business_type = normalizeBusinessType(s.business_type);
+          const employee_count = normalizeEmployeeBand(s.employee_count) ?? normalizeEmployeeBand(s.employees);
+          const founded_year = parseFoundedYear(s.founded_year) ?? parseFoundedYear(s.founded);
+          const review_score = clampReviewScore(s.review_score);
+          const capability_tags = JSON.stringify(filterCapabilityTags(s.capability_tags));
+
           const result = await db.prepare(`
             INSERT INTO suppliers
               (event_id, name, country, city, description, capabilities, certifications,
                employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
-               ai_score, score_rationale, score_breakdown, enrichment, funnel_stage)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+               ai_score, score_rationale, score_breakdown, enrichment, funnel_stage,
+               business_type, employee_count, founded_year, review_score, capability_tags)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(
               event.id, s.name, s.country, s.city, s.description,
               JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
@@ -214,7 +233,8 @@ export async function POST(req: NextRequest) {
               contactEmail || null, contactUrl || null, contactPhone || null, contactLinkedin || null,
               JSON.stringify(s.data_sources), agent.label, waveNumber,
               score.overall_score, score.rationale, JSON.stringify(score.breakdown),
-              JSON.stringify(enrichment), funnel_stage
+              JSON.stringify(enrichment), funnel_stage,
+              business_type, employee_count, founded_year, review_score, capability_tags
             );
 
           const saved = await db.prepare("SELECT * FROM suppliers WHERE id=?").get(result.lastInsertRowid);

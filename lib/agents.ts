@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { scrapeSupplierContact } from "./contact";
+import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "./taxonomy";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -43,6 +44,13 @@ export type ScoutResult = {
   website: string;
   contact_email: string;
   data_sources: string[];
+  // Structured supplier record (Epic 1). The scout emits these during discovery;
+  // the persistence layer normalizes them to the controlled sets in lib/taxonomy.ts.
+  business_type: string;      // one of BUSINESS_TYPES ("" if unknown)
+  employee_count: string;     // a banded label from EMPLOYEE_BANDS ("" if unknown)
+  founded_year: number | null; // numeric founding year, or null if unknown
+  review_score: number | null; // 0-5 aggregate rating, or null if none found
+  capability_tags: string[];   // subset of CAPABILITY_TAGS
 };
 
 export type QualificationResult = {
@@ -229,23 +237,36 @@ Wave: ${wave} | Focus: ${agentFocus}
 ${geoLine}
 ${avoidList}
 
+STRUCTURED FIELDS — use ONLY the controlled values below. These power filterable, comparable supplier cards, so consistency matters more than richness:
+- "business_type": exactly one of: ${BUSINESS_TYPES.join(", ")}. Pick the best fit; use "Other" only if none apply.
+- "employee_count": a headcount BAND, exactly one of: ${EMPLOYEE_BANDS.join(", ")}. Map whatever figure you find to the nearest band. Use "" if you have no signal.
+- "founded_year": the founding year as a plain integer (e.g. 1992), or null if not stated.
+- "review_score": an aggregate rating from 0 to 5 (one decimal is fine) ONLY if a credible source shows one (Google/Trustpilot/marketplace rating); otherwise null. Never invent a rating.
+- "capability_tags": zero or more tags from THIS controlled list only (silently drop anything not on it): ${CAPABILITY_TAGS.join(", ")}.
+
 After searching, return a JSON array of supplier objects:
 [{
   "name": "Company Name",
   "country": "Country",
   "city": "City",
   "description": "2-3 sentence description of what they do and their specialization",
+  "business_type": "Manufacturer",
   "capabilities": ["capability 1", "capability 2", "capability 3", "capability 4"],
+  "capability_tags": ["OEM", "Low MOQ"],
   "certifications": ["ISO 9001:2015", "IATF 16949"],
   "employees": "200-500",
+  "employee_count": "201-500",
   "annual_revenue": "$20M-$50M",
   "founded": "1992",
+  "founded_year": 1992,
+  "review_score": 4.5,
   "website": "www.example.com",
   "contact_email": "info@example.com",
   "data_sources": ["https://real-source-url-you-saw.com/page", "https://directory.com/listing"]
 }]
 
 For "contact_email": only include a real address you actually saw on the company's site or a directory listing (e.g. a sales/info/contact mailbox). If you did not find one, use "" — never guess or construct an address.
+For the structured fields: fill them only from what you actually saw. Leaving "founded_year"/"review_score" as null (or "employee_count"/"business_type" as "") is strongly preferred over guessing.
 
 Your FINAL message must contain ONLY the JSON array (after you have finished searching).`;
 

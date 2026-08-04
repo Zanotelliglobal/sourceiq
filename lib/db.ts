@@ -230,6 +230,16 @@ async function initSchema(): Promise<void> {
     -- assessed by the qualifier against the event's ship-to destination.
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS serviceable_regions TEXT;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS ships_to_target BOOLEAN;
+    -- Structured supplier record (Epic 1 — credibility layer): coarse business
+    -- type, banded headcount, numeric founding year, a 0-5 review score, and a
+    -- controlled capability-tag vocabulary (JSON array of tags). Populated by the
+    -- scout during discovery and normalized to the controlled sets in
+    -- lib/taxonomy.ts before insert, so stored values are always in-vocabulary.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS business_type TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS employee_count TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS founded_year INTEGER;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS review_score DOUBLE PRECISION;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS capability_tags TEXT;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
@@ -386,6 +396,15 @@ export type Supplier = {
   employees: string | null;
   annual_revenue: string | null;
   founded: string | null;
+  // Structured supplier record (Epic 1). business_type ∈ BUSINESS_TYPES,
+  // employee_count is a banded label ∈ EMPLOYEE_BANDS, founded_year is numeric,
+  // review_score is 0-5, capability_tags is a JSON array of CAPABILITY_TAGS
+  // (see lib/taxonomy.ts). All nullable — legacy rows predate these columns.
+  business_type: string | null;
+  employee_count: string | null;
+  founded_year: number | null;
+  review_score: number | null;
+  capability_tags: string | null;
   website: string | null;
   data_sources: string | null;
   contact_email: string | null;

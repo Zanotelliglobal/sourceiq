@@ -51,6 +51,7 @@ export const fr: Record<string, string> = {
   "Contacting...": "Prise de contact...",
   "Copied": "Copié",
   "Copy draft": "Copier le brouillon",
+  "Capability Tags": "Tags de capacités",
   "Core Capabilities": "Capacités clés",
   "Could not load billing status.": "Impossible de charger le statut de facturation.",
   "Couldn't load events": "Impossible de charger les événements",
