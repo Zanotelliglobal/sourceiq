@@ -105,7 +105,10 @@ export default function BillingPage() {
       {loading ? (
         <div className="card p-10"><div className="shimmer h-6 w-48 rounded" /></div>
       ) : !status ? (
-        <div className="card p-10 text-center text-sm text-slate-500">{error || t("Unavailable.")}</div>
+        <div className="card p-10 text-center">
+          <h2 className="text-base font-bold text-red-600 mb-1">{t("Couldn't load billing")}</h2>
+          <p className="text-sm text-slate-500">{error || t("Unavailable.")}</p>
+        </div>
       ) : (
         <div className="space-y-8">
           {/* Current plan */}

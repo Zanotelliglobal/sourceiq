@@ -54,6 +54,7 @@ export const de: Record<string, string> = {
   "Core Capabilities": "Kernkompetenzen",
   "Could not load billing status.": "Abrechnungsstatus konnte nicht geladen werden.",
   "Couldn't load events": "Events konnten nicht geladen werden",
+  "Couldn't load billing": "Abrechnung konnte nicht geladen werden",
   "Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.": "Erstellen Sie Ihr erstes Sourcing-Event, um KI-Agenten über globale Lieferantennetzwerke einzusetzen und in wenigen Minuten eine qualifizierte Long List aufzubauen.",
   "Current Plan": "Aktueller Tarif",
   "DECLINED": "ABGELEHNT",

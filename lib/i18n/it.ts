@@ -54,6 +54,7 @@ export const it: Record<string, string> = {
   "Core Capabilities": "Competenze principali",
   "Could not load billing status.": "Impossibile caricare lo stato della fatturazione.",
   "Couldn't load events": "Impossibile caricare gli eventi",
+  "Couldn't load billing": "Impossibile caricare la fatturazione",
   "Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.": "Crea il tuo primo evento di sourcing per schierare agenti AI sulle reti di fornitori globali e costruire una long list qualificata in pochi minuti.",
   "Current Plan": "Piano attuale",
   "DECLINED": "RIFIUTATO",

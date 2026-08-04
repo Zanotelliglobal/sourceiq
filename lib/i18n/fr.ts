@@ -54,6 +54,7 @@ export const fr: Record<string, string> = {
   "Core Capabilities": "Capacités clés",
   "Could not load billing status.": "Impossible de charger le statut de facturation.",
   "Couldn't load events": "Impossible de charger les événements",
+  "Couldn't load billing": "Impossible de charger la facturation",
   "Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.": "Créez votre premier événement de sourcing pour déployer des agents IA sur les réseaux mondiaux de fournisseurs et constituer une liste longue qualifiée en quelques minutes.",
   "Current Plan": "Forfait actuel",
   "DECLINED": "REFUSÉ",
