@@ -42,6 +42,23 @@ describe("normalizeUsage", () => {
     expect(u.cost_usd).toBeCloseTo(10, 6);
     expect(u.web_searches).toBe(1000);
   });
+
+  it("prices identical token counts differently across models", () => {
+    const usage = { input_tokens: 1_000_000, output_tokens: 1_000_000 };
+    const opus = normalizeUsage(usage, "claude-opus-4-7");
+    const sonnet = normalizeUsage(usage, "claude-sonnet-4-6");
+    const haiku = normalizeUsage(usage, "claude-haiku-4-5");
+    expect(opus.cost_usd).toBeCloseTo(30, 6);   // $5 + $25 per 1M
+    expect(sonnet.cost_usd).toBeCloseTo(18, 6); // $3 + $15 per 1M
+    expect(haiku.cost_usd).toBeCloseTo(6, 6);   // $1 + $5 per 1M
+    expect(haiku.cost_usd).toBeLessThan(sonnet.cost_usd);
+    expect(sonnet.cost_usd).toBeLessThan(opus.cost_usd);
+  });
+
+  it("falls back to Opus pricing for an unrecognized model", () => {
+    const u = normalizeUsage({ input_tokens: 1_000_000, output_tokens: 1_000_000 }, "some-future-model");
+    expect(u.cost_usd).toBeCloseTo(30, 6);
+  });
 });
 
 describe("effectiveTier", () => {

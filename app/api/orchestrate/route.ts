@@ -6,6 +6,7 @@ import {
   runQualifierAgent,
   runQualifierAgentGrounded,
   runEnricherAgent,
+  AGENT_MODELS,
 } from "@/lib/agents";
 
 type ScoutSupplier = Awaited<ReturnType<typeof runScoutAgent>>[number];
@@ -71,10 +72,11 @@ export async function POST(req: NextRequest) {
       const heartbeat = setInterval(() => {
         try { controller.enqueue(encoder.encode(`: keep-alive\n\n`)); } catch {}
       }, 15000);
-      // Record token usage per stage, then push a running cost total to the UI.
-      const track = (stage: string) => (u: unknown) => {
+      // Record token usage per stage + the model that actually ran it, then
+      // push a running cost total to the UI.
+      const track = (stage: string, model: string) => (u: unknown) => {
         void (async () => {
-          await recordUsage(db, event.id, stage, u as never);
+          await recordUsage(db, event.id, stage, u as never, model);
           const s = await usageSummary(db, event.id);
           send({ type: "usage", cost_usd: s.cost_usd, total_tokens: s.total_tokens, web_searches: s.web_searches });
         })();
@@ -98,7 +100,7 @@ export async function POST(req: NextRequest) {
           categoryLabel, event.description,
           effectiveRequirements, event.annual_spend, waveNumber,
           event.target_countries || "",
-          track("orchestrator")
+          track("orchestrator", AGENT_MODELS.orchestrator)
         );
 
         send({ type: "strategy", wave: waveNumber, strategy: plan.strategy, agents: plan.agents });
@@ -164,7 +166,7 @@ export async function POST(req: NextRequest) {
 
           let score;
           try {
-            score = await runQualifierAgent(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier"));
+            score = await runQualifierAgent(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier", AGENT_MODELS.qualifier));
           } catch {
             score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit:60, quality_signals:60, geographic_risk:60, financial_stability:60, compliance_readiness:60 } };
           }
@@ -176,13 +178,13 @@ export async function POST(req: NextRequest) {
           const borderline = score.overall_score >= 60 && score.overall_score <= 82;
           if (groundingOn && (thinEvidence || borderline)) {
             try {
-              score = await runQualifierAgentGrounded(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier"));
+              score = await runQualifierAgentGrounded(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier", AGENT_MODELS.qualifierGrounded));
             } catch { /* keep the cheap-pass score on failure */ }
           }
 
           let enrichment;
           try {
-            enrichment = await runEnricherAgent(s, score, categoryLabel, track("enricher"));
+            enrichment = await runEnricherAgent(s, score, categoryLabel, track("enricher", AGENT_MODELS.enricher));
           } catch {
             enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
           }
@@ -258,7 +260,7 @@ export async function POST(req: NextRequest) {
               effectiveRequirements, event.annual_spend,
               waveNumber, avoidNames,
               event.target_countries || "",
-              track("scout")
+              track("scout", AGENT_MODELS.scout)
             );
           } catch (err) {
             await db.prepare(`UPDATE agent_runs SET status='error', message=?, completed_at=datetime('now')

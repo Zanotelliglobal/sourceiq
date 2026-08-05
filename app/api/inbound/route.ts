@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { getDb } from "@/lib/db";
 import { parseReplyToken } from "@/lib/mail";
-import { runReplyClassifierAgent } from "@/lib/agents";
+import { runReplyClassifierAgent, AGENT_MODELS } from "@/lib/agents";
 import { recordUsage } from "@/lib/usage";
 import { notify } from "@/lib/notifications";
 
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
   try {
     cls = await runReplyClassifierAgent(
       supplier.name, supplier.country, supplier.category, supplier.requirements, replyBody,
-      (u) => { void recordUsage(db, supplier.event_id, "reply_classifier", u as never); }
+      (u) => { void recordUsage(db, supplier.event_id, "reply_classifier", u as never, AGENT_MODELS.replyClassifier); }
     );
   } catch (err) {
     return NextResponse.json({ ok: true, matched: true, classified: false, error: String(err) });

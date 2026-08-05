@@ -7,14 +7,16 @@ type Db = ReturnType<typeof getDb>;
 // Records real token usage from every Claude call so cost is measured, not
 // estimated. Agents report usage via an onUsage callback; routes persist it.
 
-// Opus 4.7 pricing ($ per 1M tokens). Cache reads are 0.1x input; cache writes 1.25x.
-const PRICE = {
-  input: 5.0 / 1_000_000,
-  output: 25.0 / 1_000_000,
-  cache_read: 0.5 / 1_000_000,
-  cache_write: 6.25 / 1_000_000,
-  web_search: 10.0 / 1_000, // $10 per 1,000 searches
+// Per-model pricing ($ per 1M tokens). Cache reads are 0.1x input; cache writes
+// 1.25x input, for every model. Unrecognized models fall back to Opus (the
+// most expensive tier) so a mislabeled call over-, never under-, counts cost.
+const DEFAULT_MODEL = "claude-opus-4-7";
+const PRICE_TABLE: Record<string, { input: number; output: number; cache_read: number; cache_write: number }> = {
+  "claude-opus-4-7": { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000, cache_read: 0.5 / 1_000_000, cache_write: 6.25 / 1_000_000 },
+  "claude-sonnet-4-6": { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000, cache_read: 0.3 / 1_000_000, cache_write: 3.75 / 1_000_000 },
+  "claude-haiku-4-5": { input: 1.0 / 1_000_000, output: 5.0 / 1_000_000, cache_read: 0.1 / 1_000_000, cache_write: 1.25 / 1_000_000 },
 };
+const WEB_SEARCH_PRICE = 10.0 / 1_000; // $10 per 1,000 searches — a tool fee, flat across models
 
 // Raw shape returned by the Anthropic SDK's response.usage (fields optional).
 export type RawUsage = {
@@ -34,18 +36,19 @@ export type UsageRecord = {
   cost_usd: number;
 };
 
-export function normalizeUsage(u: RawUsage | undefined | null): UsageRecord {
+export function normalizeUsage(u: RawUsage | undefined | null, model: string = DEFAULT_MODEL): UsageRecord {
   const input = u?.input_tokens ?? 0;
   const output = u?.output_tokens ?? 0;
   const cacheRead = u?.cache_read_input_tokens ?? 0;
   const cacheWrite = u?.cache_creation_input_tokens ?? 0;
   const searches = u?.server_tool_use?.web_search_requests ?? 0;
+  const price = PRICE_TABLE[model] ?? PRICE_TABLE[DEFAULT_MODEL];
   const cost =
-    input * PRICE.input +
-    output * PRICE.output +
-    cacheRead * PRICE.cache_read +
-    cacheWrite * PRICE.cache_write +
-    searches * PRICE.web_search;
+    input * price.input +
+    output * price.output +
+    cacheRead * price.cache_read +
+    cacheWrite * price.cache_write +
+    searches * WEB_SEARCH_PRICE;
   return {
     input_tokens: input,
     output_tokens: output,
@@ -62,9 +65,9 @@ export async function recordUsage(
   eventId: number,
   stage: string,
   raw: RawUsage | undefined | null,
-  model = "claude-opus-4-7"
+  model: string = DEFAULT_MODEL
 ): Promise<UsageRecord> {
-  const r = normalizeUsage(raw);
+  const r = normalizeUsage(raw, model);
   // Resolve the owning tenant from the parent event so every usage row is
   // attributable to an organization for billing. Falls back to org 1.
   const evt = await db.prepare("SELECT org_id FROM sourcing_events WHERE id = ?").get(eventId) as { org_id?: number } | undefined;
