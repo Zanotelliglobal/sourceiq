@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runReplyClassifierAgent } from "@/lib/agents";
+import { runReplyClassifierAgent, AGENT_MODELS } from "@/lib/agents";
 import { recordUsage } from "@/lib/usage";
 import { notify } from "@/lib/notifications";
 
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
   try {
     cls = await runReplyClassifierAgent(
       s.name, s.country, s.category, s.requirements, composed,
-      (u) => { void recordUsage(db, s.event_id, "reply_classifier", u as never); }
+      (u) => { void recordUsage(db, s.event_id, "reply_classifier", u as never, AGENT_MODELS.replyClassifier); }
     );
   } catch (err) {
     // Classification failed — keep the raw submission and fall back to the

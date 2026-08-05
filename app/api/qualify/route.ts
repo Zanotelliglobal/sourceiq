@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact } from "@/lib/agents";
+import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage } from "@/lib/usage";
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       try {
         const found = await resolveSupplierContact(
           supplier.name, supplier.country, supplier.website || "",
-          (u) => { void recordUsage(db, supplier.event_id, "contact_finder", u as never); }
+          (u) => { void recordUsage(db, supplier.event_id, "contact_finder", u as never, AGENT_MODELS.contactFinder); }
         );
         if (found.contact_email || found.contact_url || found.phone || found.linkedin) {
           supplier.contact_email = found.contact_email || supplier.contact_email;
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     const email = await runOutreachAgent(
       supplier.name, supplier.country, supplier.category, supplier.requirements, supplier.annual_spend,
-      (u) => { void recordUsage(db, supplier.event_id, "outreach", u as never); },
+      (u) => { void recordUsage(db, supplier.event_id, "outreach", u as never, AGENT_MODELS.outreach); },
       buyer
     );
 
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
 
     const email = await runFollowUpAgent(
       supplier.name, supplier.country, supplier.category, lastOut?.subject || "our recent inquiry",
-      (u) => { void recordUsage(db, supplier.event_id, "followup", u as never); }
+      (u) => { void recordUsage(db, supplier.event_id, "followup", u as never, AGENT_MODELS.followUp); }
     );
 
     let delivery;
