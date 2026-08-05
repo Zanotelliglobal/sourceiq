@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import FunnelExplainer from "@/components/FunnelExplainer";
+import { applySupplierUpdated } from "@/lib/supplier-updates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
@@ -1196,6 +1197,12 @@ export default function EventPage() {
       const s = msg.supplier as Supplier;
       setSuppliers(prev => prev.find(x => x.id === s.id) ? prev : [...prev, s]);
       addLog(`✓  ${s.name} (${s.country}) — ${s.ai_score}`);
+    }
+    if (type === "supplier_updated") {
+      // A background contact scrape (deferred off the critical path — see
+      // lib/process-supplier.ts) resolved after the card was already streamed.
+      // Patch the matching card in place with whatever channels it found.
+      setSuppliers(prev => applySupplierUpdated(prev, msg));
     }
     if (type === "agent_complete") {
       setLiveAgents(prev => prev.map(a => a.agent_id === msg.agent_id ? { ...a, status: "complete", message: `${msg.suppliers_found} leads delivered` } : a));

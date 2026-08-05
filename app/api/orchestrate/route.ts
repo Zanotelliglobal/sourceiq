@@ -1,24 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import {
-  runOrchestrator,
-  runScoutAgent,
-  runQualifierAgent,
-  runQualifierAgentGrounded,
-  runEnricherAgent,
-  AGENT_MODELS,
-} from "@/lib/agents";
-
-type ScoutSupplier = Awaited<ReturnType<typeof runScoutAgent>>[number];
-import { scrapeSupplierContact } from "@/lib/contact";
+import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
+import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
 import { recordUsage, usageSummary } from "@/lib/usage";
-import {
-  normalizeBusinessType,
-  normalizeEmployeeBand,
-  parseFoundedYear,
-  clampReviewScore,
-  filterCapabilityTags,
-} from "@/lib/taxonomy";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -158,91 +142,10 @@ export async function POST(req: NextRequest) {
 
         const groundingOn = process.env.QUALIFIER_GROUNDING !== "0";
         let newSuppliers = 0;
-
-        // Process one deduped supplier: qualify (cheap → grounded for the risky
-        // band) → enrich → contact scrape → insert → stream.
-        const makeProcessSupplier = (agent: (typeof plan.agents)[number]) => async (s: ScoutSupplier) => {
-          send({ type: "qualifying", agent_id: agent.id, supplier_name: s.name });
-
-          let score;
-          try {
-            score = await runQualifierAgent(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier", AGENT_MODELS.qualifier));
-          } catch {
-            score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit:60, quality_signals:60, geographic_risk:60, financial_stability:60, compliance_readiness:60 } };
-          }
-
-          // Escalate to the grounded (web-verified) qualifier when the cheap pass
-          // is untrustworthy: thin evidence, or a borderline score where a false
-          // positive is most costly. Keeps cost down by grounding only the risky band.
-          const thinEvidence = (s.data_sources || []).length === 0;
-          const borderline = score.overall_score >= 60 && score.overall_score <= 82;
-          if (groundingOn && (thinEvidence || borderline)) {
-            try {
-              score = await runQualifierAgentGrounded(s, categoryLabel, effectiveRequirements, event.annual_spend, track("qualifier", AGENT_MODELS.qualifierGrounded));
-            } catch { /* keep the cheap-pass score on failure */ }
-          }
-
-          let enrichment;
-          try {
-            enrichment = await runEnricherAgent(s, score, categoryLabel, track("enricher", AGENT_MODELS.enricher));
-          } catch {
-            enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
-          }
-
-          // Contact mapping DURING sourcing: cheaply scrape the supplier's own
-          // site for a real email / contact page / phone / LinkedIn. This is a
-          // deterministic HTTP scrape (no LLM); the heavier web-search fallback
-          // runs later at outreach time only for suppliers still missing an email.
-          let contactEmail = s.contact_email || "";
-          let contactUrl = "", contactPhone = "", contactLinkedin = "";
-          if (!contactEmail && s.website) {
-            try {
-              // Tight budget during bulk discovery: homepage + 2 contact pages, 5s each.
-              const c = await scrapeSupplierContact(s.website, { timeoutMs: 5000, maxPages: 2 });
-              contactEmail = c.contact_email || contactEmail;
-              contactUrl = c.contact_url;
-              contactPhone = c.phone;
-              contactLinkedin = c.linkedin;
-            } catch { /* best-effort — supplier still saved without a channel */ }
-          }
-
-          // Every discovered supplier enters the Long List. Progression through
-          // Contacted → Responded → Short List is driven by the outreach campaign.
-          const funnel_stage = "long_list";
-
-          // Structured supplier record (Epic 1): normalize the scout's output to
-          // the controlled vocabularies before insert, so stored values are always
-          // in-set. employee_count/founded_year fall back to parsing the legacy
-          // free-text employees/founded fields when the model didn't emit the
-          // structured version.
-          const business_type = normalizeBusinessType(s.business_type);
-          const employee_count = normalizeEmployeeBand(s.employee_count) ?? normalizeEmployeeBand(s.employees);
-          const founded_year = parseFoundedYear(s.founded_year) ?? parseFoundedYear(s.founded);
-          const review_score = clampReviewScore(s.review_score);
-          const capability_tags = JSON.stringify(filterCapabilityTags(s.capability_tags));
-
-          const result = await db.prepare(`
-            INSERT INTO suppliers
-              (event_id, name, country, city, description, capabilities, certifications,
-               employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
-               ai_score, score_rationale, score_breakdown, enrichment, funnel_stage,
-               business_type, employee_count, founded_year, review_score, capability_tags)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-            .run(
-              event.id, s.name, s.country, s.city, s.description,
-              JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
-              s.employees, s.annual_revenue, s.founded, s.website,
-              contactEmail || null, contactUrl || null, contactPhone || null, contactLinkedin || null,
-              JSON.stringify(s.data_sources), agent.label, waveNumber,
-              score.overall_score, score.rationale, JSON.stringify(score.breakdown),
-              JSON.stringify(enrichment), funnel_stage,
-              business_type, employee_count, founded_year, review_score, capability_tags
-            );
-
-          const saved = await db.prepare("SELECT * FROM suppliers WHERE id=?").get(result.lastInsertRowid);
-          send({ type: "supplier_found", supplier: saved, agent_id: agent.id, agent_label: agent.label });
-          newSuppliers++;
-        };
+        // Contact scraping runs off the critical path (lib/process-supplier.ts):
+        // each supplier's background scrape task lands here so we can drain them
+        // all before the stream closes, instead of awaiting them inline.
+        const backgroundTasks: Promise<void>[] = [];
 
         // Run one scout end-to-end: scout → dedup claim → qualify/enrich pool.
         const runScout = async (agent: (typeof plan.agents)[number]) => {
@@ -278,8 +181,13 @@ export async function POST(req: NextRequest) {
                       WHERE event_id=? AND agent_id=? AND wave=?`)
             .run(`Qualifying ${fresh.length} suppliers...`, fresh.length, event.id, agent.id, waveNumber);
 
-          // Qualify + enrich concurrently with a bounded pool per scout.
-          const processSupplier = makeProcessSupplier(agent);
+          // Qualify + enrich concurrently with a bounded pool per scout. Contact
+          // scraping is handled inside processSupplier, off the critical path —
+          // see lib/process-supplier.ts.
+          const processSupplier = makeProcessSupplier({
+            db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
+            annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
+          }, agent);
           const qualConcurrency = Math.max(1, Number(process.env.QUAL_CONCURRENCY) || 4);
           let qCursor = 0;
           const qWorker = async () => {
@@ -289,6 +197,7 @@ export async function POST(req: NextRequest) {
             }
           };
           await Promise.all(Array.from({ length: Math.min(qualConcurrency, fresh.length) }, qWorker));
+          newSuppliers += fresh.length;
 
           await db.prepare(`UPDATE agent_runs SET status='complete', message=?, completed_at=datetime('now')
                       WHERE event_id=? AND agent_id=? AND wave=?`)
@@ -306,6 +215,11 @@ export async function POST(req: NextRequest) {
           }
         };
         await Promise.all(Array.from({ length: Math.min(scoutConcurrency, plan.agents.length) }, sWorker));
+
+        // Drain any still-pending background contact scrapes before finishing the
+        // wave, so wave_complete's usage totals reflect them and the SSE stream
+        // doesn't close mid-scrape.
+        await Promise.allSettled(backgroundTasks);
 
         await db.prepare(`UPDATE sourcing_events SET status='reviewing', updated_at=datetime('now') WHERE id=?`)
           .run(event.id);
