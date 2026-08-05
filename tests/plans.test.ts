@@ -12,7 +12,7 @@ import {
 
 describe("getTier", () => {
   it("resolves each known tier key", () => {
-    for (const key of ["free", "basic", "premium", "pro"] as const) {
+    for (const key of ["free", "basic", "growth", "premium", "pro"] as const) {
       expect(getTier(key)?.key).toBe(key);
     }
   });
@@ -33,7 +33,7 @@ describe("tier limits", () => {
   });
 
   it("paid tiers allow export", () => {
-    for (const key of ["basic", "premium", "pro"] as const) {
+    for (const key of ["basic", "growth", "premium", "pro"] as const) {
       expect(getTier(key)!.limits.export).toBe(true);
     }
   });
@@ -45,10 +45,22 @@ describe("tier limits", () => {
     expect(pro.limits.suppliersPerEvent).toBe(UNLIMITED);
   });
 
-  it("outreach is a premium+ capability", () => {
+  it("outreach is a growth+ capability", () => {
     expect(getTier("basic")!.limits.outreach).toBe(false);
+    expect(getTier("growth")!.limits.outreach).toBe(true);
     expect(getTier("premium")!.limits.outreach).toBe(true);
     expect(getTier("pro")!.limits.outreach).toBe(true);
+  });
+
+  it("growth sits between basic and premium, unlocking outreach", () => {
+    const growth = getTier("growth")!;
+    expect(growth.limits.eventsPerMonth).toBe(12);
+    expect(growth.limits.wavesPerEvent).toBe(6);
+    expect(growth.limits.suppliersPerEvent).toBe(400);
+    expect(growth.limits.seats).toBe(5);
+    expect(growth.limits.outreach).toBe(true);
+    expect(growth.limits.export).toBe(true);
+    expect(growth.featured).toBeFalsy();
   });
 });
 
@@ -57,6 +69,7 @@ describe("priceEnvVar", () => {
     expect(priceEnvVar("basic", "monthly")).toBe("STRIPE_PRICE_BASIC_MONTHLY");
     expect(priceEnvVar("pro", "yearly")).toBe("STRIPE_PRICE_PRO_YEARLY");
     expect(priceEnvVar("premium", "weekly")).toBe("STRIPE_PRICE_PREMIUM_WEEKLY");
+    expect(priceEnvVar("growth", "monthly")).toBe("STRIPE_PRICE_GROWTH_MONTHLY");
   });
 });
 
