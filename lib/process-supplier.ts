@@ -19,6 +19,7 @@ import {
   runQualifierAgent,
   runQualifierAgentGrounded,
   runEnricherAgent,
+  AGENT_MODELS,
 } from "@/lib/agents";
 import { scrapeSupplierContact } from "@/lib/contact";
 import {
@@ -45,7 +46,7 @@ export type ProcessSupplierDeps = {
   annualSpend: string;
   groundingOn: boolean;
   send: (data: Record<string, unknown>) => void;
-  track: (stage: string) => (u: unknown) => void;
+  track: (stage: string, model: string) => (u: unknown) => void;
   // Background contact-scrape tasks are pushed here instead of being awaited
   // inline, so the route can `await Promise.allSettled(backgroundTasks)`
   // before closing the SSE stream — nothing is lost, but nothing blocks the
@@ -77,7 +78,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
 
     let score;
     try {
-      score = await qualifierAgent(s, deps.categoryLabel, deps.effectiveRequirements, deps.annualSpend, deps.track("qualifier"));
+      score = await qualifierAgent(s, deps.categoryLabel, deps.effectiveRequirements, deps.annualSpend, deps.track("qualifier", AGENT_MODELS.qualifier));
     } catch {
       score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit: 60, quality_signals: 60, geographic_risk: 60, financial_stability: 60, compliance_readiness: 60 } };
     }
@@ -89,13 +90,13 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     const borderline = score.overall_score >= 60 && score.overall_score <= 82;
     if (deps.groundingOn && (thinEvidence || borderline)) {
       try {
-        score = await qualifierAgentGrounded(s, deps.categoryLabel, deps.effectiveRequirements, deps.annualSpend, deps.track("qualifier"));
+        score = await qualifierAgentGrounded(s, deps.categoryLabel, deps.effectiveRequirements, deps.annualSpend, deps.track("qualifier", AGENT_MODELS.qualifierGrounded));
       } catch { /* keep the cheap-pass score on failure */ }
     }
 
     let enrichment;
     try {
-      enrichment = await enricherAgent(s, score, deps.categoryLabel, deps.track("enricher"));
+      enrichment = await enricherAgent(s, score, deps.categoryLabel, deps.track("enricher", AGENT_MODELS.enricher));
     } catch {
       enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
     }

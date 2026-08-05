@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact } from "@/lib/agents";
+import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, usageSummary } from "@/lib/usage";
@@ -57,9 +57,9 @@ export async function POST(req: NextRequest) {
       const send = (data: object) => {
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); } catch {}
       };
-      const track = (stage: string) => (u: unknown) => {
+      const track = (stage: string, model: string) => (u: unknown) => {
         void (async () => {
-          await recordUsage(db, event.id, stage, u as never);
+          await recordUsage(db, event.id, stage, u as never, model);
           const s = await usageSummary(db, event.id);
           send({ type: "usage", cost_usd: s.cost_usd, total_tokens: s.total_tokens, web_searches: s.web_searches });
         })();
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
           // 0 ── Contact discovery: resolve the best reachable channel if we have no email.
           if (!s.contact_email) {
             try {
-              const found = await resolveSupplierContact(s.name, s.country, s.website || "", track("contact_finder"));
+              const found = await resolveSupplierContact(s.name, s.country, s.website || "", track("contact_finder", AGENT_MODELS.contactFinder));
               if (found.contact_email || found.contact_url || found.phone || found.linkedin) {
                 s.contact_email = found.contact_email || s.contact_email;
                 await db.prepare(
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
           send({ type: "contacting", supplier_id: s.id, supplier_name: s.name });
           let email;
           try {
-            email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach"), buyer);
+            email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach", AGENT_MODELS.outreach), buyer);
           } catch (err) {
             send({ type: "supplier_error", supplier_id: s.id, message: String(err) });
             continue;
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
             resp = await runSupplierResponseAgent(
               s.name, s.country, s.ai_score ?? 60,
               event.category, event.requirements, email.body,
-              track("supplier_response")
+              track("supplier_response", AGENT_MODELS.supplierResponse)
             );
           } catch {
             resp = { responded: false, sentiment: "negative" as const, language: "English", reply: "", reply_en: "", capacity_confirmed: "N/A", lead_time: "N/A", highlights: [] };

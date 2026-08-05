@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { runOrchestrator, runScoutAgent } from "@/lib/agents";
+import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
 import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
 import { recordUsage, usageSummary } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
@@ -56,10 +56,11 @@ export async function POST(req: NextRequest) {
       const heartbeat = setInterval(() => {
         try { controller.enqueue(encoder.encode(`: keep-alive\n\n`)); } catch {}
       }, 15000);
-      // Record token usage per stage, then push a running cost total to the UI.
-      const track = (stage: string) => (u: unknown) => {
+      // Record token usage per stage + the model that actually ran it, then
+      // push a running cost total to the UI.
+      const track = (stage: string, model: string) => (u: unknown) => {
         void (async () => {
-          await recordUsage(db, event.id, stage, u as never);
+          await recordUsage(db, event.id, stage, u as never, model);
           const s = await usageSummary(db, event.id);
           send({ type: "usage", cost_usd: s.cost_usd, total_tokens: s.total_tokens, web_searches: s.web_searches });
         })();
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
           categoryLabel, event.description,
           effectiveRequirements, event.annual_spend, waveNumber,
           event.target_countries || "",
-          track("orchestrator")
+          track("orchestrator", AGENT_MODELS.orchestrator)
         );
 
         send({ type: "strategy", wave: waveNumber, strategy: plan.strategy, agents: plan.agents });
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
               effectiveRequirements, event.annual_spend,
               waveNumber, avoidNames,
               event.target_countries || "",
-              track("scout")
+              track("scout", AGENT_MODELS.scout)
             );
           } catch (err) {
             await db.prepare(`UPDATE agent_runs SET status='error', message=?, completed_at=datetime('now')
