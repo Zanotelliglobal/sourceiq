@@ -56,12 +56,17 @@ columns on the existing `suppliers` table + enrichment-agent output changes.
 Reframe `sourcing_events` from transactional searches into durable, revisitable projects. Most data
 already exists — this is mostly UI + light schema.
 
+> **✅ Shipped (#21/#29):** 2.1 and 2.2 turned out to already be satisfied by existing `/dashboard`
+> and funnel-stage UI — no code needed. 2.3 (outreach thread history) was the one genuine gap and is
+> now live: `lib/outreach-log.ts` + `GET /api/outreach-log` + a timeline section in the supplier
+> `DetailPanel`.
+
 | # | Feature | Impact | Effort | Notes |
 |---|---------|--------|--------|-------|
-| 2.1 | Projects list view (browse past events) | 5 | M | left-nav "Inquiries" analog |
-| 2.2 | Saved-suppliers / shortlist view per project | 4 | M | funnel data already present |
-| 2.3 | Revisitable outreach threads (reply history per supplier) | 4 | M | uses `outreach_logs` |
-| 2.4 | Rename/pin/archive projects | 2 | S | |
+| 2.1 ✅ | Projects list view (browse past events) | 5 | M | shipped — already satisfied by `/dashboard` |
+| 2.2 ✅ | Saved-suppliers / shortlist view per project | 4 | M | shipped — already satisfied by `funnel_stage` grouping |
+| 2.3 ✅ | Revisitable outreach threads (reply history per supplier) | 4 | M | shipped #21/#29 — reads `outreach_logs` |
+| 2.4 | Rename/pin/archive projects | 2 | S | explicitly out of scope in #21; still open |
 | 2.5 | Cross-project search | 3 | M | "Search chats" analog |
 | 2.6 | Soft data lock-in messaging on cancel (what you'd lose) | 3 | S | retention nudge |
 
@@ -121,7 +126,7 @@ contact-unlock paywall** — "contacts included" is our positioning wedge.
 | 6.1 | Credit currency alongside/instead of event limits | 3 | M | strategic, decide first |
 | 6.2 | Daily credit refresh on free tier (habitual return) | 3 | S | upgrade pressure |
 | 6.3 | Pro-gated features with inline "Upgrade" cards | 3 | S | e.g. verification depth, extension data |
-| 6.4 | Fill the abandoned $49–99 pricing middle (they jump $25→$299) | 4 | S | pure pricing/packaging |
+| 6.4 ✅ | Fill the abandoned $49–99 pricing middle (they jump $25→$299) | 4 | S | shipped #31/#32 — new €89/mo "Growth" tier between Basic (€49) and Premium (€149) |
 | 6.5 | ~~Contact-unlock paywall~~ | — | — | **intentionally skipped** — anti-pattern for us |
 | 6.6 | Tiered plans (Free/mid/Pro/Custom) | — | — | **already shipped** — `lib/plans.ts` TIERS (their point 38) |
 
@@ -134,13 +139,17 @@ contact-unlock paywall** — "contacts included" is our positioning wedge.
 
 Fuse shipped onboarding (#18) + referrals (#19) into a rewarded activation loop.
 
+> **✅ Shipped (#22/#28):** 7.1 and 7.3 are live — a 4-task quick-start checklist
+> (`lib/onboarding.ts`) granting bonus events per org on completion, plus a `REFERRAL_REWARD_CAP_PER_ORG`
+> cap and centralized reward constant in `lib/referrals.ts`.
+
 | # | Feature | Impact | Effort | Notes |
 |---|---------|--------|--------|-------|
-| 7.1 | Gamified "Quick start" checklist that rewards activation | 4 | M | fuse #18 + #19 |
-| 7.2 | Rewards for reviews (G2/Capterra) + social posts | 4 | M | their distribution engine |
-| 7.3 | Referral cap per org + reward-per-conversion tuning | 3 | S | hardens shipped #19 |
-| 7.4 | Persistent "earn extra credits/events" sidebar CTA | 2 | S | |
-| 7.5 | Always-visible Upgrade button next to plan badge | 1 | XS | |
+| 7.1 ✅ | Gamified "Quick start" checklist that rewards activation | 4 | M | shipped #22/#28 |
+| 7.2 | Rewards for reviews (G2/Capterra) + social posts | 4 | M | their distribution engine; still open |
+| 7.3 ✅ | Referral cap per org + reward-per-conversion tuning | 3 | S | shipped #22/#28 |
+| 7.4 | Persistent "earn extra credits/events" sidebar CTA | 2 | S | explicitly out of scope in #22; still open |
+| 7.5 | Always-visible Upgrade button next to plan badge | 1 | XS | explicitly out of scope in #22; still open |
 
 ---
 
@@ -152,35 +161,78 @@ enrich → contact), so it is inherently slower. The orchestration is already po
 (`SCOUT_CONCURRENCY`, `QUAL_CONCURRENCY`), so the remaining latency is model choice, live
 generation, and inline enrichment — all reclaimable.
 
+> **✅ Shipped (#23/#24, #30/#33/#36):** 8.1 (per-agent model right-sizing via `AGENT_MODELS` in
+> `lib/agents.ts`), 8.3 (contact scrape deferred off the critical path), and 8.4 (supplier cards
+> stream via `supplier_found` the instant they're qualified, enrichment=null) are all live. 8.2 was
+> largely subsumed by 8.1 — Haiku has no extended-thinking budget to tune — but residual effort
+> tuning on the two Sonnet-tier verifiers (grounded qualifier, contact finder) was explicitly called
+> out as a follow-up, not done. The model-aware cost-telemetry gap noted as a follow-up in #24 was
+> also closed separately (#25/#34).
+
 | # | Feature | Impact | Effort | Notes |
 |---|---------|--------|--------|-------|
-| 8.1 | Right-size models per agent — Haiku/Sonnet for classifier/qualifier/enricher/contact-finder/reply-classifier; keep Opus for scout + orchestrator | 5 | S | today **all 12 agents** use `claude-opus-4-7`; simple structured steps don't need it |
-| 8.2 | Tune `effort` down (+ limit thinking) on structured sub-agents | 4 | S | Opus reasoning wasted on extraction/classification |
-| 8.3 | Defer contact enrichment (scrape + contact-finder) to on-demand, off the discovery critical path | 4 | M | today runs inline per supplier before save |
-| 8.4 | Stream each supplier card the moment it's qualified (progressive results) | 4 | M | SSE foundation already exists (`send()`, live count #4) |
-| 8.5 | Raise scout/qual concurrency within rate limits | 2 | S | env-tunable already |
+| 8.1 ✅ | Right-size models per agent — Haiku/Sonnet for classifier/qualifier/enricher/contact-finder/reply-classifier; keep Opus for scout + orchestrator | 5 | S | shipped #23/#24 |
+| 8.2 | Tune `effort` down (+ limit thinking) on the two remaining Sonnet-tier verifiers (grounded qualifier, contact finder) | 2 | S | residual — needs an eval to avoid weakening verification rigor; called out in #24 |
+| 8.3 ✅ | Defer contact enrichment (scrape + contact-finder) to background, off the discovery critical path | 4 | M | shipped #33 |
+| 8.4 ✅ | Stream each supplier card the moment it's qualified (progressive results) + defer LLM enrichment too | 4 | M | shipped #30/#33/#36 |
+| 8.5 | Raise scout/qual concurrency within rate limits | 2 | S | env-tunable already; still open |
 | 8.6 | Cap/early-exit the grounded-qualifier iteration loop (up to 6 Opus calls) | 3 | S | `agents.ts` `for i<6` hotspot |
 | 8.7 | Persistent, reusable supplier store — cached results return instantly for repeat/similar queries | 5 | L | the real "become lookup-fast" move; ties to Epic 1/2 |
 
 ---
 
-## Recommended sequencing
+## Recommended sequencing — status
 
-1. **Epic 8.1–8.2 (latency quick wins)** — model right-sizing + effort tuning; near-zero risk, days
-   of work, immediately felt. Highest leverage given speed is the top complaint.
-2. **Epic 1 (credibility layer)** — highest impact/effort ratio; makes results look pro; unblocks
-   filtering (Epic 3). Start with 1.1–1.6.
-3. **Epic 2 (persistent projects)** — retention; mostly UI over data we already have.
-4. **Epic 7 (growth flywheel)** — cheap, compounds; hardens shipped #18/#19.
-5. **Epic 8.3–8.4 (defer enrichment + progressive streaming)** — bigger perceived-speed win.
-6. **Epic 3 (filtering)** — depends on Epic 1's structured fields.
-7. **Epic 6.4 (pricing middle)** — trivial, high leverage; do opportunistically.
-8. **Epic 8.7 (supplier cache)** + **Epic 4 (Product object)** — larger architectural bets.
-9. **Epic 5** — polish, fold in opportunistically.
+1. ✅ **Epic 8.1–8.2 (latency quick wins)** — shipped #23/#24. 8.2 residual (Sonnet-tier effort
+   tuning) still open, see 8.2 above.
+2. ✅ **Epic 1 (credibility layer)** — 1.1–1.6 shipped #20. 1.7–1.10 still open.
+3. ✅ **Epic 2 (persistent projects)** — 2.1–2.3 shipped #21/#29. 2.4–2.6 still open.
+4. ✅ **Epic 7 (growth flywheel)** — 7.1 + 7.3 shipped #22/#28. 7.2/7.4/7.5 still open.
+5. ✅ **Epic 8.3–8.4 (defer enrichment + progressive streaming)** — shipped #30/#33/#36.
+6. **Epic 3 (filtering)** — next up; depends on Epic 1's structured fields, which are now in place.
+7. ✅ **Epic 6.4 (pricing middle)** — shipped #31/#32 (Growth tier).
+8. **Epic 8.7 (supplier cache)** + **Epic 4 (Product object)** — larger architectural bets, still open.
+9. **Epic 5** — polish, fold in opportunistically, still open.
 
-## First batch to file as GitHub issues
+Everything above that isn't a Product-related AI feature (Epic 4's dropped points 29–33) or the
+contact-unlock paywall (6.5) remains eligible — see the second batch below for what's left.
 
-- **Issue A** — Epic 1.1–1.6: structured supplier fields + capability tag taxonomy
-- **Issue B** — Epic 2.1–2.3: events as persistent projects (list + shortlist + threads)
-- **Issue C** — Epic 7.1 + 7.3: quick-start activation checklist + referral cap
-- **Issue D** — Epic 8.1–8.2: latency quick wins (per-agent model right-sizing + effort tuning)
+## First batch — filed and shipped
+
+- ✅ **Issue A** (#20) — Epic 1.1–1.6: structured supplier fields + capability tag taxonomy
+- ✅ **Issue B** (#21) — Epic 2.1–2.3: events as persistent projects (list + shortlist + threads)
+- ✅ **Issue C** (#22) — Epic 7.1 + 7.3: quick-start activation checklist + referral cap
+- ✅ **Issue D** (#23) — Epic 8.1–8.2: latency quick wins (per-agent model right-sizing + effort tuning)
+- ✅ (unplanned, filed mid-stream) **#25** — model-aware token cost accounting (follow-up from #24)
+- ✅ (unplanned, filed mid-stream) **#30/#31** — defer enrichment fully off critical path; Growth pricing tier
+
+## Second batch to file as GitHub issues
+
+Ordered by the sequencing above (3 → 8.7/4 → remaining growth/latency scraps → 5), each scoped
+tightly enough to ship independently like the first batch:
+
+- **Issue E** — Epic 3.1–3.2: filter panel with tabbed groups (General/Product/Profile/Highlight/
+  Verification) + "AI filter" free-text → structured-filter bridge. The core of Epic 3; 3.3–3.8 are
+  cheap polish that can ride along or follow separately.
+- **Issue F** — Epic 1.7–1.9: `partnered_customers[]`/count, `key_export_markets[]`, and
+  verification badges (VAT/registry/website-live/cert-DB checks). Extends the credibility layer
+  Epic 1 already shipped; 1.10 (`extension_data`) is lower priority and Pro-gated, can wait.
+- **Issue G** — Epic 2.4–2.6: rename/pin/archive projects, cross-project search, soft data lock-in
+  messaging on cancel. Closes out the persistent-projects epic.
+- **Issue H** — Epic 8.2 + 8.5 + 8.6: residual effort tuning on the two Sonnet-tier verifiers, raise
+  scout/qual concurrency within rate limits, cap the grounded-qualifier iteration loop. Cheap
+  latency scraps, bundle-able into one PR.
+- **Issue I** — Epic 7.2 + 7.4 + 7.5: review/social-post credit rewards, persistent "earn more"
+  sidebar CTA, always-visible Upgrade button. Growth-flywheel polish, low effort each.
+- **Issue J** *(larger, sequence later)* — Epic 8.7: persistent, reusable supplier store/cache for
+  instant repeat/similar-query results. The real "become lookup-fast" move; needs a design pass on
+  cache-key/staleness before implementation.
+- **Issue K** *(larger, sequence later)* — Epic 4: Product as a first-class object (name/category/
+  images, child of supplier) + composer mode buttons. Deliberately excludes the dropped
+  research/ideation/image-gen/full-profile/shipment-data surfaces (points 29–33).
+- **Issue L** *(strategic decision needed first, not ready to file as an implementation issue)* —
+  Epic 6.1–6.3: whether to introduce a credit currency alongside/instead of flat event limits, daily
+  free-tier refresh, and Pro-gated upgrade cards. Needs a product decision before scoping.
+- **Issue M** *(grab-bag, fold in opportunistically)* — Epic 5: chat/UX polish (saved chats, grouped
+  results, thumbs up/down, share button, disclaimer bar, sidebar pin/collapse, help entry). Each
+  item is cheap; bundle 2–3 at a time rather than filing 8 tiny issues.
