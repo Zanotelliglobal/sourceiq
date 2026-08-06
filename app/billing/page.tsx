@@ -55,6 +55,9 @@ export default function BillingPage() {
       .then(r => (r.ok ? r.json() : null))
       .then(d => { if (d?.seats) setSeats(d.seats); })
       .catch(() => {});
+    // `t` is intentionally omitted: this fetch should run once on mount, not
+    // re-run (and re-hit the API) every time the user switches language.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkout(tierKey: string) {

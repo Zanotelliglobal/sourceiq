@@ -134,6 +134,10 @@ export default function Dashboard() {
 
     load();
     return () => { cancelled = true; clearTimeout(timer); };
+    // `t` is intentionally omitted: this starts a self-rescheduling poll loop
+    // that should run once on mount, not restart every time the user switches
+    // language.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stats = {
