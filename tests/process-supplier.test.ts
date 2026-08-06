@@ -45,10 +45,21 @@ function fakeDb() {
             }
             return { changes: row ? 1 : 0, lastInsertRowid: undefined };
           }
+          if (/^\s*update\s+suppliers\s+set\s+enrichment/i.test(sql)) {
+            const [enrichment, id] = params;
+            const row = rows.find(r => r.id === id);
+            if (row) row.enrichment = enrichment;
+            return { changes: row ? 1 : 0, lastInsertRowid: undefined };
+          }
           return { changes: 0, lastInsertRowid: undefined };
         },
         async get(...params: unknown[]) {
-          if (/^\s*select/i.test(sql)) return rows.find(r => r.id === params[0]);
+          // Return a snapshot copy, mirroring a real SELECT — later UPDATEs to
+          // the underlying row must not retroactively mutate an already-read result.
+          if (/^\s*select/i.test(sql)) {
+            const row = rows.find(r => r.id === params[0]);
+            return row ? { ...row } : undefined;
+          }
           return undefined;
         },
         async all() { return rows; },
@@ -117,8 +128,15 @@ function baseDeps(overrides: Partial<ProcessSupplierDeps> = {}): { deps: Process
   return { deps, events };
 }
 
+const expectedEnrichmentJson = JSON.stringify({
+  market_position: "Established mid-tier player.",
+  key_risks: [] as string[],
+  key_strengths: [] as string[],
+  recommended_action: "pursue",
+});
+
 describe("makeProcessSupplier", () => {
-  it("inserts the supplier and sends supplier_found BEFORE the contact scrape resolves", async () => {
+  it("inserts the supplier with enrichment=null and sends supplier_found BEFORE enrichment or the contact scrape resolves", async () => {
     let releaseScrape!: () => void;
     const gate = new Promise<void>(resolve => { releaseScrape = resolve; });
     let scrapeResolved = false;
@@ -133,28 +151,52 @@ describe("makeProcessSupplier", () => {
 
     await process(scoutSupplier());
 
-    // The supplier is already inserted and streamed — the scrape has not
-    // resolved yet, proving it is off the critical path.
-    expect(events.some(e => e.type === "supplier_found")).toBe(true);
+    // The supplier is already inserted and streamed — enrichment and the
+    // scrape have not resolved yet, proving both are off the critical path.
+    const found = events.find(e => e.type === "supplier_found") as { supplier: { enrichment: string | null } };
+    expect(found.supplier.enrichment).toBeNull();
     expect(scrapeResolved).toBe(false);
-    expect(deps.backgroundTasks.length).toBe(1);
+    expect(deps.backgroundTasks.length).toBe(2);
 
-    // Now let the background scrape finish and confirm it patches the row
-    // and streams a follow-up event.
+    // Now let both background tasks finish and confirm each patches the row
+    // and streams its own follow-up event.
     releaseScrape();
     await Promise.allSettled(deps.backgroundTasks);
 
     expect(scrapeResolved).toBe(true);
-    const updated = events.find(e => e.type === "supplier_updated");
-    expect(updated).toMatchObject({
+    const contactUpdate = events.find(e => e.type === "supplier_updated" && "contact_email" in e);
+    expect(contactUpdate).toMatchObject({
       contact_email: "info@acme.example",
       contact_url: "https://acme.example/contact",
       contact_phone: "+1 555 0100",
       contact_linkedin: "",
     });
+    const enrichUpdate = events.find(e => e.type === "supplier_updated" && "enrichment" in e);
+    expect(enrichUpdate).toMatchObject({ enrichment: expectedEnrichmentJson });
   });
 
-  it("does not scrape when the scout already surfaced a contact email", async () => {
+  it("falls back to a neutral placeholder when enrichment fails, without crashing", async () => {
+    const failingEnricher = async () => { throw new Error("llm down"); };
+    const { deps, events } = baseDeps({
+      runEnricherAgent: failingEnricher,
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await expect(process(scoutSupplier())).resolves.toBeUndefined();
+    const settled = await Promise.allSettled(deps.backgroundTasks);
+    expect(settled.every(r => r.status === "fulfilled")).toBe(true);
+
+    const enrichUpdate = events.find(e => e.type === "supplier_updated" && "enrichment" in e) as { enrichment: string };
+    expect(JSON.parse(enrichUpdate.enrichment)).toMatchObject({
+      market_position: "Unknown",
+      key_risks: [],
+      key_strengths: [],
+      recommended_action: "monitor",
+    });
+  });
+
+  it("does not scrape when the scout already surfaced a contact email, but still enriches in the background", async () => {
     let scrapeCalled = false;
     const scrape = async (): Promise<ContactChannels> => {
       scrapeCalled = true;
@@ -166,12 +208,15 @@ describe("makeProcessSupplier", () => {
     await process(scoutSupplier({ contact_email: "sales@acme.example" }));
 
     expect(scrapeCalled).toBe(false);
-    expect(deps.backgroundTasks.length).toBe(0);
+    expect(deps.backgroundTasks.length).toBe(1);
     const found = events.find(e => e.type === "supplier_found") as { supplier: { contact_email: string } };
     expect(found.supplier.contact_email).toBe("sales@acme.example");
+
+    await Promise.allSettled(deps.backgroundTasks);
+    expect(events.some(e => e.type === "supplier_updated" && "enrichment" in e)).toBe(true);
   });
 
-  it("does not crash and emits no supplier_updated when the scrape fails", async () => {
+  it("does not crash and emits no contact supplier_updated when the scrape fails", async () => {
     const failingScrape = async (): Promise<ContactChannels> => {
       throw new Error("timeout");
     };
@@ -179,14 +224,14 @@ describe("makeProcessSupplier", () => {
     const process = makeProcessSupplier(deps, AGENT);
 
     await expect(process(scoutSupplier())).resolves.toBeUndefined();
-    expect(deps.backgroundTasks.length).toBe(1);
+    expect(deps.backgroundTasks.length).toBe(2);
 
     const settled = await Promise.allSettled(deps.backgroundTasks);
     expect(settled.every(r => r.status === "fulfilled")).toBe(true);
-    expect(events.some(e => e.type === "supplier_updated")).toBe(false);
+    expect(events.some(e => e.type === "supplier_updated" && "contact_email" in e)).toBe(false);
   });
 
-  it("does not emit supplier_updated when the scrape resolves with nothing found", async () => {
+  it("does not emit a contact supplier_updated when the scrape resolves with nothing found", async () => {
     const emptyScrape = async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" });
     const { deps, events } = baseDeps({ scrapeSupplierContact: emptyScrape });
     const process = makeProcessSupplier(deps, AGENT);
@@ -194,6 +239,6 @@ describe("makeProcessSupplier", () => {
     await process(scoutSupplier());
     await Promise.allSettled(deps.backgroundTasks);
 
-    expect(events.some(e => e.type === "supplier_updated")).toBe(false);
+    expect(events.some(e => e.type === "supplier_updated" && "contact_email" in e)).toBe(false);
   });
 });

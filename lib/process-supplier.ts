@@ -1,15 +1,16 @@
 // ─── PER-SUPPLIER DISCOVERY PIPELINE ──────────────────────────────────────────
 // Extracted from app/api/orchestrate/route.ts (Issue #30) so the
-// qualify → enrich → insert → stream → (background) contact-scrape → patch
+// qualify → insert → stream → (background) enrich + contact-scrape → patch
 // pipeline is unit-testable in isolation, without spinning up the whole SSE
 // route or hitting real LLM/network calls.
 //
-// Why: the deterministic contact scrape (lib/contact.ts) was the last thing
-// left on the critical path between "supplier qualified" and "card appears in
-// the UI" — up to ~10s per supplier (homepage + 2 contact pages, 5s each).
-// Now a supplier is inserted and streamed via `supplier_found` the instant
-// it's qualified+enriched, with empty contact_* fields. The scrape then runs
-// in the background; if it finds anything, it UPDATEs the row and emits a
+// Why: enrichment (an LLM call) and the deterministic contact scrape
+// (lib/contact.ts) were the last things left on the critical path between
+// "supplier qualified" and "card appears in the UI" — tens of seconds per
+// supplier. Now a supplier is inserted and streamed via `supplier_found` the
+// instant it's qualified, with enrichment=null and empty contact_* fields.
+// Enrichment and the contact scrape then run in the background, each
+// independently; whichever finds something UPDATEs the row and emits a
 // `supplier_updated` event so the client can patch the card in place.
 
 import { getDb } from "@/lib/db";
@@ -47,8 +48,8 @@ export type ProcessSupplierDeps = {
   groundingOn: boolean;
   send: (data: Record<string, unknown>) => void;
   track: (stage: string, model: string) => (u: unknown) => void;
-  // Background contact-scrape tasks are pushed here instead of being awaited
-  // inline, so the route can `await Promise.allSettled(backgroundTasks)`
+  // Background enrichment/contact-scrape tasks are pushed here instead of
+  // being awaited inline, so the route can `await Promise.allSettled(backgroundTasks)`
   // before closing the SSE stream — nothing is lost, but nothing blocks the
   // critical path (insert + supplier_found) either.
   backgroundTasks: Promise<void>[];
@@ -63,9 +64,9 @@ export type ProcessSupplierDeps = {
 
 /**
  * Build the per-supplier processor for one scout agent: qualify (cheap →
- * grounded for the risky band) → enrich → insert (contact fields empty except
- * any email the scout already surfaced) → stream `supplier_found` → background
- * contact scrape → `supplier_updated` on resolution.
+ * grounded for the risky band) → insert (enrichment null, contact fields empty
+ * except any email the scout already surfaced) → stream `supplier_found` →
+ * background enrich + contact scrape → `supplier_updated` on each resolution.
  */
 export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanEntry) {
   const qualifierAgent = deps.runQualifierAgent ?? runQualifierAgent;
@@ -94,13 +95,6 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
       } catch { /* keep the cheap-pass score on failure */ }
     }
 
-    let enrichment;
-    try {
-      enrichment = await enricherAgent(s, score, deps.categoryLabel, deps.track("enricher", AGENT_MODELS.enricher));
-    } catch {
-      enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
-    }
-
     // Every discovered supplier enters the Long List. Progression through
     // Contacted → Responded → Short List is driven by the outreach campaign.
     const funnel_stage = "long_list";
@@ -116,10 +110,11 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     const review_score = clampReviewScore(s.review_score);
     const capability_tags = JSON.stringify(filterCapabilityTags(s.capability_tags));
 
-    // Insert immediately and stream — contact_url/phone/linkedin always start
-    // empty (they can only come from the scrape below); contact_email is
-    // filled in now ONLY if the scout already surfaced one directly (a
-    // synchronous, zero-latency value — no reason to withhold it).
+    // Insert immediately and stream — enrichment starts null (it can only
+    // come from the background enrich task below); contact_url/phone/linkedin
+    // always start empty too (they can only come from the scrape below).
+    // contact_email is filled in now ONLY if the scout already surfaced one
+    // directly (a synchronous, zero-latency value — no reason to withhold it).
     const result = await deps.db.prepare(`
       INSERT INTO suppliers
         (event_id, name, country, city, description, capabilities, certifications,
@@ -134,13 +129,31 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
         s.contact_email || null, null, null, null,
         JSON.stringify(s.data_sources), agent.label, deps.waveNumber,
         score.overall_score, score.rationale, JSON.stringify(score.breakdown),
-        JSON.stringify(enrichment), funnel_stage,
+        null, funnel_stage,
         business_type, employee_count, founded_year, review_score, capability_tags
       );
 
     const supplierId = result.lastInsertRowid;
     const saved = await deps.db.prepare("SELECT * FROM suppliers WHERE id=?").get(supplierId) as Supplier;
     deps.send({ type: "supplier_found", supplier: saved, agent_id: agent.id, agent_label: agent.label });
+
+    // Enrichment runs OFF the critical path — the card is already streamed.
+    // Fire-and-forget, but tracked in backgroundTasks so the route can await
+    // completion before closing the SSE stream. On failure, fall back to a
+    // neutral placeholder (mirrors the prior inline behavior) rather than
+    // leaving the card without a recommendation indefinitely.
+    const enrichTask = (async () => {
+      let enrichment;
+      try {
+        enrichment = await enricherAgent(s, score, deps.categoryLabel, deps.track("enricher", AGENT_MODELS.enricher));
+      } catch {
+        enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
+      }
+      const enrichmentJson = JSON.stringify(enrichment);
+      await deps.db.prepare(`UPDATE suppliers SET enrichment=? WHERE id=?`).run(enrichmentJson, supplierId);
+      deps.send({ type: "supplier_updated", id: supplierId, enrichment: enrichmentJson });
+    })();
+    deps.backgroundTasks.push(enrichTask);
 
     // Contact scrape runs OFF the critical path — the card is already
     // streamed. Fire-and-forget, but tracked in backgroundTasks so the route
