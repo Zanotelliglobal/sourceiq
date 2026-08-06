@@ -206,33 +206,33 @@ contact-unlock paywall (6.5) remains eligible — see the second batch below for
 - ✅ (unplanned, filed mid-stream) **#25** — model-aware token cost accounting (follow-up from #24)
 - ✅ (unplanned, filed mid-stream) **#30/#31** — defer enrichment fully off critical path; Growth pricing tier
 
-## Second batch to file as GitHub issues
+## Second batch — filed
 
 Ordered by the sequencing above (3 → 8.7/4 → remaining growth/latency scraps → 5), each scoped
 tightly enough to ship independently like the first batch:
 
-- **Issue E** — Epic 3.1–3.2: filter panel with tabbed groups (General/Product/Profile/Highlight/
-  Verification) + "AI filter" free-text → structured-filter bridge. The core of Epic 3; 3.3–3.8 are
-  cheap polish that can ride along or follow separately.
-- **Issue F** — Epic 1.7–1.9: `partnered_customers[]`/count, `key_export_markets[]`, and
+- ✅ **Issue E** (#38) — Epic 3.1–3.2: filter panel with tabbed groups (General/Product/Profile/
+  Highlight/Verification) + "AI filter" free-text → structured-filter bridge. The core of Epic 3;
+  3.3–3.8 are cheap polish that can ride along or follow separately.
+- ✅ **Issue F** (#39) — Epic 1.7–1.9: `partnered_customers[]`/count, `key_export_markets[]`, and
   verification badges (VAT/registry/website-live/cert-DB checks). Extends the credibility layer
   Epic 1 already shipped; 1.10 (`extension_data`) is lower priority and Pro-gated, can wait.
-- **Issue G** — Epic 2.4–2.6: rename/pin/archive projects, cross-project search, soft data lock-in
-  messaging on cancel. Closes out the persistent-projects epic.
-- **Issue H** — Epic 8.2 + 8.5 + 8.6: residual effort tuning on the two Sonnet-tier verifiers, raise
-  scout/qual concurrency within rate limits, cap the grounded-qualifier iteration loop. Cheap
-  latency scraps, bundle-able into one PR.
-- **Issue I** — Epic 7.2 + 7.4 + 7.5: review/social-post credit rewards, persistent "earn more"
-  sidebar CTA, always-visible Upgrade button. Growth-flywheel polish, low effort each.
-- **Issue J** *(larger, sequence later)* — Epic 8.7: persistent, reusable supplier store/cache for
-  instant repeat/similar-query results. The real "become lookup-fast" move; needs a design pass on
-  cache-key/staleness before implementation.
-- **Issue K** *(larger, sequence later)* — Epic 4: Product as a first-class object (name/category/
-  images, child of supplier) + composer mode buttons. Deliberately excludes the dropped
-  research/ideation/image-gen/full-profile/shipment-data surfaces (points 29–33).
-- **Issue L** *(strategic decision needed first, not ready to file as an implementation issue)* —
-  Epic 6.1–6.3: whether to introduce a credit currency alongside/instead of flat event limits, daily
-  free-tier refresh, and Pro-gated upgrade cards. Needs a product decision before scoping.
-- **Issue M** *(grab-bag, fold in opportunistically)* — Epic 5: chat/UX polish (saved chats, grouped
-  results, thumbs up/down, share button, disclaimer bar, sidebar pin/collapse, help entry). Each
-  item is cheap; bundle 2–3 at a time rather than filing 8 tiny issues.
+- ✅ **Issue G** (#40) — Epic 2.4–2.6: rename/pin/archive projects, cross-project search, soft data
+  lock-in messaging on cancel. Closes out the persistent-projects epic.
+- ✅ **Issue H** (#41) — Epic 8.2 + 8.5 + 8.6: residual effort tuning on the two Sonnet-tier
+  verifiers, raise scout/qual concurrency within rate limits, cap the grounded-qualifier iteration
+  loop. Cheap latency scraps, bundle-able into one PR.
+- ✅ **Issue I** (#42) — Epic 7.2 + 7.4 + 7.5: review/social-post credit rewards, persistent "earn
+  more" sidebar CTA, always-visible Upgrade button. Growth-flywheel polish, low effort each.
+- ✅ **Issue J** (#43) *(larger, sequence later)* — Epic 8.7: persistent, reusable supplier
+  store/cache for instant repeat/similar-query results. The real "become lookup-fast" move; filed
+  as a design spike — cache-key/staleness policy first, implementation as a follow-up.
+- ✅ **Issue K** (#44) *(larger, sequence later)* — Epic 4: Product as a first-class object
+  (name/category/images, child of supplier) + composer mode buttons. Deliberately excludes the
+  dropped research/ideation/image-gen/full-profile/shipment-data surfaces (points 29–33).
+- ✅ **Issue L** (#45) *(strategic decision needed first)* — Epic 6.1–6.3: whether to introduce a
+  credit currency alongside/instead of flat event limits, daily free-tier refresh, and Pro-gated
+  upgrade cards. Filed as a decision issue (`question` label), not an implementation issue.
+- ✅ **Issue M** (#46) *(grab-bag, first bundle)* — Epic 5: chat/UX polish, bundle 1 (saved chats,
+  grouped results, thumbs up/down, disclaimer bar). Share button, cross-object nav, and sidebar
+  pin/collapse deferred to a later Epic 5 bundle rather than filing 8 tiny issues.
