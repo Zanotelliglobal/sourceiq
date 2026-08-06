@@ -5,12 +5,14 @@ type Stub = {
   id: number; name: string;
   contact_email: string | null; contact_url: string | null;
   contact_phone: string | null; contact_linkedin: string | null;
+  enrichment: string | null;
 };
 
 function supplier(overrides: Partial<Stub> = {}): Stub {
   return {
     id: 1, name: "Acme",
     contact_email: null, contact_url: null, contact_phone: null, contact_linkedin: null,
+    enrichment: null,
     ...overrides,
   };
 }
@@ -40,11 +42,19 @@ describe("applySupplierUpdated", () => {
     expect(result[0].contact_phone).toBe("+1 555 0000");
   });
 
+  it("merges the enrichment field into the matching supplier by id", () => {
+    const suppliers = [supplier({ id: 1 })];
+    const enrichment = JSON.stringify({ market_position: "Established mid-tier player.", recommended_action: "pursue" });
+    const result = applySupplierUpdated(suppliers, { type: "supplier_updated", id: 1, enrichment });
+
+    expect(result[0].enrichment).toBe(enrichment);
+  });
+
   it("returns the same array reference when there is nothing to patch", () => {
     const suppliers = [supplier({ id: 1 })];
     const result = applySupplierUpdated(suppliers, {
       type: "supplier_updated", id: 1,
-      contact_email: "", contact_url: "", contact_phone: "", contact_linkedin: "",
+      contact_email: "", contact_url: "", contact_phone: "", contact_linkedin: "", enrichment: "",
     });
 
     expect(result).toBe(suppliers);
