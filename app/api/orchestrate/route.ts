@@ -188,7 +188,11 @@ export async function POST(req: NextRequest) {
             db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
             annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
           }, agent);
-          const qualConcurrency = Math.max(1, Number(process.env.QUAL_CONCURRENCY) || 4);
+          // #41 (Epic 8.5): default raised 4->6. Most qualifier calls are Haiku
+          // (cheap, high rate limits); only the thin-evidence band escalates to
+          // the Sonnet-tier grounded qualifier, so headroom here is dominated by
+          // Haiku's limits, not Sonnet's. Still env-overridable per deployment.
+          const qualConcurrency = Math.max(1, Number(process.env.QUAL_CONCURRENCY) || 6);
           let qCursor = 0;
           const qWorker = async () => {
             while (qCursor < fresh.length) {
@@ -206,7 +210,13 @@ export async function POST(req: NextRequest) {
         };
 
         // Run scouts in a bounded pool — the big wall-clock win over sequential.
-        const scoutConcurrency = Math.max(1, Number(process.env.SCOUT_CONCURRENCY) || 3);
+        // #41 (Epic 8.5): default raised 3->4. Each scout is an Opus call with
+        // web_search, then fans out into its own qualConcurrency pool once it
+        // finishes scouting — so worst-case simultaneous model calls rises from
+        // ~3x4=12 to ~4x6=24. That's the new ceiling to watch for 429s against;
+        // still env-overridable per deployment if a given account's limits are
+        // tighter.
+        const scoutConcurrency = Math.max(1, Number(process.env.SCOUT_CONCURRENCY) || 4);
         let sCursor = 0;
         const sWorker = async () => {
           while (sCursor < plan.agents.length) {
