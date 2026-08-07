@@ -493,16 +493,31 @@ Return JSON only (after any searches):
   const messages: any[] = [{ role: "user", content: prompt }]; // eslint-disable-line @typescript-eslint/no-explicit-any
   let response: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-  // Resume the pause_turn loop until the model finishes its turn.
+  // Resume the pause_turn loop until the model finishes its turn — capped at 6
+  // resumes as a hard safety ceiling, but see the early-exit check below (#41,
+  // Epic 8.6): once a turn already contains a complete, parseable score, we
+  // return immediately instead of always chasing the cap. pause_turn just means
+  // a server-side web_search took long enough to need a resume — it says nothing
+  // about whether the model had already committed to an answer in that same
+  // turn, and the old code discarded every turn's text except the very last.
   for (let i = 0; i < 6; i++) {
     response = await client.messages.create({
       model: AGENT_MODELS.qualifierGrounded,
       max_tokens: 3000,
       thinking: { type: "adaptive" },
+      // #41 (Epic 8.2): residual effort tuning on the grounded qualifier — one of
+      // the two remaining Sonnet-tier verifiers. "medium" trims reasoning depth
+      // versus the implicit default while this is still a verification task, so
+      // we don't go to "low". Flagged for a before/after accuracy eval in
+      // staging rather than assumed safe from this sandbox alone.
+      effort: "medium",
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
       messages,
     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     onUsage?.(response.usage);
+
+    const confident = parseGroundedQualification(response.content);
+    if (confident) return confident;
 
     if (response.stop_reason === "pause_turn") {
       messages.push({ role: "assistant", content: response.content });
@@ -511,14 +526,29 @@ Return JSON only (after any searches):
     break;
   }
 
-  const text = response.content
+  const fallback = response && parseGroundedQualification(response.content);
+  if (fallback) return fallback;
+  return { overall_score: 60, rationale: "Limited data for qualification.", breakdown: { capability_fit: 60, quality_signals: 60, geographic_risk: 60, financial_stability: 60, compliance_readiness: 60 } };
+}
+
+// Parses a complete qualification object out of a turn's content, if present.
+// Shared by the early-exit check and the post-loop fallback so both agree on
+// what counts as "a confident result" — a valid JSON object with a numeric
+// overall_score, not just any JSON-shaped text.
+function parseGroundedQualification(content: any): QualificationResult | null { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const text = (content || [])
     .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
     .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
     .join("");
-
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return { overall_score: 60, rationale: "Limited data for qualification.", breakdown: { capability_fit: 60, quality_signals: 60, geographic_risk: 60, financial_stability: 60, compliance_readiness: 60 } };
-  return JSON.parse(match[0]) as QualificationResult;
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (typeof parsed?.overall_score !== "number") return null;
+    return parsed as QualificationResult;
+  } catch {
+    return null;
+  }
 }
 
 // ─── ENRICHER AGENT ───────────────────────────────────────────────────────────
@@ -622,6 +652,12 @@ Your FINAL message must be ONLY this JSON:
       model: AGENT_MODELS.contactFinder,
       max_tokens: 4000,
       thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      // #41 (Epic 8.2): residual effort tuning on the contact finder — the other
+      // remaining Sonnet-tier verifier. Finding a contact channel needs far less
+      // deliberation than verifying a capability claim, so "medium" effort is a
+      // conservative trim here too (see the qualifierGrounded comment above for
+      // the same eval caveat).
+      effort: "medium",
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
       messages,
     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
