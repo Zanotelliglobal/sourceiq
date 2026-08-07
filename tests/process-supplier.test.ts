@@ -51,6 +51,12 @@ function fakeDb() {
             if (row) row.enrichment = enrichment;
             return { changes: row ? 1 : 0, lastInsertRowid: undefined };
           }
+          if (/^\s*update\s+suppliers\s+set\s+verification_badges/i.test(sql)) {
+            const [verification_badges, id] = params;
+            const row = rows.find(r => r.id === id);
+            if (row) row.verification_badges = verification_badges;
+            return { changes: row ? 1 : 0, lastInsertRowid: undefined };
+          }
           return { changes: 0, lastInsertRowid: undefined };
         },
         async get(...params: unknown[]) {
@@ -88,6 +94,8 @@ function scoutSupplier(overrides: Partial<ScoutSupplier> = {}): ScoutSupplier {
     founded_year: 1992,
     review_score: 4.5,
     capability_tags: [],
+    partnered_customers: [],
+    key_export_markets: [],
     ...overrides,
   };
 }
@@ -104,6 +112,8 @@ const fakeEnricher = async () => ({
   key_strengths: [] as string[],
   recommended_action: "pursue",
 });
+
+const fakeCheckWebsiteLive = async () => false;
 
 const AGENT = { id: "scout-1", type: "broad-scout", label: "Market Scout Alpha", focus: "general" };
 
@@ -123,6 +133,7 @@ function baseDeps(overrides: Partial<ProcessSupplierDeps> = {}): { deps: Process
     runQualifierAgent: fakeQualifier,
     runQualifierAgentGrounded: fakeQualifier,
     runEnricherAgent: fakeEnricher,
+    checkWebsiteLive: fakeCheckWebsiteLive,
     ...overrides,
   };
   return { deps, events };
@@ -156,7 +167,8 @@ describe("makeProcessSupplier", () => {
     const found = events.find(e => e.type === "supplier_found") as { supplier: { enrichment: string | null } };
     expect(found.supplier.enrichment).toBeNull();
     expect(scrapeResolved).toBe(false);
-    expect(deps.backgroundTasks.length).toBe(2);
+    // enrich + contact scrape + website-live verification check.
+    expect(deps.backgroundTasks.length).toBe(3);
 
     // Now let both background tasks finish and confirm each patches the row
     // and streams its own follow-up event.
@@ -208,7 +220,8 @@ describe("makeProcessSupplier", () => {
     await process(scoutSupplier({ contact_email: "sales@acme.example" }));
 
     expect(scrapeCalled).toBe(false);
-    expect(deps.backgroundTasks.length).toBe(1);
+    // enrich + website-live check (no scrape task — the scout already had an email).
+    expect(deps.backgroundTasks.length).toBe(2);
     const found = events.find(e => e.type === "supplier_found") as { supplier: { contact_email: string } };
     expect(found.supplier.contact_email).toBe("sales@acme.example");
 
@@ -224,7 +237,8 @@ describe("makeProcessSupplier", () => {
     const process = makeProcessSupplier(deps, AGENT);
 
     await expect(process(scoutSupplier())).resolves.toBeUndefined();
-    expect(deps.backgroundTasks.length).toBe(2);
+    // enrich + contact scrape + website-live verification check.
+    expect(deps.backgroundTasks.length).toBe(3);
 
     const settled = await Promise.allSettled(deps.backgroundTasks);
     expect(settled.every(r => r.status === "fulfilled")).toBe(true);
@@ -240,5 +254,79 @@ describe("makeProcessSupplier", () => {
     await Promise.allSettled(deps.backgroundTasks);
 
     expect(events.some(e => e.type === "supplier_updated" && "contact_email" in e)).toBe(false);
+  });
+
+  it("normalizes partnered_customers/key_export_markets at insert and derives partnered_customer_count", async () => {
+    const { deps, events } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await process(scoutSupplier({
+      contact_email: "sales@acme.example",
+      partnered_customers: ["Nike", " Nike ", "Adidas", 42 as unknown as string],
+      key_export_markets: ["USA", "EU"],
+    }));
+
+    const found = events.find(e => e.type === "supplier_found") as {
+      supplier: { partnered_customers: string; partnered_customer_count: number | null; key_export_markets: string };
+    };
+    expect(JSON.parse(found.supplier.partnered_customers)).toEqual(["Nike", "Adidas"]);
+    expect(found.supplier.partnered_customer_count).toBe(2);
+    expect(JSON.parse(found.supplier.key_export_markets)).toEqual(["USA", "EU"]);
+  });
+
+  it("leaves partnered_customer_count null when no customers were named", async () => {
+    const { deps, events } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await process(scoutSupplier({ contact_email: "sales@acme.example" }));
+
+    const found = events.find(e => e.type === "supplier_found") as { supplier: { partnered_customer_count: number | null } };
+    expect(found.supplier.partnered_customer_count).toBeNull();
+  });
+
+  it("patches verification_badges and streams supplier_updated when the website-live check passes", async () => {
+    const { deps, events } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+      checkWebsiteLive: async () => true,
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await process(scoutSupplier({ contact_email: "sales@acme.example" }));
+    const found = events.find(e => e.type === "supplier_found") as { supplier: { verification_badges: string | null } };
+    expect(found.supplier.verification_badges).toBeNull();
+
+    await Promise.allSettled(deps.backgroundTasks);
+    const badgeUpdate = events.find(e => e.type === "supplier_updated" && "verification_badges" in e) as { verification_badges: string };
+    expect(JSON.parse(badgeUpdate.verification_badges)).toEqual(["website-live"]);
+  });
+
+  it("does not patch verification_badges when the website-live check fails or the site is unreachable", async () => {
+    const { deps, events } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+      checkWebsiteLive: async () => { throw new Error("timeout"); },
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await expect(process(scoutSupplier({ contact_email: "sales@acme.example" }))).resolves.toBeUndefined();
+    const settled = await Promise.allSettled(deps.backgroundTasks);
+    expect(settled.every(r => r.status === "fulfilled")).toBe(true);
+    expect(events.some(e => e.type === "supplier_updated" && "verification_badges" in e)).toBe(false);
+  });
+
+  it("does not run the website-live check when the scout found no website", async () => {
+    const { deps } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await process(scoutSupplier({ contact_email: "sales@acme.example", website: "" }));
+    // enrich only — no scrape task condition differs (website falsy skips the
+    // `!s.contact_email && s.website` scrape branch too, since website is ""),
+    // and the badge task is also skipped without a website.
+    expect(deps.backgroundTasks.length).toBe(1);
   });
 });

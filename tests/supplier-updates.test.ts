@@ -5,14 +5,14 @@ type Stub = {
   id: number; name: string;
   contact_email: string | null; contact_url: string | null;
   contact_phone: string | null; contact_linkedin: string | null;
-  enrichment: string | null;
+  enrichment: string | null; verification_badges: string | null;
 };
 
 function supplier(overrides: Partial<Stub> = {}): Stub {
   return {
     id: 1, name: "Acme",
     contact_email: null, contact_url: null, contact_phone: null, contact_linkedin: null,
-    enrichment: null,
+    enrichment: null, verification_badges: null,
     ...overrides,
   };
 }
@@ -54,10 +54,18 @@ describe("applySupplierUpdated", () => {
     const suppliers = [supplier({ id: 1 })];
     const result = applySupplierUpdated(suppliers, {
       type: "supplier_updated", id: 1,
-      contact_email: "", contact_url: "", contact_phone: "", contact_linkedin: "", enrichment: "",
+      contact_email: "", contact_url: "", contact_phone: "", contact_linkedin: "", enrichment: "", verification_badges: "",
     });
 
     expect(result).toBe(suppliers);
+  });
+
+  it("merges the verification_badges field into the matching supplier by id", () => {
+    const suppliers = [supplier({ id: 1 })];
+    const verification_badges = JSON.stringify(["website-live"]);
+    const result = applySupplierUpdated(suppliers, { type: "supplier_updated", id: 1, verification_badges });
+
+    expect(result[0].verification_badges).toBe(verification_badges);
   });
 
   it("leaves every supplier unchanged when the id does not match any", () => {

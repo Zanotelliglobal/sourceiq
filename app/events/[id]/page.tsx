@@ -20,6 +20,8 @@ type Supplier = {
   employees: string | null; annual_revenue: string | null; founded: string | null;
   business_type: string | null; employee_count: string | null; founded_year: number | null;
   review_score: number | null; capability_tags: string | null;
+  partnered_customers: string | null; partnered_customer_count: number | null;
+  key_export_markets: string | null; verification_badges: string | null;
   website: string | null; contact_email: string | null;
   contact_url: string | null; contact_phone: string | null; contact_linkedin: string | null;
   data_sources: string | null; scout_agent: string | null;
@@ -220,6 +222,9 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   const caps    = tryParse<string[]>(supplier.capabilities, []);
   const certs   = tryParse<string[]>(supplier.certifications, []);
   const tags    = tryParse<string[]>(supplier.capability_tags, []);
+  const customers = tryParse<string[]>(supplier.partnered_customers, []);
+  const exportMarkets = tryParse<string[]>(supplier.key_export_markets, []);
+  const badges  = tryParse<string[]>(supplier.verification_badges, []);
   const breakdown = tryParse<Record<string, number>>(supplier.score_breakdown, {});
   const enrichment = tryParse<{ market_position?: string; key_risks?: string[]; key_strengths?: string[]; recommended_action?: string } | null>(supplier.enrichment, null);
   const response = tryParse<SupplierResponse | null>(supplier.response_detail, null);
@@ -264,7 +269,14 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-start justify-between gap-3 z-10">
           <div>
-            <h2 className="font-bold text-slate-900 text-lg leading-tight">{supplier.name}</h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-bold text-slate-900 text-lg leading-tight">{supplier.name}</h2>
+              {badges.includes("website-live") && (
+                <span title={t("Website reachability verified automatically")} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                  <Check className="w-2.5 h-2.5" /> {t("Verified")}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-400 mt-0.5">{[supplier.city, supplier.country].filter(Boolean).join(", ")}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0"><X className="w-4 h-4" /></button>
@@ -307,6 +319,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               { label: "Employees", v: supplier.employee_count ?? supplier.employees },
               { label: "Rating", v: supplier.review_score !== null ? `★ ${supplier.review_score.toFixed(1)} / 5` : null },
               { label: "Est. Revenue", v: supplier.annual_revenue },
+              { label: "Partnered Customers", v: supplier.partnered_customer_count ? t("{n} known", { n: supplier.partnered_customer_count }) : null },
               { label: "Founded", v: supplier.founded_year ?? supplier.founded },
               { label: "Website", v: supplier.website },
               { label: "Contact", v: supplier.contact_email },
@@ -360,6 +373,30 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               <div className="flex flex-wrap gap-1.5">
                 {certs.map(c => (
                   <span key={c} className="text-xs bg-emerald-50 border border-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg font-medium">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Partnered customers */}
+          {customers.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Partnered Customers")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {customers.map(c => (
+                  <span key={c} className="text-xs bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-lg">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Key export markets */}
+          {exportMarkets.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Key Export Markets")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {exportMarkets.map(m => (
+                  <span key={m} className="text-xs bg-blue-50 border border-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-medium">{m}</span>
                 ))}
               </div>
             </div>
@@ -675,6 +712,7 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
   const caps  = tryParse<string[]>(supplier.capabilities, []);
   const certs = tryParse<string[]>(supplier.certifications, []);
   const tags  = tryParse<string[]>(supplier.capability_tags, []);
+  const badges = tryParse<string[]>(supplier.verification_badges, []);
   const stage = STAGE_STYLE[supplier.funnel_stage] || STAGE_STYLE.long_list;
   const stageLabelRaw = STAGES.find(s => s.key === supplier.funnel_stage)?.label || "";
   const stageLabel = stageLabelRaw ? t(stageLabelRaw) : "";
@@ -712,6 +750,11 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
               return <span title={t("LinkedIn — {value}", { value: supplier.contact_linkedin })} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">{t("in LinkedIn")}</span>;
             return <span title={t("No contact channel found yet")} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">{t("No contact")}</span>;
           })()}
+          {badges.includes("website-live") && (
+            <span title={t("Website reachability verified automatically")} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+              <Check className="w-2.5 h-2.5" /> {t("Verified")}
+            </span>
+          )}
         </div>
         <div className="text-xs text-slate-400 mt-0.5 truncate">
           {[supplier.city, supplier.country].filter(Boolean).join(", ")}
@@ -1731,6 +1774,9 @@ export default function EventPage() {
     { header: "Founded",         get: s => s.founded },
     { header: "Capabilities",    get: s => listVal(s.capabilities) },
     { header: "Certifications",  get: s => listVal(s.certifications) },
+    { header: "Partnered Customers", get: s => listVal(s.partnered_customers) },
+    { header: "Key Export Markets",  get: s => listVal(s.key_export_markets) },
+    { header: "Verification Badges", get: s => listVal(s.verification_badges) },
     { header: "Wave",            get: s => s.wave },
     { header: "Description",     get: s => s.description },
   ];

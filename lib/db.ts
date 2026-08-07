@@ -244,6 +244,16 @@ async function initSchema(): Promise<void> {
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS founded_year INTEGER;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS review_score DOUBLE PRECISION;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS capability_tags TEXT;
+    -- Trust-signal fields (Epic 1 continuation — issue #39): named customers
+    -- the supplier already ships to, markets it already exports to, and
+    -- lightweight verification badges (e.g. "website-live") computed
+    -- automatically rather than model-generated. Free text/JSON arrays with
+    -- no fixed vocabulary except verification_badges (see lib/taxonomy.ts).
+    -- All nullable — populated best-effort, never block insert on their absence.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS partnered_customers TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS partnered_customer_count INTEGER;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS key_export_markets TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS verification_badges TEXT;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
@@ -409,6 +419,12 @@ export type Supplier = {
   founded_year: number | null;
   review_score: number | null;
   capability_tags: string | null;
+  // Trust-signal fields (Epic 1 continuation — issue #39): see the matching
+  // ALTER TABLE comment above for what each column holds. All nullable.
+  partnered_customers: string | null;
+  partnered_customer_count: number | null;
+  key_export_markets: string | null;
+  verification_badges: string | null;
   website: string | null;
   data_sources: string | null;
   contact_email: string | null;

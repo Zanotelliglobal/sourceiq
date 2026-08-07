@@ -55,6 +55,12 @@ export const CAPABILITY_TAGS = [
 ] as const;
 export type CapabilityTag = (typeof CAPABILITY_TAGS)[number];
 
+/** Verification badges: lightweight, automatically-computed checks (not
+ *  model-generated) shown as trust signals on the supplier card. Small, fixed
+ *  set — extend as more checks land (VAT/registry lookup, cert-DB cross-check). */
+export const VERIFICATION_BADGE_TYPES = ["website-live"] as const;
+export type VerificationBadgeType = (typeof VERIFICATION_BADGE_TYPES)[number];
+
 // Case-insensitive lookup maps, built once at module load.
 const BUSINESS_TYPE_BY_LOWER = new Map(BUSINESS_TYPES.map((t) => [t.toLowerCase(), t]));
 const CAPABILITY_TAG_BY_LOWER = new Map(CAPABILITY_TAGS.map((t) => [t.toLowerCase(), t]));
@@ -134,6 +140,25 @@ export function filterCapabilityTags(raw: unknown): CapabilityTag[] {
       seen.add(canonical);
       out.push(canonical);
     }
+  }
+  return out;
+}
+
+/** Keep only non-empty, trimmed, de-duplicated strings, capped to a sane
+ *  count. Used for free-text arrays with no fixed vocabulary (partnered
+ *  customers, export markets) where we still don't want to store garbage
+ *  (blanks, exact-duplicate re-mentions) straight from model output. */
+export function sanitizeStringList(raw: unknown, maxItems = 20): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const v = item.trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+    if (out.length >= maxItems) break;
   }
   return out;
 }

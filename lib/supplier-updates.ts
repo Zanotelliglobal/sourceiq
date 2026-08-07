@@ -15,12 +15,13 @@ export function applySupplierUpdated<T extends { id: number }>(
   msg: Record<string, unknown>
 ): T[] {
   const id = msg.id as number;
-  const patch: Partial<Record<"contact_email" | "contact_url" | "contact_phone" | "contact_linkedin" | "enrichment", string>> = {};
+  const patch: Partial<Record<"contact_email" | "contact_url" | "contact_phone" | "contact_linkedin" | "enrichment" | "verification_badges", string>> = {};
   if (typeof msg.contact_email === "string" && msg.contact_email) patch.contact_email = msg.contact_email;
   if (typeof msg.contact_url === "string" && msg.contact_url) patch.contact_url = msg.contact_url;
   if (typeof msg.contact_phone === "string" && msg.contact_phone) patch.contact_phone = msg.contact_phone;
   if (typeof msg.contact_linkedin === "string" && msg.contact_linkedin) patch.contact_linkedin = msg.contact_linkedin;
   if (typeof msg.enrichment === "string" && msg.enrichment) patch.enrichment = msg.enrichment;
+  if (typeof msg.verification_badges === "string" && msg.verification_badges) patch.verification_badges = msg.verification_badges;
 
   if (Object.keys(patch).length === 0) return suppliers;
   return suppliers.map(s => (s.id === id ? { ...s, ...patch } : s));
