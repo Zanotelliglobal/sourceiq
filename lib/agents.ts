@@ -1,7 +1,34 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { scrapeSupplierContact } from "./contact";
+import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "./taxonomy";
+import { sanitizeFilterQuery, type SupplierFilters } from "./supplier-filters";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// ─── AGENT MODEL ASSIGNMENTS ──────────────────────────────────────────────────
+// Latency right-sizing: not every agent needs Opus. Plain structured
+// classification/extraction runs on Haiku; language-sensitive drafting and the
+// grounded (web-search) verifiers run on Sonnet; live discovery scouting and the
+// top-level orchestrator stay on Opus, where reasoning quality is the product.
+//
+// HARD CONSTRAINT: Haiku 4.5 supports neither adaptive thinking nor the `effort`
+// param (each returns HTTP 400). Any agent that uses `thinking: {type:"adaptive"}`
+// with web_search MUST run on Sonnet 4.6 or Opus — never Haiku. Today those are
+// the scout (kept on Opus), the grounded qualifier and the contact finder (Sonnet).
+export const AGENT_MODELS = {
+  classifier: "claude-haiku-4-5",         // plain JSON category classification
+  orchestrator: "claude-opus-4-7",        // low-volume, once-per-wave search-strategy planning
+  scout: "claude-opus-4-7",               // live discovery — the core product value (adaptive thinking + web_search)
+  qualifier: "claude-haiku-4-5",          // plain JSON scoring against a fixed rubric
+  qualifierGrounded: "claude-sonnet-4-6", // adaptive thinking + web_search (cannot be Haiku)
+  enricher: "claude-haiku-4-5",           // plain structured enrichment fields
+  contactFinder: "claude-sonnet-4-6",     // adaptive thinking + web_search (cannot be Haiku)
+  outreach: "claude-sonnet-4-6",          // drafts emails in the supplier's local language — fidelity matters
+  followUp: "claude-sonnet-4-6",          // localized follow-up drafting
+  supplierResponse: "claude-haiku-4-5",   // demo-mode reply simulation (low stakes)
+  replyClassifier: "claude-haiku-4-5",    // structured classification of a real inbound reply
+  filterMapper: "claude-haiku-4-5",       // plain JSON: free text -> structured filter fields
+} as const;
 
 // Optional token-usage reporter. Routes pass this to record real cost per call.
 export type UsageCb = (u: any) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -19,6 +46,17 @@ export type ScoutResult = {
   website: string;
   contact_email: string;
   data_sources: string[];
+  // Structured supplier record (Epic 1). The scout emits these during discovery;
+  // the persistence layer normalizes them to the controlled sets in lib/taxonomy.ts.
+  business_type: string;      // one of BUSINESS_TYPES ("" if unknown)
+  employee_count: string;     // a banded label from EMPLOYEE_BANDS ("" if unknown)
+  founded_year: number | null; // numeric founding year, or null if unknown
+  review_score: number | null; // 0-5 aggregate rating, or null if none found
+  capability_tags: string[];   // subset of CAPABILITY_TAGS
+  // Trust-signal fields (Epic 1 continuation, issue #39). Free text, no fixed
+  // vocabulary — only populated when the scout found explicit evidence.
+  partnered_customers: string[]; // named customers the supplier states it ships to
+  key_export_markets: string[];  // countries/regions the supplier states it already exports to
 };
 
 export type QualificationResult = {
@@ -76,7 +114,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.classifier,
     max_tokens: 300,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -94,6 +132,54 @@ Return JSON only:
   if (!categories.includes(parsed.category)) parsed.category = "Other";
   if (typeof parsed.title !== "string") parsed.title = "";
   return parsed;
+}
+
+// ─── FILTER MAPPER ────────────────────────────────────────────────────────────
+// "AI filter" bridge (Epic 3, issue #38): maps a free-text supplier
+// description to the same structured filter shape the filter panel produces,
+// so a buyer can type "ISO-certified manufacturers in Vietnam with 200+
+// employees" instead of clicking through every tab. Fields the query doesn't
+// mention are simply omitted rather than guessed.
+export async function runFilterMapperAgent(query: string, onUsage?: UsageCb): Promise<SupplierFilters> {
+  const prompt = `You are SourceIQ's Filter Mapper. Convert a buyer's free-text supplier search into structured filters over already-discovered suppliers.
+
+Allowed business_type values (use EXACT strings, omit if not mentioned): ${BUSINESS_TYPES.join(", ")}
+Allowed employee_count bands (use EXACT strings, omit if not mentioned): ${EMPLOYEE_BANDS.join(", ")}
+Allowed capability_tags (use EXACT strings, omit if not mentioned): ${CAPABILITY_TAGS.join(", ")}
+certifications: any certification name mentioned (e.g. "ISO 9001:2015"), written as commonly formatted. No fixed list.
+
+Query: "${query}"
+
+Only include a field if the query gives you a real signal for it — never guess a value just to fill a field. "200+ employees" means founded_year_min/max are NOT set, employee_count should include every band at or above 200. Return JSON only, omitting any key you have no signal for:
+{
+  "business_type": ["..."],
+  "employee_count": ["..."],
+  "founded_year_min": 1990,
+  "founded_year_max": 2010,
+  "review_score_min": 4,
+  "certifications": ["..."],
+  "capability_tags": ["..."]
+}`;
+
+  try {
+    const response = await client.messages.create({
+      model: AGENT_MODELS.filterMapper,
+      max_tokens: 400,
+      messages: [{ role: "user", content: prompt }],
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    onUsage?.((response as any).usage); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const text = response.content
+      .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
+      .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .join("");
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return {};
+    return sanitizeFilterQuery(JSON.parse(match[0]));
+  } catch {
+    return {};
+  }
 }
 
 // ─── ORCHESTRATOR ─────────────────────────────────────────────────────────────
@@ -139,7 +225,7 @@ Return JSON only:
 Include 5-7 agents in the array.`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.orchestrator,
     max_tokens: 1000,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -205,23 +291,40 @@ Wave: ${wave} | Focus: ${agentFocus}
 ${geoLine}
 ${avoidList}
 
+STRUCTURED FIELDS — use ONLY the controlled values below. These power filterable, comparable supplier cards, so consistency matters more than richness:
+- "business_type": exactly one of: ${BUSINESS_TYPES.join(", ")}. Pick the best fit; use "Other" only if none apply.
+- "employee_count": a headcount BAND, exactly one of: ${EMPLOYEE_BANDS.join(", ")}. Map whatever figure you find to the nearest band. Use "" if you have no signal.
+- "founded_year": the founding year as a plain integer (e.g. 1992), or null if not stated.
+- "review_score": an aggregate rating from 0 to 5 (one decimal is fine) ONLY if a credible source shows one (Google/Trustpilot/marketplace rating); otherwise null. Never invent a rating.
+- "capability_tags": zero or more tags from THIS controlled list only (silently drop anything not on it): ${CAPABILITY_TAGS.join(", ")}.
+- "partnered_customers": named companies the supplier explicitly states it already supplies (e.g. a "clients"/"case studies" page, a named reference). Only include customers actually named by a source — never infer or guess a plausible customer. Empty array if none found.
+- "key_export_markets": countries/regions the supplier explicitly states it already exports to or ships from/to. Only from explicit statements — empty array if none found.
+
 After searching, return a JSON array of supplier objects:
 [{
   "name": "Company Name",
   "country": "Country",
   "city": "City",
   "description": "2-3 sentence description of what they do and their specialization",
+  "business_type": "Manufacturer",
   "capabilities": ["capability 1", "capability 2", "capability 3", "capability 4"],
+  "capability_tags": ["OEM", "Low MOQ"],
   "certifications": ["ISO 9001:2015", "IATF 16949"],
   "employees": "200-500",
+  "employee_count": "201-500",
   "annual_revenue": "$20M-$50M",
   "founded": "1992",
+  "founded_year": 1992,
+  "review_score": 4.5,
+  "partnered_customers": ["Nike", "Adidas"],
+  "key_export_markets": ["USA", "EU"],
   "website": "www.example.com",
   "contact_email": "info@example.com",
   "data_sources": ["https://real-source-url-you-saw.com/page", "https://directory.com/listing"]
 }]
 
 For "contact_email": only include a real address you actually saw on the company's site or a directory listing (e.g. a sales/info/contact mailbox). If you did not find one, use "" — never guess or construct an address.
+For the structured fields: fill them only from what you actually saw. Leaving "founded_year"/"review_score" as null (or "employee_count"/"business_type" as "", or "partnered_customers"/"key_export_markets" as []) is strongly preferred over guessing.
 
 Your FINAL message must contain ONLY the JSON array (after you have finished searching).`;
 
@@ -254,7 +357,7 @@ Your FINAL message must contain ONLY the JSON array (after you have finished sea
 
   while (guard++ < 8) {
     const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
-      model: "claude-opus-4-7",
+      model: AGENT_MODELS.scout,
       max_tokens: 16000,
       thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 12 }],
@@ -322,7 +425,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.qualifier,
     max_tokens: 800,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -393,7 +496,7 @@ Return JSON only (after any searches):
   // Resume the pause_turn loop until the model finishes its turn.
   for (let i = 0; i < 6; i++) {
     response = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: AGENT_MODELS.qualifierGrounded,
       max_tokens: 3000,
       thinking: { type: "adaptive" },
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
@@ -444,7 +547,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.enricher,
     max_tokens: 500,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -516,7 +619,7 @@ Your FINAL message must be ONLY this JSON:
 
   while (guard++ < 6) {
     const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
-      model: "claude-opus-4-7",
+      model: AGENT_MODELS.contactFinder,
       max_tokens: 4000,
       thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
@@ -667,7 +770,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.outreach,
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -716,7 +819,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.followUp,
     max_tokens: 900,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -789,7 +892,7 @@ Return JSON only:
 If responded=false, still return the object with sentiment "negative", empty reply and reply_en, and empty highlights.`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.supplierResponse,
     max_tokens: 1200,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -857,7 +960,7 @@ Return JSON only:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: AGENT_MODELS.replyClassifier,
     max_tokens: 1200,
     messages: [{ role: "user", content: prompt }],
   } as any); // eslint-disable-line @typescript-eslint/no-explicit-any

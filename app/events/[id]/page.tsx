@@ -5,16 +5,24 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   X, Check, Minus, Bell, Star, Undo2, Sparkles, Lock, Hand,
-  Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown,
+  Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown, SlidersHorizontal,
 } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import FunnelExplainer from "@/components/FunnelExplainer";
+import { applySupplierUpdated } from "@/lib/supplier-updates";
+import { filterSuppliers, isFiltersEmpty, type SupplierFilters } from "@/lib/supplier-filters";
+import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "@/lib/taxonomy";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
   id: number; event_id: number; name: string; country: string; city: string | null;
   description: string; capabilities: string; certifications: string | null;
   employees: string | null; annual_revenue: string | null; founded: string | null;
+  business_type: string | null; employee_count: string | null; founded_year: number | null;
+  review_score: number | null; capability_tags: string | null;
+  partnered_customers: string | null; partnered_customer_count: number | null;
+  key_export_markets: string | null; verification_badges: string | null;
   website: string | null; contact_email: string | null;
   contact_url: string | null; contact_phone: string | null; contact_linkedin: string | null;
   data_sources: string | null; scout_agent: string | null;
@@ -28,6 +36,11 @@ type SupplierResponse = {
   responded: boolean; sentiment: "positive" | "negative"; language: string;
   reply: string; reply_en: string;
   capacity_confirmed: string; lead_time: string; highlights: string[];
+};
+
+// One message in a supplier's revisitable outreach thread (GET /api/outreach-log).
+type OutreachLogEntry = {
+  id: number; direction: string; subject: string | null; body: string; sent_at: string;
 };
 
 type AgentRun = {
@@ -171,32 +184,8 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-// Shared modal accessibility: Esc-to-close, initial focus into the dialog, a
-// lightweight focus trap so keyboard users can't tab out, and focus restoration
-// to the previously focused element on close. Returns a ref for the dialog node.
-function useModalA11y(onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const node = ref.current;
-    node?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
-      if (e.key === "Tab" && node) {
-        const f = node.querySelectorAll<HTMLElement>(
-          'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
-        );
-        if (f.length === 0) return;
-        const first = f[0], last = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); previouslyFocused?.focus?.(); };
-  }, [onClose]);
-  return ref;
-}
+// useModalA11y lives in hooks/useModalA11y.ts (extracted for #40 so the
+// dashboard/billing modals can share it too) — imported above.
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
@@ -209,6 +198,10 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   const t = useT();
   const caps    = tryParse<string[]>(supplier.capabilities, []);
   const certs   = tryParse<string[]>(supplier.certifications, []);
+  const tags    = tryParse<string[]>(supplier.capability_tags, []);
+  const customers = tryParse<string[]>(supplier.partnered_customers, []);
+  const exportMarkets = tryParse<string[]>(supplier.key_export_markets, []);
+  const badges  = tryParse<string[]>(supplier.verification_badges, []);
   const breakdown = tryParse<Record<string, number>>(supplier.score_breakdown, {});
   const enrichment = tryParse<{ market_position?: string; key_risks?: string[]; key_strengths?: string[]; recommended_action?: string } | null>(supplier.enrichment, null);
   const response = tryParse<SupplierResponse | null>(supplier.response_detail, null);
@@ -216,6 +209,28 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
   const [showReplyEn, setShowReplyEn] = useState(false);
   const replyForeign = response?.language && response.language.toLowerCase() !== "english";
   const dialogRef = useModalA11y(onClose);
+
+  // Revisitable outreach thread: every RFI/follow-up sent and every reply
+  // received for this supplier, oldest first. Self-fetched so the panel stays
+  // a drop-in presentational component driven only by the `supplier` prop.
+  const [thread, setThread] = useState<OutreachLogEntry[] | null>(null);
+  const [threadError, setThreadError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setThread(null);
+    setThreadError(false);
+    (async () => {
+      try {
+        const res = await fetch(`/api/outreach-log?supplier_id=${supplier.id}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (alive) setThread(data.entries || []);
+      } catch {
+        if (alive) setThreadError(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [supplier.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -231,7 +246,14 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-start justify-between gap-3 z-10">
           <div>
-            <h2 className="font-bold text-slate-900 text-lg leading-tight">{supplier.name}</h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-bold text-slate-900 text-lg leading-tight">{supplier.name}</h2>
+              {badges.includes("website-live") && (
+                <span title={t("Website reachability verified automatically")} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                  <Check className="w-2.5 h-2.5" /> {t("Verified")}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-400 mt-0.5">{[supplier.city, supplier.country].filter(Boolean).join(", ")}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0"><X className="w-4 h-4" /></button>
@@ -270,9 +292,12 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {/* Quick facts */}
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Employees", v: supplier.employees },
+              { label: "Business Type", v: supplier.business_type },
+              { label: "Employees", v: supplier.employee_count ?? supplier.employees },
+              { label: "Rating", v: supplier.review_score !== null ? `★ ${supplier.review_score.toFixed(1)} / 5` : null },
               { label: "Est. Revenue", v: supplier.annual_revenue },
-              { label: "Founded", v: supplier.founded },
+              { label: "Partnered Customers", v: supplier.partnered_customer_count ? t("{n} known", { n: supplier.partnered_customer_count }) : null },
+              { label: "Founded", v: supplier.founded_year ?? supplier.founded },
               { label: "Website", v: supplier.website },
               { label: "Contact", v: supplier.contact_email },
               { label: "Contact Page", v: supplier.contact_url },
@@ -306,6 +331,18 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
             </div>
           )}
 
+          {/* Capability tags — controlled-vocabulary highlights */}
+          {tags.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Capability Tags")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map(tag => (
+                  <span key={tag} className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-medium">{tag}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Certifications */}
           {certs.length > 0 && (
             <div>
@@ -313,6 +350,30 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               <div className="flex flex-wrap gap-1.5">
                 {certs.map(c => (
                   <span key={c} className="text-xs bg-emerald-50 border border-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg font-medium">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Partnered customers */}
+          {customers.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Partnered Customers")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {customers.map(c => (
+                  <span key={c} className="text-xs bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-lg">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Key export markets */}
+          {exportMarkets.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("Key Export Markets")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {exportMarkets.map(m => (
+                  <span key={m} className="text-xs bg-blue-50 border border-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-medium">{m}</span>
                 ))}
               </div>
             </div>
@@ -411,6 +472,38 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
               )}
             </div>
           )}
+
+          {/* Outreach thread — the full, revisitable correspondence history for
+              this supplier: every RFI/follow-up sent and every reply received,
+              oldest first. Self-fetched from /api/outreach-log on open. */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+              <Mail className="w-3 h-3" /> {t("Outreach History")}
+            </div>
+            {threadError ? (
+              <p className="text-sm text-red-600">{t("Could not load outreach history.")}</p>
+            ) : thread === null ? (
+              <p className="text-sm text-slate-400">{t("Loading…")}</p>
+            ) : thread.length === 0 ? (
+              <p className="text-sm text-slate-400 italic bg-slate-50 rounded-xl p-4 border border-slate-100">{t("No outreach sent yet.")}</p>
+            ) : (
+              <ol className="relative border-l border-slate-200 ml-2 space-y-3">
+                {thread.map(msg => (
+                  <li key={msg.id} className="ml-4">
+                    <div className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 border-white ${msg.direction === "inbound" ? "bg-emerald-400" : "bg-blue-400"}`} />
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${msg.direction === "inbound" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
+                        {msg.direction === "inbound" ? t("Received") : t("Sent")}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{relativeTime(msg.sent_at)}</span>
+                    </div>
+                    {msg.subject && <div className="text-xs font-semibold text-slate-700">{msg.subject}</div>}
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </div>
 
         {/* Action footer */}
@@ -595,6 +688,8 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
   const t = useT();
   const caps  = tryParse<string[]>(supplier.capabilities, []);
   const certs = tryParse<string[]>(supplier.certifications, []);
+  const tags  = tryParse<string[]>(supplier.capability_tags, []);
+  const badges = tryParse<string[]>(supplier.verification_badges, []);
   const stage = STAGE_STYLE[supplier.funnel_stage] || STAGE_STYLE.long_list;
   const stageLabelRaw = STAGES.find(s => s.key === supplier.funnel_stage)?.label || "";
   const stageLabel = stageLabelRaw ? t(stageLabelRaw) : "";
@@ -632,10 +727,17 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
               return <span title={t("LinkedIn — {value}", { value: supplier.contact_linkedin })} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">{t("in LinkedIn")}</span>;
             return <span title={t("No contact channel found yet")} className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">{t("No contact")}</span>;
           })()}
+          {badges.includes("website-live") && (
+            <span title={t("Website reachability verified automatically")} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+              <Check className="w-2.5 h-2.5" /> {t("Verified")}
+            </span>
+          )}
         </div>
         <div className="text-xs text-slate-400 mt-0.5 truncate">
           {[supplier.city, supplier.country].filter(Boolean).join(", ")}
-          {supplier.employees && <span className="ml-2">· {supplier.employees}</span>}
+          {supplier.business_type && <span className="ml-2">· {supplier.business_type}</span>}
+          {(supplier.employee_count ?? supplier.employees) && <span className="ml-2">· {supplier.employee_count ?? supplier.employees}</span>}
+          {supplier.review_score !== null && <span className="ml-2 text-amber-500">· ★ {supplier.review_score.toFixed(1)}</span>}
         </div>
       </td>
 
@@ -649,9 +751,18 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
         </div>
       </td>
 
-      {/* Capabilities — hidden on small */}
+      {/* Capability tags / capabilities — hidden on small */}
       <td className="px-3 py-3 hidden xl:table-cell max-w-xs">
-        <div className="text-xs text-slate-500 truncate">{caps.slice(0, 3).join(" · ")}</div>
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {tags.slice(0, 3).map(tag => (
+              <span key={tag} className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-1.5 py-0.5 rounded font-medium">{tag}</span>
+            ))}
+            {tags.length > 3 && <span className="text-[10px] text-slate-400">+{tags.length - 3}</span>}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-500 truncate">{caps.slice(0, 3).join(" · ")}</div>
+        )}
       </td>
 
       {/* Stage */}
@@ -978,6 +1089,232 @@ function CampaignConfirmModal({ count, anonymous, preview, onCancel, onConfirm }
   );
 }
 
+// ─── Structured filter panel ───────────────────────────────────────────────────
+// Filters the current event's already-discovered suppliers by the structured
+// fields Epic 1 (#20) populates. Tabbed like SourceReady's panel, minus tabs we
+// have no fields for yet: no "Highlight" (verification badges land in #39) and
+// no separate "Product" tab (capability tags — the product-facing signals —
+// live under "Product" here since there's no standalone Product object yet, #44).
+const FILTER_TABS = ["General", "Product", "Profile", "Verification"] as const;
+type FilterTab = (typeof FILTER_TABS)[number];
+
+function FilterPanel({ filters, onApply, onClose }: {
+  filters: SupplierFilters;
+  onApply: (f: SupplierFilters) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const dialogRef = useModalA11y(onClose);
+  const [draft, setDraft] = useState<SupplierFilters>(filters);
+  const [tab, setTab] = useState<FilterTab>("General");
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const toggleIn = (key: "business_type" | "employee_count" | "certifications" | "capability_tags", value: string) => {
+    setDraft(d => {
+      const current = d[key] ?? [];
+      const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+      return { ...d, [key]: next };
+    });
+  };
+
+  async function runAiFilter() {
+    if (aiQuery.trim().length < 3) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/filter-suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: aiQuery.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      const mapped = (await res.json()) as SupplierFilters;
+      setDraft(d => ({ ...d, ...mapped }));
+    } catch {
+      setAiError(t("Couldn't map that to filters — try being more specific."));
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  const clearAll = () => setDraft({});
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Filter suppliers")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
+        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+          <div>
+            <h3 className="font-bold text-slate-900">{t("Filter suppliers")}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{t("Narrow the current list by structured fields")}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="px-6 pt-4">
+          <div className="mb-3">
+            <label className="label">{t("AI filter — describe what you're looking for")}</label>
+            <div className="flex gap-2">
+              <input
+                className="input"
+                placeholder={t('e.g. "ISO-certified manufacturers in Vietnam with 200+ employees"')}
+                value={aiQuery}
+                onChange={e => setAiQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void runAiFilter(); } }}
+              />
+              <button
+                onClick={() => void runAiFilter()}
+                disabled={aiLoading || aiQuery.trim().length < 3}
+                className="btn-secondary py-2 px-3 whitespace-nowrap disabled:opacity-50"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> {aiLoading ? t("Mapping…") : t("Apply")}
+              </button>
+            </div>
+            {aiError && <p className="text-xs text-red-600 mt-1.5">{aiError}</p>}
+          </div>
+
+          <div className="flex items-center gap-1 border-b border-slate-200">
+            {FILTER_TABS.map(tb => (
+              <button
+                key={tb}
+                onClick={() => setTab(tb)}
+                className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-all ${
+                  tab === tb ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                {t(tb)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-6 pt-4 space-y-4">
+          {tab === "General" && (
+            <>
+              <div>
+                <label className="label">{t("Business type")}</label>
+                <div className="flex flex-wrap gap-2">
+                  {BUSINESS_TYPES.map(v => {
+                    const active = (draft.business_type ?? []).includes(v);
+                    return (
+                      <button key={v} type="button" onClick={() => toggleIn("business_type", v)}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                        {active && <Check className="w-3 h-3" />}{v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">{t("Founded after (year)")}</label>
+                  <input type="number" className="input" placeholder={t("e.g. 1990")}
+                    value={draft.founded_year_min ?? ""}
+                    onChange={e => setDraft(d => ({ ...d, founded_year_min: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <label className="label">{t("Founded before (year)")}</label>
+                  <input type="number" className="input" placeholder={t("e.g. 2015")}
+                    value={draft.founded_year_max ?? ""}
+                    onChange={e => setDraft(d => ({ ...d, founded_year_max: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === "Product" && (
+            <div>
+              <label className="label">{t("Capability tags")}</label>
+              <div className="flex flex-wrap gap-2">
+                {CAPABILITY_TAGS.map(v => {
+                  const active = (draft.capability_tags ?? []).includes(v);
+                  return (
+                    <button key={v} type="button" onClick={() => toggleIn("capability_tags", v)}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                      {active && <Check className="w-3 h-3" />}{v}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "Profile" && (
+            <>
+              <div>
+                <label className="label">{t("Employee count")}</label>
+                <div className="flex flex-wrap gap-2">
+                  {EMPLOYEE_BANDS.map(v => {
+                    const active = (draft.employee_count ?? []).includes(v);
+                    return (
+                      <button key={v} type="button" onClick={() => toggleIn("employee_count", v)}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                        {active && <Check className="w-3 h-3" />}{v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="label">{t("Minimum review score")}</label>
+                <select className="input" value={draft.review_score_min ?? ""}
+                  onChange={e => setDraft(d => ({ ...d, review_score_min: e.target.value ? Number(e.target.value) : undefined }))}>
+                  <option value="">{t("Any")}</option>
+                  {[1, 2, 3, 3.5, 4, 4.5].map(n => <option key={n} value={n}>{n}+</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {tab === "Verification" && (
+            <div>
+              <label className="label">{t("Certifications")}</label>
+              <input
+                className="input"
+                placeholder={t("Type a certification and press Enter (e.g. ISO 9001:2015)")}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const value = (e.target as HTMLInputElement).value.trim();
+                  if (!value) return;
+                  toggleIn("certifications", value);
+                  (e.target as HTMLInputElement).value = "";
+                }}
+              />
+              {(draft.certifications ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {(draft.certifications ?? []).map(c => (
+                    <span key={c} className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg">
+                      {c}<button type="button" onClick={() => toggleIn("certifications", c)} className="hover:text-blue-200"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
+          <button onClick={clearAll} className="btn-ghost py-2.5">{t("Clear all")}</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost py-2.5">{t("Cancel")}</button>
+            <button onClick={() => { onApply(draft); onClose(); }} className="btn-primary py-2.5 px-6">{t("Apply filters")}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function EventPage() {
   const t = useT();
@@ -992,6 +1329,11 @@ export default function EventPage() {
   const [liveAgents, setLiveAgents] = useState<{ agent_id: string; agent_label: string; status: string; message?: string }[]>([]);
   const [logs, setLogs]         = useState<string[]>([]);
   const [stageFilter, setStageFilter] = useState("all");
+  // Structured filter panel state (Epic 3, #38). Persisted per-event in
+  // localStorage so it survives reloads and isn't reset by SSE-driven
+  // supplier list updates — those only ever append/patch `suppliers`.
+  const [structuredFilters, setStructuredFilters] = useState<SupplierFilters>({});
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [outreachTarget, setOutreachTarget] = useState<Supplier | null>(null);
   const [editingBrief, setEditingBrief] = useState(false);
@@ -1013,6 +1355,20 @@ export default function EventPage() {
       .then(d => { if (d?.limits) setCanExport(Boolean(d.limits.export)); })
       .catch(() => {});
   }, []);
+
+  // Hydrate structured filters from localStorage on mount, then persist any
+  // change. Keyed per event so filters from one project don't leak into another.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(`sourceiq:filters:${id}`);
+      if (stored) setStructuredFilters(JSON.parse(stored));
+    } catch { /* corrupt/old value — ignore, start from an empty filter set */ }
+  }, [id]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`sourceiq:filters:${id}`, JSON.stringify(structuredFilters));
+    } catch { /* storage unavailable (e.g. private mode) — filters just won't persist */ }
+  }, [id, structuredFilters]);
 
   // Close the export format menu on any outside click.
   useEffect(() => {
@@ -1108,6 +1464,12 @@ export default function EventPage() {
       const s = msg.supplier as Supplier;
       setSuppliers(prev => prev.find(x => x.id === s.id) ? prev : [...prev, s]);
       addLog(`✓  ${s.name} (${s.country}) — ${s.ai_score}`);
+    }
+    if (type === "supplier_updated") {
+      // A background contact scrape (deferred off the critical path — see
+      // lib/process-supplier.ts) resolved after the card was already streamed.
+      // Patch the matching card in place with whatever channels it found.
+      setSuppliers(prev => applySupplierUpdated(prev, msg));
     }
     if (type === "agent_complete") {
       setLiveAgents(prev => prev.map(a => a.agent_id === msg.agent_id ? { ...a, status: "complete", message: `${msg.suppliers_found} leads delivered` } : a));
@@ -1347,7 +1709,7 @@ export default function EventPage() {
   if (!event) return <div className="text-center py-24 text-slate-400">{t("Event not found.")}</div>;
 
   // Filter + sort
-  const filtered = suppliers
+  const filtered = filterSuppliers(suppliers, structuredFilters)
     .filter(s => stageFilter === "all" || s.funnel_stage === stageFilter)
     .sort((a, b) =>
       sortBy === "score" ? (b.ai_score ?? 0) - (a.ai_score ?? 0) :
@@ -1358,6 +1720,15 @@ export default function EventPage() {
   const stageCounts = Object.fromEntries(
     STAGES.map(s => [s.key, s.key === "all" ? suppliers.length : suppliers.filter(x => x.funnel_stage === s.key).length])
   );
+
+  const activeFilterCount = [
+    structuredFilters.business_type,
+    structuredFilters.employee_count,
+    structuredFilters.certifications,
+    structuredFilters.capability_tags,
+  ].filter(v => (v?.length ?? 0) > 0).length
+    + (structuredFilters.founded_year_min != null || structuredFilters.founded_year_max != null ? 1 : 0)
+    + (structuredFilters.review_score_min != null ? 1 : 0);
 
   // ── Supplier exports (CSV / Excel / PDF) ──────────────────────────────────
   // All three formats share one column definition so the columns/order stay in
@@ -1380,6 +1751,9 @@ export default function EventPage() {
     { header: "Founded",         get: s => s.founded },
     { header: "Capabilities",    get: s => listVal(s.capabilities) },
     { header: "Certifications",  get: s => listVal(s.certifications) },
+    { header: "Partnered Customers", get: s => listVal(s.partnered_customers) },
+    { header: "Key Export Markets",  get: s => listVal(s.key_export_markets) },
+    { header: "Verification Badges", get: s => listVal(s.verification_badges) },
     { header: "Wave",            get: s => s.wave },
     { header: "Description",     get: s => s.description },
   ];
@@ -1713,6 +2087,21 @@ export default function EventPage() {
                 <Star className="w-3 h-3" /> {t("Shortlist all responders ({n})", { n: stageCounts["responded"] })}
               </button>
             )}
+            {suppliers.length > 0 && (
+              <button
+                onClick={() => setFilterPanelOpen(true)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${
+                  isFiltersEmpty(structuredFilters)
+                    ? "text-slate-600 border-slate-200 hover:bg-slate-100"
+                    : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                <SlidersHorizontal className="w-3 h-3" /> {t("Filters")}
+                {!isFiltersEmpty(structuredFilters) && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded bg-white/20 text-[10px]">{activeFilterCount}</span>
+                )}
+              </button>
+            )}
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t("Sort:")}</span>
             {(["score", "name", "wave"] as const).map(s => (
               <button
@@ -1857,6 +2246,15 @@ export default function EventPage() {
 
       {showAudit && (
         <AuditModal eventId={event.id} onClose={() => setShowAudit(false)} />
+      )}
+
+      {/* Structured filter panel (Epic 3, #38) */}
+      {filterPanelOpen && (
+        <FilterPanel
+          filters={structuredFilters}
+          onApply={setStructuredFilters}
+          onClose={() => setFilterPanelOpen(false)}
+        />
       )}
 
       {/* Bulk outreach confirmation */}

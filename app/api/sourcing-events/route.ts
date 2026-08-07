@@ -35,7 +35,7 @@ export async function GET() {
        LEFT JOIN suppliers s ON s.event_id = se.id
        WHERE se.org_id = ?
        GROUP BY se.id
-       ORDER BY se.created_at DESC`
+       ORDER BY se.pinned DESC, se.created_at DESC`
     )
     .all(ctx.orgId) as Array<Record<string, unknown> & { effective_status: string }>;
 

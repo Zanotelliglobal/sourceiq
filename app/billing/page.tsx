@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Minus } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
+import { useModalA11y } from "@/hooks/useModalA11y";
 import {
   TIERS,
   CADENCES,
@@ -13,6 +14,8 @@ import {
   type Cadence,
   type Tier,
 } from "@/lib/plans";
+
+type CancelImpact = { active_projects: number; supplier_count: number; outreach_count: number };
 
 type BillingStatus = {
   configured: boolean;
@@ -45,6 +48,11 @@ export default function BillingPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seats, setSeats] = useState<{ used: number; limit: number; unlimited: boolean } | null>(null);
+  // "What you'd lose" cancel/downgrade messaging (#40) — shown before we ever
+  // send the user to Stripe's portal, where the actual cancellation happens.
+  const [cancelImpactOpen, setCancelImpactOpen] = useState(false);
+  const [impact, setImpact] = useState<CancelImpact | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/billing/status")
@@ -55,6 +63,9 @@ export default function BillingPage() {
       .then(r => (r.ok ? r.json() : null))
       .then(d => { if (d?.seats) setSeats(d.seats); })
       .catch(() => {});
+    // `t` is intentionally omitted: this fetch should run once on mount, not
+    // re-run (and re-hit the API) every time the user switches language.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkout(tierKey: string) {
@@ -87,6 +98,28 @@ export default function BillingPage() {
     }
   }
 
+  // "Manage subscription" is also the only path to cancellation (Stripe's own
+  // portal handles the actual cancel/downgrade). Interstitial first, so buyers
+  // see what's at stake before they leave SourceIQ.
+  async function openCancelImpact() {
+    setCancelImpactOpen(true);
+    setImpactLoading(true);
+    setImpact(null);
+    try {
+      const r = await fetch("/api/billing/cancel-impact");
+      if (r.ok) setImpact(await r.json());
+    } catch {
+      /* modal shows a fallback message when impact stays null */
+    } finally {
+      setImpactLoading(false);
+    }
+  }
+
+  function confirmContinueToPortal() {
+    setCancelImpactOpen(false);
+    portal();
+  }
+
   const trialMsg = (() => {
     if (!status?.trial_ends_at) return null;
     const ms = new Date(status.trial_ends_at).getTime() - Date.now();
@@ -101,7 +134,7 @@ export default function BillingPage() {
   const isActivePaid = status?.status === "active" || status?.status === "past_due";
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
+    <div className="max-w-6xl mx-auto px-6 py-10">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("Billing & Subscription")}</h1>
         <p className="text-sm text-slate-500 mt-1">{t("Manage your SourceIQ plan and payment details.")}</p>
@@ -138,7 +171,7 @@ export default function BillingPage() {
             <div className="flex items-center gap-3">
               {cfg && <span className={`badge ${cfg.badge}`}>{t(cfg.label)}</span>}
               {status.has_customer && (
-                <button className="btn-secondary" disabled={busy !== null} onClick={portal}>
+                <button className="btn-secondary" disabled={busy !== null} onClick={openCancelImpact}>
                   {busy === "portal" ? t("Opening…") : t("Manage subscription")}
                 </button>
               )}
@@ -173,8 +206,8 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Tier comparison grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Tier comparison grid — column count tracks TIERS.length, not hardcoded */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {TIERS.map(tier => (
               <TierCard
                 key={tier.key}
@@ -186,7 +219,7 @@ export default function BillingPage() {
                 disabled={busy !== null}
                 isActivePaid={!!isActivePaid}
                 onSubscribe={() => checkout(tier.key)}
-                onManage={portal}
+                onManage={openCancelImpact}
                 t={t}
               />
             ))}
@@ -197,6 +230,81 @@ export default function BillingPage() {
           </div>
         </div>
       )}
+
+      {cancelImpactOpen && (
+        <CancelImpactModal
+          loading={impactLoading}
+          impact={impact}
+          onClose={() => setCancelImpactOpen(false)}
+          onContinue={confirmContinueToPortal}
+        />
+      )}
+    </div>
+  );
+}
+
+// "What you'd lose" summary (#40) shown before the user is handed off to
+// Stripe's portal to manage/cancel their subscription. Cancellation itself
+// still happens entirely in Stripe's UI — this only adds messaging.
+function CancelImpactModal({ loading, impact, onClose, onContinue }: {
+  loading: boolean;
+  impact: CancelImpact | null;
+  onClose: () => void;
+  onContinue: () => void;
+}) {
+  const t = useT();
+  const dialogRef = useModalA11y(onClose);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Before you manage your subscription")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 animate-slide-in outline-none p-6"
+      >
+        <h2 className="text-lg font-bold text-slate-900 mb-1">{t("Before you go…")}</h2>
+        <p className="text-sm text-slate-500 mb-4">
+          {t("If you cancel or downgrade, here's what's tied to your account today:")}
+        </p>
+
+        {loading ? (
+          <div className="space-y-2 mb-5">
+            <div className="shimmer h-5 w-full rounded" />
+            <div className="shimmer h-5 w-full rounded" />
+            <div className="shimmer h-5 w-3/4 rounded" />
+          </div>
+        ) : impact ? (
+          <ul className="space-y-2 mb-5 text-sm">
+            <li className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50">
+              <span className="text-slate-600">{t("Active sourcing projects")}</span>
+              <span className="font-bold text-slate-900">{impact.active_projects}</span>
+            </li>
+            <li className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50">
+              <span className="text-slate-600">{t("Suppliers discovered")}</span>
+              <span className="font-bold text-slate-900">{impact.supplier_count}</span>
+            </li>
+            <li className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50">
+              <span className="text-slate-600">{t("Outreach messages sent")}</span>
+              <span className="font-bold text-slate-900">{impact.outreach_count}</span>
+            </li>
+          </ul>
+        ) : (
+          <p className="text-sm text-red-600 mb-5">{t("Couldn't load your usage summary — you can still continue.")}</p>
+        )}
+
+        <p className="text-xs text-slate-400 mb-5">
+          {t("Your data isn't deleted, but a lower plan may limit what you can access or run going forward.")}
+        </p>
+
+        <div className="flex items-center justify-end gap-2">
+          <button className="btn-secondary" onClick={onClose}>{t("Keep my plan")}</button>
+          <button className="btn-primary" onClick={onContinue}>{t("Continue to Stripe")}</button>
+        </div>
+      </div>
     </div>
   );
 }

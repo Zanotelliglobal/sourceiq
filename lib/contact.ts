@@ -152,6 +152,30 @@ function merge(base: ContactChannels, add: Partial<ContactChannels>): ContactCha
   };
 }
 
+// Lightweight liveness probe backing the "website-live" verification badge
+// (Epic 1 continuation, issue #39). Deliberately looser than fetchHtml — no
+// content-type/HTML requirement, just "did the origin answer at all". HEAD
+// first (cheaper), falling back to GET for servers that reject HEAD.
+export async function checkWebsiteLive(website: string, timeoutMs = 5000): Promise<boolean> {
+  const origin = normalizeSite(website);
+  if (!origin) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = { "User-Agent": "Mozilla/5.0 (compatible; SourceIQ-ContactBot/1.0; +https://sourceiq.app)" };
+  try {
+    const head = await fetch(origin, { method: "HEAD", signal: controller.signal, redirect: "follow", headers });
+    if (head.status === 405 || head.status === 501) {
+      const get = await fetch(origin, { method: "GET", signal: controller.signal, redirect: "follow", headers });
+      return get.ok;
+    }
+    return head.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Scrape a supplier's own site for contact channels. Fetches the homepage, follows
 // a discovered contact link (or tries common slugs), and stops early once it has
 // a solid email. Fully deterministic — no model call.

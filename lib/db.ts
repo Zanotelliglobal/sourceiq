@@ -156,6 +156,10 @@ async function initSchema(): Promise<void> {
     ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bonus_events INTEGER NOT NULL DEFAULT 0;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_org_referral_code ON organizations(referral_code) WHERE referral_code IS NOT NULL;
 
+    -- Quick-start checklist progress: a JSON object of {taskKey: isoTimestamp}
+    -- recording when each onboarding task was completed. See lib/onboarding.ts.
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS checklist_progress TEXT NOT NULL DEFAULT '{}';
+
     CREATE TABLE IF NOT EXISTS sourcing_events (
       id            BIGSERIAL PRIMARY KEY,
       org_id        BIGINT NOT NULL DEFAULT 1 REFERENCES organizations(id) ON DELETE CASCADE,
@@ -184,6 +188,11 @@ async function initSchema(): Promise<void> {
     -- Ship-to: the destination market suppliers must be able to deliver/export to
     -- (e.g. "Italy", "EU"). Agents qualify supplier serviceability against this.
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS ship_to TEXT;
+    -- Project-management ergonomics (#40): pin surfaces a project at the top of
+    -- the dashboard list; archive hides it from the default view without
+    -- deleting any of its data (suppliers/outreach history stay intact).
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS suppliers (
       id            BIGSERIAL PRIMARY KEY,
@@ -230,6 +239,26 @@ async function initSchema(): Promise<void> {
     -- assessed by the qualifier against the event's ship-to destination.
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS serviceable_regions TEXT;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS ships_to_target BOOLEAN;
+    -- Structured supplier record (Epic 1 — credibility layer): coarse business
+    -- type, banded headcount, numeric founding year, a 0-5 review score, and a
+    -- controlled capability-tag vocabulary (JSON array of tags). Populated by the
+    -- scout during discovery and normalized to the controlled sets in
+    -- lib/taxonomy.ts before insert, so stored values are always in-vocabulary.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS business_type TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS employee_count TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS founded_year INTEGER;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS review_score DOUBLE PRECISION;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS capability_tags TEXT;
+    -- Trust-signal fields (Epic 1 continuation — issue #39): named customers
+    -- the supplier already ships to, markets it already exports to, and
+    -- lightweight verification badges (e.g. "website-live") computed
+    -- automatically rather than model-generated. Free text/JSON arrays with
+    -- no fixed vocabulary except verification_badges (see lib/taxonomy.ts).
+    -- All nullable — populated best-effort, never block insert on their absence.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS partnered_customers TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS partnered_customer_count INTEGER;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS key_export_markets TEXT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS verification_badges TEXT;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
@@ -328,6 +357,9 @@ async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
     CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id);
     CREATE INDEX IF NOT EXISTS idx_events_org ON sourcing_events(org_id);
+    -- Cross-project search (#40) filters/joins suppliers by their parent
+    -- event's org_id; this index makes that join selective.
+    CREATE INDEX IF NOT EXISTS idx_events_org_archived ON sourcing_events(org_id, archived);
     CREATE INDEX IF NOT EXISTS idx_usage_event ON token_usage(event_id);
     CREATE INDEX IF NOT EXISTS idx_usage_org ON token_usage(org_id);
     CREATE INDEX IF NOT EXISTS idx_agentruns_event ON agent_runs(event_id);
@@ -370,6 +402,8 @@ export type SourcingEvent = {
   buyer_company: string | null;
   status: string;
   wave_count: number;
+  pinned: boolean;
+  archived: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -386,6 +420,21 @@ export type Supplier = {
   employees: string | null;
   annual_revenue: string | null;
   founded: string | null;
+  // Structured supplier record (Epic 1). business_type ∈ BUSINESS_TYPES,
+  // employee_count is a banded label ∈ EMPLOYEE_BANDS, founded_year is numeric,
+  // review_score is 0-5, capability_tags is a JSON array of CAPABILITY_TAGS
+  // (see lib/taxonomy.ts). All nullable — legacy rows predate these columns.
+  business_type: string | null;
+  employee_count: string | null;
+  founded_year: number | null;
+  review_score: number | null;
+  capability_tags: string | null;
+  // Trust-signal fields (Epic 1 continuation — issue #39): see the matching
+  // ALTER TABLE comment above for what each column holds. All nullable.
+  partnered_customers: string | null;
+  partnered_customer_count: number | null;
+  key_export_markets: string | null;
+  verification_badges: string | null;
   website: string | null;
   data_sources: string | null;
   contact_email: string | null;
@@ -436,6 +485,18 @@ export type AuditLog = {
   created_at: string;
 };
 
+// One message (outbound RFI/follow-up or inbound supplier reply) in a
+// supplier's outreach correspondence. Together, all rows for a supplier_id
+// form its revisitable outreach thread — see lib/outreach-log.ts.
+export type OutreachLog = {
+  id: number;
+  supplier_id: number;
+  direction: string; // 'inbound' | 'outbound'
+  subject: string | null;
+  body: string;
+  sent_at: string;
+};
+
 // Organizations carry the billing/tenancy state.
 export type Organization = {
   id: number;
@@ -449,6 +510,7 @@ export type Organization = {
   referral_code: string | null;
   referred_by: number | null;
   bonus_events: number;
+  checklist_progress: string;
   created_at: string;
   updated_at: string;
 };
