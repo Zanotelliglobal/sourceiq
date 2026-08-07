@@ -9,6 +9,7 @@ import {
   normalizeEmployeeBand,
   bandForCount,
   filterCapabilityTags,
+  sanitizeStringList,
 } from "@/lib/taxonomy";
 
 describe("normalizeBusinessType", () => {
@@ -110,5 +111,25 @@ describe("filterCapabilityTags", () => {
     for (const tag of filterCapabilityTags([...CAPABILITY_TAGS])) {
       expect(CAPABILITY_TAGS).toContain(tag);
     }
+  });
+});
+
+describe("sanitizeStringList", () => {
+  it("trims whitespace and drops blank entries", () => {
+    expect(sanitizeStringList(["Nike", "  Adidas  ", "", "   "])).toEqual(["Nike", "Adidas"]);
+  });
+  it("drops non-string items without throwing", () => {
+    expect(sanitizeStringList(["Nike", 42, null, { name: "x" }])).toEqual(["Nike"]);
+  });
+  it("de-duplicates exact (post-trim) matches, preserving first-seen order", () => {
+    expect(sanitizeStringList(["USA", "EU", "USA", " EU "])).toEqual(["USA", "EU"]);
+  });
+  it("caps the result to maxItems", () => {
+    expect(sanitizeStringList(["a", "b", "c", "d"], 2)).toEqual(["a", "b"]);
+  });
+  it("returns [] for non-arrays", () => {
+    expect(sanitizeStringList(null)).toEqual([]);
+    expect(sanitizeStringList("Nike")).toEqual([]);
+    expect(sanitizeStringList(undefined)).toEqual([]);
   });
 });

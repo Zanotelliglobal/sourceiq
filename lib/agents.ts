@@ -53,6 +53,10 @@ export type ScoutResult = {
   founded_year: number | null; // numeric founding year, or null if unknown
   review_score: number | null; // 0-5 aggregate rating, or null if none found
   capability_tags: string[];   // subset of CAPABILITY_TAGS
+  // Trust-signal fields (Epic 1 continuation, issue #39). Free text, no fixed
+  // vocabulary — only populated when the scout found explicit evidence.
+  partnered_customers: string[]; // named customers the supplier states it ships to
+  key_export_markets: string[];  // countries/regions the supplier states it already exports to
 };
 
 export type QualificationResult = {
@@ -293,6 +297,8 @@ STRUCTURED FIELDS — use ONLY the controlled values below. These power filterab
 - "founded_year": the founding year as a plain integer (e.g. 1992), or null if not stated.
 - "review_score": an aggregate rating from 0 to 5 (one decimal is fine) ONLY if a credible source shows one (Google/Trustpilot/marketplace rating); otherwise null. Never invent a rating.
 - "capability_tags": zero or more tags from THIS controlled list only (silently drop anything not on it): ${CAPABILITY_TAGS.join(", ")}.
+- "partnered_customers": named companies the supplier explicitly states it already supplies (e.g. a "clients"/"case studies" page, a named reference). Only include customers actually named by a source — never infer or guess a plausible customer. Empty array if none found.
+- "key_export_markets": countries/regions the supplier explicitly states it already exports to or ships from/to. Only from explicit statements — empty array if none found.
 
 After searching, return a JSON array of supplier objects:
 [{
@@ -310,13 +316,15 @@ After searching, return a JSON array of supplier objects:
   "founded": "1992",
   "founded_year": 1992,
   "review_score": 4.5,
+  "partnered_customers": ["Nike", "Adidas"],
+  "key_export_markets": ["USA", "EU"],
   "website": "www.example.com",
   "contact_email": "info@example.com",
   "data_sources": ["https://real-source-url-you-saw.com/page", "https://directory.com/listing"]
 }]
 
 For "contact_email": only include a real address you actually saw on the company's site or a directory listing (e.g. a sales/info/contact mailbox). If you did not find one, use "" — never guess or construct an address.
-For the structured fields: fill them only from what you actually saw. Leaving "founded_year"/"review_score" as null (or "employee_count"/"business_type" as "") is strongly preferred over guessing.
+For the structured fields: fill them only from what you actually saw. Leaving "founded_year"/"review_score" as null (or "employee_count"/"business_type" as "", or "partnered_customers"/"key_export_markets" as []) is strongly preferred over guessing.
 
 Your FINAL message must contain ONLY the JSON array (after you have finished searching).`;
 

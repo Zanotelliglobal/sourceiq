@@ -22,13 +22,14 @@ import {
   runEnricherAgent,
   AGENT_MODELS,
 } from "@/lib/agents";
-import { scrapeSupplierContact } from "@/lib/contact";
+import { scrapeSupplierContact, checkWebsiteLive } from "@/lib/contact";
 import {
   normalizeBusinessType,
   normalizeEmployeeBand,
   parseFoundedYear,
   clampReviewScore,
   filterCapabilityTags,
+  sanitizeStringList,
 } from "@/lib/taxonomy";
 
 export type ScoutSupplier = Awaited<ReturnType<typeof runScoutAgent>>[number];
@@ -60,6 +61,7 @@ export type ProcessSupplierDeps = {
   runQualifierAgentGrounded?: typeof runQualifierAgentGrounded;
   runEnricherAgent?: typeof runEnricherAgent;
   scrapeSupplierContact?: typeof scrapeSupplierContact;
+  checkWebsiteLive?: typeof checkWebsiteLive;
 };
 
 /**
@@ -73,6 +75,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
   const qualifierAgentGrounded = deps.runQualifierAgentGrounded ?? runQualifierAgentGrounded;
   const enricherAgent = deps.runEnricherAgent ?? runEnricherAgent;
   const scrapeContact = deps.scrapeSupplierContact ?? scrapeSupplierContact;
+  const websiteLiveCheck = deps.checkWebsiteLive ?? checkWebsiteLive;
 
   return async (s: ScoutSupplier): Promise<void> => {
     deps.send({ type: "qualifying", agent_id: agent.id, supplier_name: s.name });
@@ -110,6 +113,15 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     const review_score = clampReviewScore(s.review_score);
     const capability_tags = JSON.stringify(filterCapabilityTags(s.capability_tags));
 
+    // Trust-signal fields (Epic 1 continuation, issue #39): free text, so no
+    // controlled-vocabulary normalization — just drop blanks/duplicates so a
+    // sloppy model response never stores garbage. partnered_customer_count is
+    // derived, not model-emitted, and left null (not 0) when none were named.
+    const partneredCustomers = sanitizeStringList(s.partnered_customers);
+    const partnered_customers = JSON.stringify(partneredCustomers);
+    const partnered_customer_count = partneredCustomers.length > 0 ? partneredCustomers.length : null;
+    const key_export_markets = JSON.stringify(sanitizeStringList(s.key_export_markets));
+
     // Insert immediately and stream — enrichment starts null (it can only
     // come from the background enrich task below); contact_url/phone/linkedin
     // always start empty too (they can only come from the scrape below).
@@ -120,8 +132,9 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
         (event_id, name, country, city, description, capabilities, certifications,
          employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
          ai_score, score_rationale, score_breakdown, enrichment, funnel_stage,
-         business_type, employee_count, founded_year, review_score, capability_tags)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+         business_type, employee_count, founded_year, review_score, capability_tags,
+         partnered_customers, partnered_customer_count, key_export_markets, verification_badges)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         deps.eventId, s.name, s.country, s.city, s.description,
         JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
@@ -130,7 +143,8 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
         JSON.stringify(s.data_sources), agent.label, deps.waveNumber,
         score.overall_score, score.rationale, JSON.stringify(score.breakdown),
         null, funnel_stage,
-        business_type, employee_count, founded_year, review_score, capability_tags
+        business_type, employee_count, founded_year, review_score, capability_tags,
+        partnered_customers, partnered_customer_count, key_export_markets, null
       );
 
     const supplierId = result.lastInsertRowid;
@@ -186,6 +200,27 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
         }
       })();
       deps.backgroundTasks.push(scrapeTask);
+    }
+
+    // Website-live verification badge (issue #39) runs OFF the critical path,
+    // independent of whether a contact email was already found — it's a pure
+    // reachability probe, not a contact lookup. Only patches the row when the
+    // site actually answers; a dead/unreachable site just stays unbadged
+    // rather than storing a negative result.
+    if (s.website) {
+      const website = s.website;
+      const badgeTask = (async () => {
+        try {
+          const live = await websiteLiveCheck(website);
+          if (!live) return;
+          const verification_badges = JSON.stringify(["website-live"]);
+          await deps.db.prepare(`UPDATE suppliers SET verification_badges=? WHERE id=?`).run(verification_badges, supplierId);
+          deps.send({ type: "supplier_updated", id: supplierId, verification_badges });
+        } catch {
+          // Best-effort — never throws into the caller's unawaited task.
+        }
+      })();
+      deps.backgroundTasks.push(badgeTask);
     }
   };
 }
