@@ -12,6 +12,7 @@ import FunnelExplainer from "@/components/FunnelExplainer";
 import { applySupplierUpdated } from "@/lib/supplier-updates";
 import { filterSuppliers, isFiltersEmpty, type SupplierFilters } from "@/lib/supplier-filters";
 import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "@/lib/taxonomy";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
@@ -183,32 +184,8 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-// Shared modal accessibility: Esc-to-close, initial focus into the dialog, a
-// lightweight focus trap so keyboard users can't tab out, and focus restoration
-// to the previously focused element on close. Returns a ref for the dialog node.
-function useModalA11y(onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const node = ref.current;
-    node?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
-      if (e.key === "Tab" && node) {
-        const f = node.querySelectorAll<HTMLElement>(
-          'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
-        );
-        if (f.length === 0) return;
-        const first = f[0], last = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); previouslyFocused?.focus?.(); };
-  }, [onClose]);
-  return ref;
-}
+// useModalA11y lives in hooks/useModalA11y.ts (extracted for #40 so the
+// dashboard/billing modals can share it too) — imported above.
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {

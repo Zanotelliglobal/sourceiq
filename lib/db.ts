@@ -188,6 +188,11 @@ async function initSchema(): Promise<void> {
     -- Ship-to: the destination market suppliers must be able to deliver/export to
     -- (e.g. "Italy", "EU"). Agents qualify supplier serviceability against this.
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS ship_to TEXT;
+    -- Project-management ergonomics (#40): pin surfaces a project at the top of
+    -- the dashboard list; archive hides it from the default view without
+    -- deleting any of its data (suppliers/outreach history stay intact).
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS suppliers (
       id            BIGSERIAL PRIMARY KEY,
@@ -352,6 +357,9 @@ async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
     CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id);
     CREATE INDEX IF NOT EXISTS idx_events_org ON sourcing_events(org_id);
+    -- Cross-project search (#40) filters/joins suppliers by their parent
+    -- event's org_id; this index makes that join selective.
+    CREATE INDEX IF NOT EXISTS idx_events_org_archived ON sourcing_events(org_id, archived);
     CREATE INDEX IF NOT EXISTS idx_usage_event ON token_usage(event_id);
     CREATE INDEX IF NOT EXISTS idx_usage_org ON token_usage(org_id);
     CREATE INDEX IF NOT EXISTS idx_agentruns_event ON agent_runs(event_id);
@@ -394,6 +402,8 @@ export type SourcingEvent = {
   buyer_company: string | null;
   status: string;
   wave_count: number;
+  pinned: boolean;
+  archived: boolean;
   created_at: string;
   updated_at: string;
 };

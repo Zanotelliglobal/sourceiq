@@ -3,15 +3,23 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown, Trash2, Layers } from "lucide-react";
+import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown, Trash2, Layers, Pin, Archive, ArchiveRestore, Pencil, X } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
+import { sortEventRows } from "@/lib/event-list";
 
 type EventRow = {
   id: number; title: string; category: string; status: string;
   annual_spend: string | null;
   wave_count: number; created_at: string; updated_at: string;
   supplier_count: number; shortlisted_count: number;
+  pinned: boolean; archived: boolean;
+};
+
+// Cross-project search hit shapes returned by /api/search (#40).
+type SearchSupplierHit = {
+  id: number; name: string; country: string;
+  event_id: number; event_title: string; event_archived: boolean;
 };
 
 // Clean a legacy raw-sentence title for display (new events already get a
@@ -74,6 +82,17 @@ export default function Dashboard() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [groupByCategory, setGroupByCategory] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [pinningId, setPinningId] = useState<number | null>(null);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
+  // Archive (#40): hidden from the default list; toggled on to review/restore them.
+  const [showArchived, setShowArchived] = useState(false);
+  // Cross-project search (#40): the existing `query` box already filters the
+  // loaded events client-side; this additionally looks up matching suppliers
+  // anywhere in the org (suppliers aren't loaded on this page) via /api/search.
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [supplierResults, setSupplierResults] = useState<SearchSupplierHit[]>([]);
+  const [searchingSuppliers, setSearchingSuppliers] = useState(false);
   const [trial, setTrial] = useState<{ status: string; trial_ends_at: string | null; active: boolean } | null>(null);
   const [usage, setUsage] = useState<{
     tier: string; tier_name: string; unlimited: number;
@@ -140,35 +159,49 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Cross-project supplier search (#40): debounced so we don't hit the API on
+  // every keystroke. Only runs while the search box is focused and non-trivial.
+  useEffect(() => {
+    const q = query.trim();
+    if (!searchFocused || q.length < 2) { setSupplierResults([]); return; }
+    let cancelled = false;
+    setSearchingSuppliers(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(d => { if (!cancelled) setSupplierResults(Array.isArray(d?.suppliers) ? d.suppliers : []); })
+        .catch(() => { if (!cancelled) setSupplierResults([]); })
+        .finally(() => { if (!cancelled) setSearchingSuppliers(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, searchFocused]);
+
+  const activeEvents = events.filter(e => !e.archived);
+  const archivedCount = events.length - activeEvents.length;
+
   const stats = {
-    total: events.length,
+    total: activeEvents.length,
     // Only genuinely-running events count as active (stale/interrupted ones are
     // downgraded to reviewing/idle by the API, so they no longer inflate this).
-    active: events.filter(e => WORKING.has(e.status)).length,
-    suppliers: events.reduce((a, e) => a + (e.supplier_count || 0), 0),
-    shortlisted: events.reduce((a, e) => a + (e.shortlisted_count || 0), 0),
+    active: activeEvents.filter(e => WORKING.has(e.status)).length,
+    suppliers: activeEvents.reduce((a, e) => a + (e.supplier_count || 0), 0),
+    shortlisted: activeEvents.reduce((a, e) => a + (e.shortlisted_count || 0), 0),
   };
 
-  // Client-side search + filter + sort (all events are already loaded).
+  // Client-side search + status filter (query/status are UI-specific), then
+  // hand off to the pure archived-filter + pinned-first sort (#40, lib/event-list.ts).
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matchesStatus = (e: EventRow) =>
       statusFilter === "all" ? true
       : statusFilter === "active" ? WORKING.has(e.status)
       : e.status === statusFilter;
-    const filtered = events.filter(e =>
+    const candidates = events.filter(e =>
       matchesStatus(e) &&
       (!q || e.title.toLowerCase().includes(q) || (e.category || "").toLowerCase().includes(q))
     );
-    const dir = sortDir === "asc" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "pipeline") cmp = (a.supplier_count || 0) - (b.supplier_count || 0);
-      else if (sortKey === "initiated") cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      else cmp = new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
-      return cmp * dir;
-    });
-  }, [events, query, statusFilter, sortKey, sortDir]);
+    return sortEventRows(candidates, { showArchived, sortKey, sortDir });
+  }, [events, query, statusFilter, sortKey, sortDir, showArchived]);
 
   // Toggle sort direction when re-clicking the active column, else switch column.
   const toggleSort = (key: SortKey) => {
@@ -193,6 +226,75 @@ export default function Dashboard() {
     }
   };
 
+  // Rename an event's display title (#40). Uses a native prompt, matching the
+  // codebase's existing lightweight window.confirm()-based action pattern
+  // rather than a bespoke inline-edit UI.
+  const handleRename = async (event: EventRow, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = window.prompt(t("Rename event"), cleanTitle(event.title));
+    if (next == null) return;
+    const title = next.trim();
+    if (!title || title === event.title) return;
+    setRenamingId(event.id);
+    try {
+      const res = await fetch(`/api/sourcing-events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (res.ok) setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, title } : x)));
+      else alert(t("Couldn't rename this event. Please try again."));
+    } catch {
+      alert(t("Couldn't rename this event. Please try again."));
+    } finally {
+      setRenamingId(null);
+    }
+  };
+
+  // Pin/unpin: optimistic toggle so the row moves to the top instantly; reverts
+  // on failure so the UI never diverges from the server.
+  const handleTogglePin = async (event: EventRow, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const pinned = !event.pinned;
+    setPinningId(event.id);
+    setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, pinned } : x)));
+    try {
+      const res = await fetch(`/api/sourcing-events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, pinned: !pinned } : x)));
+      alert(t("Couldn't update pin status. Please try again."));
+    } finally {
+      setPinningId(null);
+    }
+  };
+
+  // Archive/unarchive: hides (or restores) a project from the default dashboard
+  // view without deleting any of its data.
+  const handleToggleArchive = async (event: EventRow, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const archived = !event.archived;
+    setArchivingId(event.id);
+    setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, archived } : x)));
+    try {
+      const res = await fetch(`/api/sourcing-events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, archived: !archived } : x)));
+      alert(t("Couldn't update archive status. Please try again."));
+    } finally {
+      setArchivingId(null);
+    }
+  };
+
   // Group visible events by category for the clustered view.
   const grouped = useMemo(() => {
     const map = new Map<string, EventRow[]>();
@@ -213,7 +315,10 @@ export default function Dashboard() {
         className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
       >
         <td className="px-6 py-4">
-          <div className="font-semibold text-slate-900 text-sm truncate max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] xl:max-w-[360px]">{cleanTitle(event.title)}</div>
+          <div className="flex items-center gap-1.5">
+            {event.pinned && <Pin className="w-3 h-3 text-amber-500 fill-current flex-shrink-0" aria-label={t("Pinned")} />}
+            <div className="font-semibold text-slate-900 text-sm truncate max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] xl:max-w-[360px]">{cleanTitle(event.title)}</div>
+          </div>
           <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
             {event.wave_count > 0 && (
               <span>{event.wave_count === 1 ? t("{count} wave", { count: event.wave_count }) : t("{count} waves", { count: event.wave_count })}</span>
@@ -253,18 +358,55 @@ export default function Dashboard() {
           </span>
         </td>
         <td className="px-4 py-4 text-right whitespace-nowrap">
-          <button
-            onClick={e => handleDelete(event, e)}
-            disabled={deletingId === event.id}
-            title={t("Delete event")}
-            aria-label={t("Delete event")}
-            className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-          >
-            {deletingId === event.id
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <Trash2 className="w-4 h-4" />}
-          </button>
-          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors inline-block ml-1" />
+          <div className="inline-flex items-center gap-0.5">
+            <button
+              onClick={e => handleRename(event, e)}
+              disabled={renamingId === event.id}
+              title={t("Rename event")}
+              aria-label={t("Rename event")}
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+            >
+              {renamingId === event.id
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Pencil className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={e => handleTogglePin(event, e)}
+              disabled={pinningId === event.id}
+              title={event.pinned ? t("Unpin event") : t("Pin event")}
+              aria-label={event.pinned ? t("Unpin event") : t("Pin event")}
+              className={`inline-flex items-center justify-center p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                event.pinned ? "text-amber-500 hover:bg-amber-50" : "text-slate-300 hover:text-amber-600 hover:bg-amber-50"
+              }`}
+            >
+              {pinningId === event.id
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Pin className={`w-3.5 h-3.5 ${event.pinned ? "fill-current" : ""}`} />}
+            </button>
+            <button
+              onClick={e => handleToggleArchive(event, e)}
+              disabled={archivingId === event.id}
+              title={event.archived ? t("Unarchive event") : t("Archive event")}
+              aria-label={event.archived ? t("Unarchive event") : t("Archive event")}
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+            >
+              {archivingId === event.id
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : event.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={e => handleDelete(event, e)}
+              disabled={deletingId === event.id}
+              title={t("Delete event")}
+              aria-label={t("Delete event")}
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              {deletingId === event.id
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Trash2 className="w-3.5 h-3.5" />}
+            </button>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors ml-1" />
+          </div>
         </td>
       </tr>
     );
@@ -412,9 +554,53 @@ export default function Dashboard() {
                   type="text"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder={t("Search events…")}
-                  className="w-full sm:w-56 pl-8 pr-3 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                  onFocus={() => setSearchFocused(true)}
+                  // Delay so a click on a dropdown result registers before it unmounts.
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                  placeholder={t("Search events & suppliers…")}
+                  className="w-full sm:w-64 pl-8 pr-7 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                 />
+                {query && (
+                  <button
+                    onClick={() => setQuery("")}
+                    title={t("Clear search")}
+                    aria-label={t("Clear search")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-300 hover:text-slate-500 hover:bg-slate-100"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {/* Cross-project search results (#40): suppliers anywhere in the
+                    org matching the query, since suppliers themselves aren't
+                    loaded on this page. Clicking jumps to their parent event. */}
+                {searchFocused && query.trim().length >= 2 && (
+                  <div className="absolute z-20 top-full left-0 mt-1 w-80 max-h-80 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg">
+                    {searchingSuppliers ? (
+                      <div className="px-3 py-3 text-xs text-slate-400">{t("Searching…")}</div>
+                    ) : supplierResults.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-slate-400">{t("No matching suppliers found.")}</div>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                          {t("Suppliers across your projects")}
+                        </div>
+                        {supplierResults.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => router.push(`/events/${s.event_id}`)}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+                          >
+                            <div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div>
+                            <div className="text-xs text-slate-400 truncate">
+                              {s.country ? `${s.country} · ` : ""}{t("in")} {cleanTitle(s.event_title)}
+                              {s.event_archived && <span className="ml-1 text-slate-300">({t("archived")})</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1 flex-wrap">
                 {FILTERS.map(f => (
@@ -442,6 +628,21 @@ export default function Dashboard() {
                   <Layers className="w-3.5 h-3.5" />
                   {t("Group by category")}
                 </button>
+                <button
+                  onClick={() => setShowArchived(v => !v)}
+                  title={t("Show archived events")}
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                    showArchived
+                      ? "bg-slate-800 text-white border-slate-800"
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  {t("Archived")}
+                  {archivedCount > 0 && (
+                    <span className={`ml-0.5 px-1.5 rounded text-[10px] ${showArchived ? "bg-white/20" : "bg-slate-100"}`}>{archivedCount}</span>
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -468,7 +669,7 @@ export default function Dashboard() {
               {visible.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-400">
-                    {t("No events match your search.")}
+                    {showArchived ? t("No archived events.") : t("No events match your search.")}
                   </td>
                 </tr>
               ) : groupByCategory ? (
