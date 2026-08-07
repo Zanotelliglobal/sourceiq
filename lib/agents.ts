@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { scrapeSupplierContact } from "./contact";
 import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "./taxonomy";
+import { sanitizeFilterQuery, type SupplierFilters } from "./supplier-filters";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -26,6 +27,7 @@ export const AGENT_MODELS = {
   followUp: "claude-sonnet-4-6",          // localized follow-up drafting
   supplierResponse: "claude-haiku-4-5",   // demo-mode reply simulation (low stakes)
   replyClassifier: "claude-haiku-4-5",    // structured classification of a real inbound reply
+  filterMapper: "claude-haiku-4-5",       // plain JSON: free text -> structured filter fields
 } as const;
 
 // Optional token-usage reporter. Routes pass this to record real cost per call.
@@ -126,6 +128,54 @@ Return JSON only:
   if (!categories.includes(parsed.category)) parsed.category = "Other";
   if (typeof parsed.title !== "string") parsed.title = "";
   return parsed;
+}
+
+// ─── FILTER MAPPER ────────────────────────────────────────────────────────────
+// "AI filter" bridge (Epic 3, issue #38): maps a free-text supplier
+// description to the same structured filter shape the filter panel produces,
+// so a buyer can type "ISO-certified manufacturers in Vietnam with 200+
+// employees" instead of clicking through every tab. Fields the query doesn't
+// mention are simply omitted rather than guessed.
+export async function runFilterMapperAgent(query: string, onUsage?: UsageCb): Promise<SupplierFilters> {
+  const prompt = `You are SourceIQ's Filter Mapper. Convert a buyer's free-text supplier search into structured filters over already-discovered suppliers.
+
+Allowed business_type values (use EXACT strings, omit if not mentioned): ${BUSINESS_TYPES.join(", ")}
+Allowed employee_count bands (use EXACT strings, omit if not mentioned): ${EMPLOYEE_BANDS.join(", ")}
+Allowed capability_tags (use EXACT strings, omit if not mentioned): ${CAPABILITY_TAGS.join(", ")}
+certifications: any certification name mentioned (e.g. "ISO 9001:2015"), written as commonly formatted. No fixed list.
+
+Query: "${query}"
+
+Only include a field if the query gives you a real signal for it — never guess a value just to fill a field. "200+ employees" means founded_year_min/max are NOT set, employee_count should include every band at or above 200. Return JSON only, omitting any key you have no signal for:
+{
+  "business_type": ["..."],
+  "employee_count": ["..."],
+  "founded_year_min": 1990,
+  "founded_year_max": 2010,
+  "review_score_min": 4,
+  "certifications": ["..."],
+  "capability_tags": ["..."]
+}`;
+
+  try {
+    const response = await client.messages.create({
+      model: AGENT_MODELS.filterMapper,
+      max_tokens: 400,
+      messages: [{ role: "user", content: prompt }],
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    onUsage?.((response as any).usage); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const text = response.content
+      .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
+      .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .join("");
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return {};
+    return sanitizeFilterQuery(JSON.parse(match[0]));
+  } catch {
+    return {};
+  }
 }
 
 // ─── ORCHESTRATOR ─────────────────────────────────────────────────────────────

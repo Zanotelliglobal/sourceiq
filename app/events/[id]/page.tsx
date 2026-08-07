@@ -5,11 +5,13 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   X, Check, Minus, Bell, Star, Undo2, Sparkles, Lock, Hand,
-  Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown,
+  Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown, SlidersHorizontal,
 } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import FunnelExplainer from "@/components/FunnelExplainer";
 import { applySupplierUpdated } from "@/lib/supplier-updates";
+import { filterSuppliers, isFiltersEmpty, type SupplierFilters } from "@/lib/supplier-filters";
+import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "@/lib/taxonomy";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Supplier = {
@@ -1067,6 +1069,232 @@ function CampaignConfirmModal({ count, anonymous, preview, onCancel, onConfirm }
   );
 }
 
+// ─── Structured filter panel ───────────────────────────────────────────────────
+// Filters the current event's already-discovered suppliers by the structured
+// fields Epic 1 (#20) populates. Tabbed like SourceReady's panel, minus tabs we
+// have no fields for yet: no "Highlight" (verification badges land in #39) and
+// no separate "Product" tab (capability tags — the product-facing signals —
+// live under "Product" here since there's no standalone Product object yet, #44).
+const FILTER_TABS = ["General", "Product", "Profile", "Verification"] as const;
+type FilterTab = (typeof FILTER_TABS)[number];
+
+function FilterPanel({ filters, onApply, onClose }: {
+  filters: SupplierFilters;
+  onApply: (f: SupplierFilters) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const dialogRef = useModalA11y(onClose);
+  const [draft, setDraft] = useState<SupplierFilters>(filters);
+  const [tab, setTab] = useState<FilterTab>("General");
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const toggleIn = (key: "business_type" | "employee_count" | "certifications" | "capability_tags", value: string) => {
+    setDraft(d => {
+      const current = d[key] ?? [];
+      const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+      return { ...d, [key]: next };
+    });
+  };
+
+  async function runAiFilter() {
+    if (aiQuery.trim().length < 3) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/filter-suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: aiQuery.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      const mapped = (await res.json()) as SupplierFilters;
+      setDraft(d => ({ ...d, ...mapped }));
+    } catch {
+      setAiError(t("Couldn't map that to filters — try being more specific."));
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  const clearAll = () => setDraft({});
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Filter suppliers")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
+        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+          <div>
+            <h3 className="font-bold text-slate-900">{t("Filter suppliers")}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{t("Narrow the current list by structured fields")}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="px-6 pt-4">
+          <div className="mb-3">
+            <label className="label">{t("AI filter — describe what you're looking for")}</label>
+            <div className="flex gap-2">
+              <input
+                className="input"
+                placeholder={t('e.g. "ISO-certified manufacturers in Vietnam with 200+ employees"')}
+                value={aiQuery}
+                onChange={e => setAiQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void runAiFilter(); } }}
+              />
+              <button
+                onClick={() => void runAiFilter()}
+                disabled={aiLoading || aiQuery.trim().length < 3}
+                className="btn-secondary py-2 px-3 whitespace-nowrap disabled:opacity-50"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> {aiLoading ? t("Mapping…") : t("Apply")}
+              </button>
+            </div>
+            {aiError && <p className="text-xs text-red-600 mt-1.5">{aiError}</p>}
+          </div>
+
+          <div className="flex items-center gap-1 border-b border-slate-200">
+            {FILTER_TABS.map(tb => (
+              <button
+                key={tb}
+                onClick={() => setTab(tb)}
+                className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-all ${
+                  tab === tb ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                {t(tb)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-6 pt-4 space-y-4">
+          {tab === "General" && (
+            <>
+              <div>
+                <label className="label">{t("Business type")}</label>
+                <div className="flex flex-wrap gap-2">
+                  {BUSINESS_TYPES.map(v => {
+                    const active = (draft.business_type ?? []).includes(v);
+                    return (
+                      <button key={v} type="button" onClick={() => toggleIn("business_type", v)}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                        {active && <Check className="w-3 h-3" />}{v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">{t("Founded after (year)")}</label>
+                  <input type="number" className="input" placeholder={t("e.g. 1990")}
+                    value={draft.founded_year_min ?? ""}
+                    onChange={e => setDraft(d => ({ ...d, founded_year_min: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <label className="label">{t("Founded before (year)")}</label>
+                  <input type="number" className="input" placeholder={t("e.g. 2015")}
+                    value={draft.founded_year_max ?? ""}
+                    onChange={e => setDraft(d => ({ ...d, founded_year_max: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === "Product" && (
+            <div>
+              <label className="label">{t("Capability tags")}</label>
+              <div className="flex flex-wrap gap-2">
+                {CAPABILITY_TAGS.map(v => {
+                  const active = (draft.capability_tags ?? []).includes(v);
+                  return (
+                    <button key={v} type="button" onClick={() => toggleIn("capability_tags", v)}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                      {active && <Check className="w-3 h-3" />}{v}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "Profile" && (
+            <>
+              <div>
+                <label className="label">{t("Employee count")}</label>
+                <div className="flex flex-wrap gap-2">
+                  {EMPLOYEE_BANDS.map(v => {
+                    const active = (draft.employee_count ?? []).includes(v);
+                    return (
+                      <button key={v} type="button" onClick={() => toggleIn("employee_count", v)}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
+                        {active && <Check className="w-3 h-3" />}{v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="label">{t("Minimum review score")}</label>
+                <select className="input" value={draft.review_score_min ?? ""}
+                  onChange={e => setDraft(d => ({ ...d, review_score_min: e.target.value ? Number(e.target.value) : undefined }))}>
+                  <option value="">{t("Any")}</option>
+                  {[1, 2, 3, 3.5, 4, 4.5].map(n => <option key={n} value={n}>{n}+</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {tab === "Verification" && (
+            <div>
+              <label className="label">{t("Certifications")}</label>
+              <input
+                className="input"
+                placeholder={t("Type a certification and press Enter (e.g. ISO 9001:2015)")}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const value = (e.target as HTMLInputElement).value.trim();
+                  if (!value) return;
+                  toggleIn("certifications", value);
+                  (e.target as HTMLInputElement).value = "";
+                }}
+              />
+              {(draft.certifications ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {(draft.certifications ?? []).map(c => (
+                    <span key={c} className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg">
+                      {c}<button type="button" onClick={() => toggleIn("certifications", c)} className="hover:text-blue-200"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
+          <button onClick={clearAll} className="btn-ghost py-2.5">{t("Clear all")}</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost py-2.5">{t("Cancel")}</button>
+            <button onClick={() => { onApply(draft); onClose(); }} className="btn-primary py-2.5 px-6">{t("Apply filters")}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function EventPage() {
   const t = useT();
@@ -1081,6 +1309,11 @@ export default function EventPage() {
   const [liveAgents, setLiveAgents] = useState<{ agent_id: string; agent_label: string; status: string; message?: string }[]>([]);
   const [logs, setLogs]         = useState<string[]>([]);
   const [stageFilter, setStageFilter] = useState("all");
+  // Structured filter panel state (Epic 3, #38). Persisted per-event in
+  // localStorage so it survives reloads and isn't reset by SSE-driven
+  // supplier list updates — those only ever append/patch `suppliers`.
+  const [structuredFilters, setStructuredFilters] = useState<SupplierFilters>({});
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [outreachTarget, setOutreachTarget] = useState<Supplier | null>(null);
   const [editingBrief, setEditingBrief] = useState(false);
@@ -1102,6 +1335,20 @@ export default function EventPage() {
       .then(d => { if (d?.limits) setCanExport(Boolean(d.limits.export)); })
       .catch(() => {});
   }, []);
+
+  // Hydrate structured filters from localStorage on mount, then persist any
+  // change. Keyed per event so filters from one project don't leak into another.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(`sourceiq:filters:${id}`);
+      if (stored) setStructuredFilters(JSON.parse(stored));
+    } catch { /* corrupt/old value — ignore, start from an empty filter set */ }
+  }, [id]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`sourceiq:filters:${id}`, JSON.stringify(structuredFilters));
+    } catch { /* storage unavailable (e.g. private mode) — filters just won't persist */ }
+  }, [id, structuredFilters]);
 
   // Close the export format menu on any outside click.
   useEffect(() => {
@@ -1442,7 +1689,7 @@ export default function EventPage() {
   if (!event) return <div className="text-center py-24 text-slate-400">{t("Event not found.")}</div>;
 
   // Filter + sort
-  const filtered = suppliers
+  const filtered = filterSuppliers(suppliers, structuredFilters)
     .filter(s => stageFilter === "all" || s.funnel_stage === stageFilter)
     .sort((a, b) =>
       sortBy === "score" ? (b.ai_score ?? 0) - (a.ai_score ?? 0) :
@@ -1453,6 +1700,15 @@ export default function EventPage() {
   const stageCounts = Object.fromEntries(
     STAGES.map(s => [s.key, s.key === "all" ? suppliers.length : suppliers.filter(x => x.funnel_stage === s.key).length])
   );
+
+  const activeFilterCount = [
+    structuredFilters.business_type,
+    structuredFilters.employee_count,
+    structuredFilters.certifications,
+    structuredFilters.capability_tags,
+  ].filter(v => (v?.length ?? 0) > 0).length
+    + (structuredFilters.founded_year_min != null || structuredFilters.founded_year_max != null ? 1 : 0)
+    + (structuredFilters.review_score_min != null ? 1 : 0);
 
   // ── Supplier exports (CSV / Excel / PDF) ──────────────────────────────────
   // All three formats share one column definition so the columns/order stay in
@@ -1808,6 +2064,21 @@ export default function EventPage() {
                 <Star className="w-3 h-3" /> {t("Shortlist all responders ({n})", { n: stageCounts["responded"] })}
               </button>
             )}
+            {suppliers.length > 0 && (
+              <button
+                onClick={() => setFilterPanelOpen(true)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${
+                  isFiltersEmpty(structuredFilters)
+                    ? "text-slate-600 border-slate-200 hover:bg-slate-100"
+                    : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                <SlidersHorizontal className="w-3 h-3" /> {t("Filters")}
+                {!isFiltersEmpty(structuredFilters) && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded bg-white/20 text-[10px]">{activeFilterCount}</span>
+                )}
+              </button>
+            )}
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t("Sort:")}</span>
             {(["score", "name", "wave"] as const).map(s => (
               <button
@@ -1952,6 +2223,15 @@ export default function EventPage() {
 
       {showAudit && (
         <AuditModal eventId={event.id} onClose={() => setShowAudit(false)} />
+      )}
+
+      {/* Structured filter panel (Epic 3, #38) */}
+      {filterPanelOpen && (
+        <FilterPanel
+          filters={structuredFilters}
+          onApply={setStructuredFilters}
+          onClose={() => setFilterPanelOpen(false)}
+        />
       )}
 
       {/* Bulk outreach confirmation */}
