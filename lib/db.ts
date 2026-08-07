@@ -55,10 +55,22 @@ function toPg(sql: string): string {
 }
 
 // Split a multi-statement SQL string into individual statements for the HTTP
-// driver. Our DDL contains no semicolons inside string literals or bodies, so a
-// naive split on `;` is safe here.
-function splitStatements(ddl: string): string[] {
-  return ddl
+// driver. Our DDL contains no semicolons inside string literals or column
+// bodies, so a naive split on `;` is otherwise safe here — EXCEPT that `--`
+// line comments are free-form prose and can easily contain a semicolon of
+// their own (an incident: a comment reading "...list; archive hides..." split
+// into a bogus statement starting with "archive", crashing initSchema() and
+// every DB-backed route with it — see #40 postmortem). Strip comments first so
+// punctuation inside them can never corrupt the split.
+export function splitStatements(ddl: string): string[] {
+  const withoutComments = ddl
+    .split("\n")
+    .map((line) => {
+      const idx = line.indexOf("--");
+      return idx === -1 ? line : line.slice(0, idx);
+    })
+    .join("\n");
+  return withoutComments
     .split(";")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
@@ -189,7 +201,7 @@ async function initSchema(): Promise<void> {
     -- (e.g. "Italy", "EU"). Agents qualify supplier serviceability against this.
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS ship_to TEXT;
     -- Project-management ergonomics (#40): pin surfaces a project at the top of
-    -- the dashboard list; archive hides it from the default view without
+    -- the dashboard list. Archive hides it from the default view without
     -- deleting any of its data (suppliers/outreach history stay intact).
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false;
@@ -358,7 +370,7 @@ async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id);
     CREATE INDEX IF NOT EXISTS idx_events_org ON sourcing_events(org_id);
     -- Cross-project search (#40) filters/joins suppliers by their parent
-    -- event's org_id; this index makes that join selective.
+    -- event's org_id. This index makes that join selective.
     CREATE INDEX IF NOT EXISTS idx_events_org_archived ON sourcing_events(org_id, archived);
     CREATE INDEX IF NOT EXISTS idx_usage_event ON token_usage(event_id);
     CREATE INDEX IF NOT EXISTS idx_usage_org ON token_usage(org_id);
