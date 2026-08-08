@@ -111,7 +111,7 @@ full-profile / shipment-data views — their points 29–33 — are **out of sco
 | 5.4 | Share button on a result/search | 2 | S | mild virality |
 | 5.5 | "AI may make mistakes" disclaimer bar | 1 | XS | trust/compliance |
 | 5.6 | Chat-first workspace layout w/ persistent history | 3 | M | overall shell (their point 21) |
-| 5.7 | Cross-object left-nav (Suppliers / Products / Inquiries) | 3 | M | three-object browse (their point 11) |
+| 5.7 | Cross-object left-nav (Suppliers / Products / Inquiries) | 3 | M | three-object browse (their point 11) — **confirmed live** 2026-08-07 teardown: sidebar has Supplier/Product/Inquiry as distinct top-level modes below New chat/Search chats |
 | 5.8 | Pin/collapse sidebar + Help/support (?) entry | 1 | S | nav polish (their points 46, 47) |
 
 ---
@@ -236,3 +236,34 @@ tightly enough to ship independently like the first batch:
 - ✅ **Issue M** (#46) *(grab-bag, first bundle)* — Epic 5: chat/UX polish, bundle 1 (saved chats,
   grouped results, thumbs up/down, disclaimer bar). Share button, cross-object nav, and sidebar
   pin/collapse deferred to a later Epic 5 bundle rather than filing 8 tiny issues.
+
+## Appendix — live teardown notes (2026-08-07)
+
+Manual DOM capture of `app.sourceready.com/[workspaceId]/settings/inquiry` (browser extension
+blocked by device policy, so captured via copy/paste of rendered HTML). Two passes, same route:
+
+**Pass 1 — desktop-width viewport.** The route rendered SourceReady's main chat surface, not a
+settings form: left rail (New chat, Search chats, chat history grouped by month, usage/credits
+gauge, avatar menu) + main panel showing a template carousel (~24 example prompts across six modes:
+Supplier search, Product ideation, Image search, Product research, Keyword trends, Product video) +
+a chat input bar (attachment, "Supplier search" quick-mode button, More, send). Global chrome:
+Intercom widget, PostHog analytics/session-recording. No settings fields/toggles anywhere in the DOM
+despite the `/settings/inquiry` route name — confirms this URL is just SourceReady's internal path
+for the Inquiry chat mode, not a config screen.
+
+**Pass 2 — narrower viewport (DevTools docked / zoom / window not maximized).** Same route instead
+rendered a **responsive gate**: "Continue Settings on Desktop — Setting are available on desktop
+only. Open on your computer to continue," with a preview screenshot and a "Send Desktop Link to My
+Email" CTA. Confirms Settings is a genuinely separate, desktop-breakpoint-gated screen that simply
+didn't render in pass 1 because pass 1's capture was itself already below their desktop breakpoint —
+neither pass has actually seen the real settings form yet.
+
+Useful structural finding from pass 2 (visible in the sidebar even under the gate): confirms Epic 5.7
+above — **Supplier / Product / Inquiry are three distinct top-level nav modes** (icons: factory,
+hexagon/product, order-inquiry), separate from the template-carousel prompts. Also newly visible:
+credits gauge with a "Earn extra 1000+ credits" nudge row pinned above the avatar/help footer —
+relevant to Epic 7 (7.4's "persistent earn-more sidebar CTA" is literally this row in their product).
+
+**Open follow-up:** get an actual desktop-width capture of `/settings/inquiry` to document the real
+settings fields (if any exist beyond the Inquiry chat mode itself). Until then, 8.2/Epic-1/Epic-3
+scoping already in this doc is unaffected — nothing above was inferred from the unseen settings form.
