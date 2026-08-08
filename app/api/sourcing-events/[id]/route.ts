@@ -55,9 +55,16 @@ export async function PATCH(
   const owner = await db.prepare("SELECT org_id FROM sourcing_events WHERE id = ?").get(id) as { org_id?: number } | undefined;
   if (!owner || Number(owner.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Never let a client rewrite tenancy/identity columns via the generic PATCH.
-  const FORBIDDEN = new Set(["id", "org_id", "created_at"]);
-  const keys = Object.keys(body).filter(k => !FORBIDDEN.has(k));
+  // Allowlist (not blocklist) of client-editable columns. A blocklist here is
+  // unsafe: field names are interpolated directly into the SQL text below
+  // (only values are parameterized), so any key not explicitly rejected could
+  // inject arbitrary SQL via a crafted JSON body — and would also let a client
+  // silently overwrite system-managed columns (status, wave_count, etc.).
+  const ALLOWED = new Set([
+    "title", "category", "description", "requirements", "annual_spend",
+    "target_countries", "pinned", "archived",
+  ]);
+  const keys = Object.keys(body).filter(k => ALLOWED.has(k));
   if (keys.length === 0) return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
   const fields = keys.map(k => `${k} = ?`).join(", ");
   const values = [...keys.map(k => body[k]), id];
