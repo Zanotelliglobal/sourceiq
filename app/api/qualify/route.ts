@@ -58,6 +58,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
+  // Lightweight quality signal on a supplier's AI assessment (#46). -1/0/1;
+  // 0 means "cleared" (re-clicking an active thumb toggles it off client-side).
+  if (action === "set_feedback") {
+    if (!supplier_id) return NextResponse.json({ error: "supplier_id required" }, { status: 400 });
+    const signal = body.signal;
+    if (signal !== -1 && signal !== 0 && signal !== 1) {
+      return NextResponse.json({ error: "signal must be -1, 0, or 1" }, { status: 400 });
+    }
+    await db.prepare(
+      "UPDATE suppliers SET feedback_signal = ?, feedback_updated_at = datetime('now') WHERE id = ?"
+    ).run(signal, supplier_id);
+    return NextResponse.json({ success: true });
+  }
+
   if (action === "send_outreach") {
     const supplier = await db.prepare(`
       SELECT s.*, se.category, se.requirements, se.annual_spend,

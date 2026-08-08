@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   X, Check, Minus, Bell, Star, Undo2, Sparkles, Lock, Hand,
   Mail, Globe, Phone, ArrowLeft, Factory, ArrowDown, SlidersHorizontal,
+  Layers, ThumbsUp, ThumbsDown, Info,
 } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import FunnelExplainer from "@/components/FunnelExplainer";
+import EventSwitcher from "@/components/EventSwitcher";
 import { applySupplierUpdated } from "@/lib/supplier-updates";
 import { filterSuppliers, isFiltersEmpty, type SupplierFilters } from "@/lib/supplier-filters";
 import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "@/lib/taxonomy";
@@ -23,6 +25,7 @@ type Supplier = {
   review_score: number | null; capability_tags: string | null;
   partnered_customers: string | null; partnered_customer_count: number | null;
   key_export_markets: string | null; verification_badges: string | null;
+  feedback_signal: number | null;
   website: string | null; contact_email: string | null;
   contact_url: string | null; contact_phone: string | null; contact_linkedin: string | null;
   data_sources: string | null; scout_agent: string | null;
@@ -188,12 +191,13 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 // dashboard/billing modals can share it too) — imported above.
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
+function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeedback }: {
   supplier: Supplier;
   onClose: () => void;
   onMove: (id: number, stage: string) => void;
   onOutreach: (s: Supplier) => void;
   onFollowUp: (s: Supplier) => void;
+  onFeedback: (id: number, signal: number) => void;
 }) {
   const t = useT();
   const caps    = tryParse<string[]>(supplier.capabilities, []);
@@ -382,8 +386,40 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp }: {
           {/* AI Assessment */}
           {supplier.score_rationale && (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{t("AI Assessment")}</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t("AI Assessment")}</div>
+                {/* Thumbs up/down quality signal (#46 — Epic 5.3). Re-clicking an
+                    active thumb clears it (signal 0); the two are mutually exclusive. */}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onFeedback(supplier.id, supplier.feedback_signal === 1 ? 0 : 1)}
+                    title={t("Good assessment")}
+                    className={`p-1 rounded-md border transition-colors ${
+                      supplier.feedback_signal === 1
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-600"
+                        : "border-transparent text-slate-300 hover:text-emerald-600 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onFeedback(supplier.id, supplier.feedback_signal === -1 ? 0 : -1)}
+                    title={t("Poor assessment")}
+                    className={`p-1 rounded-md border transition-colors ${
+                      supplier.feedback_signal === -1
+                        ? "bg-red-50 border-red-200 text-red-600"
+                        : "border-transparent text-slate-300 hover:text-red-600 hover:bg-red-50"
+                    }`}
+                  >
+                    <ThumbsDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
               <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-xl p-4 border border-slate-100">{supplier.score_rationale}</p>
+              <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-400">
+                <Info className="w-3 h-3 flex-shrink-0" />
+                {t("AI may make mistakes. Please verify important information.")}
+              </div>
             </div>
           )}
 
@@ -1339,6 +1375,10 @@ export default function EventPage() {
   const [editingBrief, setEditingBrief] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [sortBy, setSortBy]     = useState<"score" | "name" | "wave">("score");
+  // Grouped results view (#46 — Epic 5.2): cluster the supplier table by
+  // business_type instead of one flat list, mirroring the dashboard's
+  // existing group-by-category pattern (app/dashboard/page.tsx).
+  const [groupByType, setGroupByType] = useState(false);
   const [usage, setUsage]       = useState<{ cost_usd: number; total_tokens: number; web_searches: number } | null>(null);
   // Whether the org's plan permits exporting (CSV). Free tiers see an upgrade
   // prompt instead of the export button.
@@ -1572,6 +1612,26 @@ export default function EventPage() {
     }
   }
 
+  // Thumbs up/down on a supplier's AI assessment (#46 — Epic 5.3). Same
+  // optimistic-update-then-revert shape as moveStage above.
+  async function setFeedback(supplierId: number, signal: number) {
+    const prev = suppliers.find(s => s.id === supplierId)?.feedback_signal ?? null;
+    setSuppliers(p => p.map(s => s.id === supplierId ? { ...s, feedback_signal: signal } : s));
+    if (selected?.id === supplierId) setSelected(s => s ? { ...s, feedback_signal: signal } : s);
+    try {
+      const res = await fetch("/api/qualify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set_feedback", supplier_id: supplierId, signal }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      setSuppliers(p => p.map(s => s.id === supplierId ? { ...s, feedback_signal: prev } : s));
+      if (selected?.id === supplierId) setSelected(s => s ? { ...s, feedback_signal: prev } : s);
+      addLog(`ERR could not save feedback: ${String(err)}`);
+      pushToast("error", t("Could not save feedback. Please try again."));
+    }
+  }
+
   function handleOutreachSent(supplierId: number) {
     setSuppliers(prev => prev.map(s => s.id === supplierId ? { ...s, outreach_status: "sent", funnel_stage: "contacted" } : s));
   }
@@ -1716,6 +1776,18 @@ export default function EventPage() {
       sortBy === "name"  ? a.name.localeCompare(b.name) :
       a.wave - b.wave
     );
+
+  // Grouped view: cluster `filtered` by business_type, alphabetically by
+  // group label. Null when the toggle is off so the render stays a flat list.
+  const groupedSuppliers = groupByType
+    ? Array.from(
+        filtered.reduce((map, s) => {
+          const key = s.business_type || t("Uncategorised");
+          (map.get(key) ?? map.set(key, []).get(key)!).push(s);
+          return map;
+        }, new Map<string, Supplier[]>())
+      ).sort((a, b) => a[0].localeCompare(b[0]))
+    : null;
 
   const stageCounts = Object.fromEntries(
     STAGES.map(s => [s.key, s.key === "all" ? suppliers.length : suppliers.filter(x => x.funnel_stage === s.key).length])
@@ -1970,7 +2042,10 @@ export default function EventPage() {
         <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div>
-              <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"><ArrowLeft className="w-3 h-3" /> {t("Dashboard")}</Link>
+              <div className="flex items-center gap-2">
+                <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"><ArrowLeft className="w-3 h-3" /> {t("Dashboard")}</Link>
+                <EventSwitcher currentEventId={event.id} />
+              </div>
               <div className="flex items-center gap-3 mt-0.5">
                 <h1 className="font-bold text-slate-900 text-lg leading-tight">{event.title}</h1>
                 <button
@@ -2102,6 +2177,19 @@ export default function EventPage() {
                 )}
               </button>
             )}
+            {suppliers.length > 0 && (
+              <button
+                onClick={() => setGroupByType(v => !v)}
+                title={t("Group by business type")}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${
+                  groupByType
+                    ? "bg-violet-50 text-violet-700 border-violet-200"
+                    : "text-slate-600 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <Layers className="w-3 h-3" /> {t("Group")}
+              </button>
+            )}
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t("Sort:")}</span>
             {(["score", "name", "wave"] as const).map(s => (
               <button
@@ -2199,15 +2287,36 @@ export default function EventPage() {
                     </td>
                   </tr>
                 )}
-                {filtered.map((s, i) => (
-                  <SupplierRow
-                    key={s.id}
-                    supplier={s}
-                    rank={i + 1}
-                    onClick={() => setSelected(s)}
-                    onMove={moveStage}
-                  />
-                ))}
+                {groupedSuppliers ? (
+                  groupedSuppliers.map(([type, rows]) => (
+                    <Fragment key={type}>
+                      <tr className="bg-slate-50/70">
+                        <td colSpan={7} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          {type} <span className="text-slate-400 font-semibold">· {rows.length}</span>
+                        </td>
+                      </tr>
+                      {rows.map(s => (
+                        <SupplierRow
+                          key={s.id}
+                          supplier={s}
+                          rank={filtered.indexOf(s) + 1}
+                          onClick={() => setSelected(s)}
+                          onMove={moveStage}
+                        />
+                      ))}
+                    </Fragment>
+                  ))
+                ) : (
+                  filtered.map((s, i) => (
+                    <SupplierRow
+                      key={s.id}
+                      supplier={s}
+                      rank={i + 1}
+                      onClick={() => setSelected(s)}
+                      onMove={moveStage}
+                    />
+                  ))
+                )}
               </tbody>
             </table>
           )}
@@ -2222,6 +2331,7 @@ export default function EventPage() {
           onMove={moveStage}
           onOutreach={setOutreachTarget}
           onFollowUp={sendFollowUp}
+          onFeedback={setFeedback}
         />
       )}
 

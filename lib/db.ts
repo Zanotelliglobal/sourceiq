@@ -271,6 +271,12 @@ async function initSchema(): Promise<void> {
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS partnered_customer_count INTEGER;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS key_export_markets TEXT;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS verification_badges TEXT;
+    -- Lightweight answer-quality signal (#46 — chat/UX polish bundle 1): a
+    -- thumbs up/down on the AI's qualification for a supplier, mirroring the
+    -- single-column + timestamp pattern used for opted_out above rather than a
+    -- separate audit table (fine for a v1 quality signal, not a legal record).
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS feedback_signal SMALLINT;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS feedback_updated_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
