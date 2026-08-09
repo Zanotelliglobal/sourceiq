@@ -1067,12 +1067,7 @@ function CampaignConfirmModal({ count, anonymous, preview, onCancel, onConfirm }
   onCancel: () => void; onConfirm: () => void;
 }) {
   const t = useT();
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onCancel]);
+  const dialogRef = useModalA11y(onCancel);
 
   const channel = (s: Supplier) =>
     s.contact_email ? s.contact_email
@@ -1081,8 +1076,16 @@ function CampaignConfirmModal({ count, anonymous, preview, onCancel, onConfirm }
     : t("No contact channel found yet");
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" role="dialog" aria-modal="true" onClick={onCancel}>
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={onCancel}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Send outreach to {n} suppliers?", { n: count })}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-slate-900">{t("Send outreach to {n} suppliers?", { n: count })}</h3>
