@@ -91,7 +91,7 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Available capacity <span className="font-normal text-slate-400">(optional)</span></label>
+          <label className="block text-sm font-semibold text-slate-700 mb-1">Available capacity <span className="font-normal text-slate-500">(optional)</span></label>
           <input
             value={capacity} onChange={e => setCapacity(e.target.value)}
             placeholder="e.g. 50k units/year"
@@ -99,7 +99,7 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
           />
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Indicative lead time <span className="font-normal text-slate-400">(optional)</span></label>
+          <label className="block text-sm font-semibold text-slate-700 mb-1">Indicative lead time <span className="font-normal text-slate-500">(optional)</span></label>
           <input
             value={leadTime} onChange={e => setLeadTime(e.target.value)}
             placeholder="e.g. 8–10 weeks"
@@ -138,7 +138,7 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
           ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
           : <><Send className="w-4 h-4" /> Send response</>}
       </button>
-      <p className="text-[11px] text-slate-400 text-center">
+      <p className="text-[11px] text-slate-500 text-center">
         Your response is shared only with the buyer conducting this sourcing request.
       </p>
     </form>

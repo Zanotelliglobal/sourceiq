@@ -131,7 +131,7 @@ export default function NotificationBell() {
 
           <div className="overflow-y-auto">
             {items.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-slate-400">
+              <div className="px-4 py-10 text-center text-sm text-slate-500">
                 {t("No notifications yet")}
               </div>
             ) : (
@@ -139,7 +139,7 @@ export default function NotificationBell() {
                 const Icon = ICONS[n.type] ?? Bell;
                 const inner = (
                   <div className="flex gap-3 px-4 py-3">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-slate-100 text-slate-400" : "bg-blue-50 text-blue-600"}`}>
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-slate-100 text-slate-500" : "bg-blue-50 text-blue-600"}`}>
                       <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -150,7 +150,7 @@ export default function NotificationBell() {
                         {!n.read && <span className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0" />}
                       </div>
                       {n.body && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{n.body}</p>}
-                      <span className="text-[10px] text-slate-400">{timeAgo(n.created_at, t)}</span>
+                      <span className="text-[10px] text-slate-500">{timeAgo(n.created_at, t)}</span>
                     </div>
                   </div>
                 );

@@ -35,11 +35,11 @@ export default function NotificationSettings() {
     <div className="card px-5 py-4 flex items-center justify-between gap-4">
       <div className="flex items-center gap-3 min-w-0">
         <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
-          <BellRing className="w-4.5 h-4.5 text-amber-600" />
+          <BellRing className="w-4.5 h-4.5 text-amber-700" />
         </div>
         <div className="min-w-0">
           <div className="text-sm font-bold text-slate-900">{t("Email notifications")}</div>
-          <div className="text-xs text-slate-400 truncate">
+          <div className="text-xs text-slate-500 truncate">
             {t("Get an email when discovery finishes, a supplier replies, or outreach fails.")}
           </div>
         </div>

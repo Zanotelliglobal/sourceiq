@@ -46,7 +46,7 @@ export default function LandingContent() {
               {t("Sign in")}
             </Link>
           </div>
-          <p className="animate-rise delay-3 text-xs text-slate-400 mt-4">{t("No credit card required · 14-day trial")}</p>
+          <p className="animate-rise delay-3 text-xs text-slate-500 mt-4">{t("No credit card required · 14-day trial")}</p>
 
           {/* Product preview */}
           <div className="animate-rise delay-4 mt-16 max-w-4xl mx-auto relative">
@@ -57,7 +57,7 @@ export default function LandingContent() {
                 <span className="w-2.5 h-2.5 rounded-full bg-red-300" />
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-300" />
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-300" />
-                <span className="ml-3 text-xs text-slate-400 font-mono">sourceiq.app/events/precision-machining</span>
+                <span className="ml-3 text-xs text-slate-500 font-mono">sourceiq.app/events/precision-machining</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
                 {[
@@ -68,7 +68,7 @@ export default function LandingContent() {
                 ].map(s => (
                   <div key={s.k} className="p-4 text-left">
                     <div className="text-2xl font-bold text-slate-900 tabular-nums">{s.v}</div>
-                    <div className="text-[11px] text-slate-400 font-medium">{s.k}</div>
+                    <div className="text-[11px] text-slate-500 font-medium">{s.k}</div>
                   </div>
                 ))}
               </div>
@@ -82,7 +82,7 @@ export default function LandingContent() {
                     <div className="w-10 h-10 rounded-xl border-2 border-blue-200 text-blue-600 flex items-center justify-center font-bold text-sm tabular-nums flex-shrink-0">{r.s}</div>
                     <div className="flex-1 text-left min-w-0">
                       <div className="text-sm font-semibold text-slate-900 truncate">{r.n}</div>
-                      <div className="text-xs text-slate-400">{r.c}</div>
+                      <div className="text-xs text-slate-500">{r.c}</div>
                     </div>
                     <span className={r.stage}>{r.label}</span>
                   </div>
@@ -109,7 +109,7 @@ export default function LandingContent() {
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 mt-12 text-xs font-semibold text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 mt-12 text-xs font-semibold text-slate-500">
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> {t("GDPR compliant")}</span>
             <span className="inline-flex items-center gap-1.5"><Lock className="w-4 h-4" /> {t("Anonymous outreach")}</span>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> {t("SOC 2 aligned")}</span>
@@ -165,7 +165,7 @@ export default function LandingContent() {
                 <div className="text-sm font-bold text-slate-700">{p.name}</div>
                 <div className="mt-3 flex items-baseline gap-1.5">
                   <span className="text-4xl font-extrabold text-slate-900">{p.price}</span>
-                  <span className="text-sm text-slate-400">{p.sub}</span>
+                  <span className="text-sm text-slate-500">{p.sub}</span>
                 </div>
                 <ul className="mt-6 space-y-2.5 flex-1">
                   {p.features.map(f => (
@@ -222,7 +222,7 @@ export default function LandingContent() {
               <Link href="/legal/privacy" className="hover:text-slate-900 transition-colors">{t("Privacy Policy")}</Link>
               <Link href="/legal/terms" className="hover:text-slate-900 transition-colors">{t("Terms of Service")}</Link>
             </div>
-            <p className="text-xs text-slate-400">© {new Date().getFullYear()} SourceIQ. {t("AI-powered supplier intelligence.")}</p>
+            <p className="text-xs text-slate-500">© {new Date().getFullYear()} SourceIQ. {t("AI-powered supplier intelligence.")}</p>
           </div>
         </div>
       </footer>

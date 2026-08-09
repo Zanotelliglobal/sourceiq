@@ -58,7 +58,7 @@ export default function ReferralCard() {
         </div>
         <div className="min-w-0">
           <div className="text-sm font-bold text-slate-900">{t("Refer & earn")}</div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-slate-500">
             {t("Share your link. When someone you refer subscribes, you both get bonus events.")}
           </div>
         </div>
@@ -95,7 +95,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg bg-slate-50 border border-slate-100 py-2">
       <div className="text-lg font-bold text-slate-900">{value}</div>
-      <div className="text-[11px] text-slate-400">{label}</div>
+      <div className="text-[11px] text-slate-500">{label}</div>
     </div>
   );
 }

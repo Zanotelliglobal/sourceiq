@@ -23,7 +23,7 @@ export default function LegalLayout({
       </Link>
 
       <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{title}</h1>
-      <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-2">
+      <p className="text-xs font-medium uppercase tracking-wider text-slate-500 mt-2">
         Last updated: {LEGAL_LAST_UPDATED}
       </p>
       <p className="text-sm text-slate-600 leading-relaxed mt-6">{intro}</p>
