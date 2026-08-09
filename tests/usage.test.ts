@@ -69,10 +69,10 @@ describe("effectiveTier", () => {
     expect(effectiveTier(org("free")).key).toBe("free");
   });
 
-  it("grants trialing orgs Premium-level entitlement", () => {
-    expect(effectiveTier(org("trial", "trialing")).key).toBe("premium");
-    expect(effectiveTier(org("something", "trialing")).key).toBe("premium");
-    expect(effectiveTier(org("trial", "active")).key).toBe("premium");
+  it("caps trialing orgs at Basic-level entitlement (cardless — no unbounded cost exposure)", () => {
+    expect(effectiveTier(org("trial", "trialing")).key).toBe("basic");
+    expect(effectiveTier(org("something", "trialing")).key).toBe("basic");
+    expect(effectiveTier(org("trial", "active")).key).toBe("basic");
   });
 
   it("falls back to Free for unrecognized, non-trial plans", () => {

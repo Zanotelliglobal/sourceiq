@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
 import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
-import { recordUsage, usageSummary } from "@/lib/usage";
+import { recordUsage, usageSummary, effectiveTier, checkWaveLimit } from "@/lib/usage";
+import { UNLIMITED } from "@/lib/plans";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -17,7 +18,12 @@ export async function POST(req: NextRequest) {
   const gate = requireActiveSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
-  const { event_id, wave } = await req.json();
+  // The client only ever sends `wave` as its own best-effort read of
+  // event.wave_count + 1 for display/logging purposes — the count that
+  // actually matters for plan enforcement must be computed here, server-side,
+  // from the persisted row. Trusting a client-supplied wave number would let
+  // a caller always send `wave: 1` to dodge a wave-count-based plan cap.
+  const { event_id } = await req.json();
   const db = getDb();
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
@@ -28,7 +34,16 @@ export async function POST(req: NextRequest) {
 
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const waveNumber = wave || event.wave_count + 1;
+  const tier = effectiveTier(ctx.org);
+  const waveNumber = event.wave_count + 1;
+  const waveCheck = checkWaveLimit(tier, waveNumber);
+  if (!waveCheck.ok) {
+    return NextResponse.json({
+      error: `Your ${tier.name} plan includes ${waveCheck.limit} discovery wave${waveCheck.limit === 1 ? "" : "s"} per event — you've already used ${waveCheck.used}. Upgrade for more waves.`,
+      code: waveCheck.reason,
+    }, { status: 402 });
+  }
+
   // Give the agents the specific subcategory when available — sharper searches.
   const categoryLabel = event.subcategory ? `${event.category} — ${event.subcategory}` : event.category;
 
@@ -55,6 +70,11 @@ export async function POST(req: NextRequest) {
       controller.enqueue(encoder.encode(`: ${" ".repeat(2048)}\n\n`));
       const heartbeat = setInterval(() => {
         try { controller.enqueue(encoder.encode(`: keep-alive\n\n`)); } catch {}
+        // Also touch updated_at so the GET list/detail endpoints' "interrupted
+        // run" staleness heuristic (>5 min since updated_at while status is
+        // scouting/outreach) doesn't false-positive on a healthy long-running
+        // wave — updated_at was previously only written at wave start/end.
+        void db.prepare(`UPDATE sourcing_events SET updated_at=datetime('now') WHERE id=?`).run(event.id).catch(() => {});
       }, 15000);
       // Record token usage per stage + the model that actually ran it, then
       // push a running cost total to the UI.
@@ -140,6 +160,14 @@ export async function POST(req: NextRequest) {
         // Avoid-list passed to scouts: the human-readable names we already have.
         const avoidNames: string[] = existing.map(s => s.name);
 
+        // Plan cap on suppliers-per-event: scouts run concurrently, so track
+        // remaining headroom in a closure variable and decrement it
+        // synchronously (no `await` between read and write) right alongside
+        // claimIfNew's dedup claim, so parallel scouts can't race past the cap.
+        const supplierLimit = tier.limits.suppliersPerEvent;
+        let supplierCapRemaining = supplierLimit === UNLIMITED ? Infinity : Math.max(0, supplierLimit - existing.length);
+        let capNoticeSent = false;
+
         const groundingOn = process.env.QUALIFIER_GROUNDING !== "0";
         let newSuppliers = 0;
         // Contact scraping runs off the critical path (lib/process-supplier.ts):
@@ -174,7 +202,21 @@ export async function POST(req: NextRequest) {
           }
 
           // Claim new suppliers synchronously so parallel scouts can't double-insert.
-          const fresh = found.filter(s => claimIfNew(s.name, s.website));
+          let fresh = found.filter(s => claimIfNew(s.name, s.website));
+
+          // Enforce the plan's suppliers-per-event cap: truncate this batch to
+          // whatever headroom remains, so a run never overshoots the tier limit.
+          if (supplierCapRemaining !== Infinity && fresh.length > supplierCapRemaining) {
+            fresh = fresh.slice(0, Math.max(0, supplierCapRemaining));
+            if (!capNoticeSent) {
+              capNoticeSent = true;
+              send({
+                type: "supplier_cap_reached", limit: supplierLimit,
+                message: `Reached your plan's ${supplierLimit}-supplier limit for this event — remaining candidates were skipped. Upgrade for a higher cap.`,
+              });
+            }
+          }
+          if (supplierCapRemaining !== Infinity) supplierCapRemaining -= fresh.length;
 
           send({ type: "agent_scouted", agent_id: agent.id, count: fresh.length, message: `Found ${fresh.length} suppliers, qualifying...` });
           await db.prepare(`UPDATE agent_runs SET status='qualifying', message=?, suppliers_found=?
