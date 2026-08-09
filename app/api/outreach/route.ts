@@ -105,7 +105,18 @@ export async function POST(req: NextRequest) {
 
         let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0, failed = 0;
 
-        for (const s of targets) {
+        // Each target's chain (contact discovery → draft/send → simulated reply)
+        // is ~15-40s of agent + network latency. Processing targets one at a time
+        // guarantees the serverless maxDuration (300s) is blown past ~15-20
+        // suppliers, and any real campaign (up to the plan's supplier cap) will
+        // exceed it by a wide margin (#93). Targets are independent — no shared
+        // per-iteration state besides the campaign-level counters below, which
+        // are simple synchronous increments (safe under Node's single-threaded
+        // event loop, same pattern as orchestrate's newSuppliers += ... ) — so we
+        // fan them out through a bounded worker pool, mirroring the qualifier
+        // pool in app/api/orchestrate/route.ts. Concurrency is env-overridable
+        // in case a mail/agent provider's rate limits need a lower cap.
+        const processTarget = async (s: (typeof targets)[number]) => {
           // 0 ── Contact discovery: resolve the best reachable channel if we have no email.
           if (!s.contact_email) {
             try {
@@ -128,7 +139,7 @@ export async function POST(req: NextRequest) {
             email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach", AGENT_MODELS.outreach), buyer);
           } catch (err) {
             send({ type: "supplier_error", supplier_id: s.id, message: String(err) });
-            continue;
+            return;
           }
 
           // ── Mint a per-supplier reply token so inbound replies thread back here ──
@@ -159,7 +170,7 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             failed++;
             send({ type: "supplier_error", supplier_id: s.id, message: `Send failed: ${String(err)}` });
-            continue;
+            return;
           }
 
           if (live && !delivery.sent) {
@@ -167,7 +178,7 @@ export async function POST(req: NextRequest) {
             await db.prepare(`UPDATE suppliers SET outreach_status='skipped' WHERE id=?`).run(s.id);
             skipped++;
             send({ type: "skipped", supplier_id: s.id, supplier_name: s.name, reason: delivery.reason });
-            continue;
+            return;
           }
 
           await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
@@ -182,7 +193,7 @@ export async function POST(req: NextRequest) {
             // response gate is driven by the inbound webhook, NOT simulated here.
             awaiting++;
             send({ type: "awaiting_reply", supplier_id: s.id, supplier_name: s.name });
-            continue;
+            return;
           }
 
           // ── DRAFT/DEMO mode only: simulate the supplier's reply ──
@@ -220,7 +231,21 @@ export async function POST(req: NextRequest) {
             declined++;
             send({ type: "declined", supplier_id: s.id, supplier_name: s.name, responded: resp.responded, detail: resp });
           }
-        }
+        };
+
+        // Bounded worker pool — the big wall-clock win over sequential (#93).
+        // Default of 5 concurrent targets keeps a 20-supplier campaign inside a
+        // ~60-90s wall clock instead of guaranteeing the 300s timeout; tune down
+        // per-deployment if a mail/agent provider's rate limits need a lower cap.
+        const outreachConcurrency = Math.max(1, Number(process.env.OUTREACH_CONCURRENCY) || 5);
+        let tCursor = 0;
+        const tWorker = async () => {
+          while (tCursor < targets.length) {
+            const idx = tCursor++;
+            await processTarget(targets[idx]);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(outreachConcurrency, targets.length) }, tWorker));
 
         await db.prepare(`UPDATE sourcing_events SET status='reviewing', updated_at=datetime('now') WHERE id=?`).run(event.id);
         send({ type: "campaign_complete", live, sent, positive, declined, awaiting, skipped });
