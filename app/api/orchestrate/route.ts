@@ -8,6 +8,7 @@ import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
 
@@ -17,6 +18,19 @@ export async function POST(req: NextRequest) {
 
   const gate = requireActiveSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
+
+  // A discovery wave is an expensive multi-agent LLM run (see SSE loop below),
+  // not a cheap CRUD call — cap launches per org so a scripted/looping client
+  // (or a buggy retry) can't fan out unbounded concurrent orchestrator runs.
+  // Distinct `code` from the 402 plan-limit responses above so the client can
+  // tell "you're out of waves" apart from "you're launching too fast."
+  const orgRl = await rateLimit("orchestrate", String(ctx.orgId), 10, 60);
+  if (!orgRl.ok) {
+    return NextResponse.json(
+      { error: "Too many discovery runs launched. Please slow down.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(orgRl.retryAfter) } },
+    );
+  }
 
   // The client only ever sends `wave` as its own best-effort read of
   // event.wave_count + 1 for display/logging purposes — the count that
@@ -28,11 +42,30 @@ export async function POST(req: NextRequest) {
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
-    requirements: string; annual_spend: string; wave_count: number;
+    requirements: string; annual_spend: string; wave_count: number; status: string | null; updated_at: string | null;
     target_countries: string | null; ship_to: string | null;
   } | undefined;
 
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Concurrency guard: the UI already disables the launch control while a run
+  // is active, but nothing server-side stopped a second request (double-click,
+  // replayed request, second tab) from starting an overlapping wave against
+  // the same event — which would race writes to agent_runs/suppliers/status.
+  // Mirror the GET endpoints' interruption staleness window (>5 min since the
+  // last write) so a crashed/timed-out run doesn't lock the event out of new
+  // runs forever — the DB row's status is never written back to 'reviewing'/
+  // 'idle' on that path, only downgraded in-memory for the read response.
+  if (event.status === "scouting" || event.status === "outreach") {
+    const updatedMs = event.updated_at ? new Date(event.updated_at).getTime() : 0;
+    const stale = !updatedMs || Date.now() - updatedMs > 5 * 60_000;
+    if (!stale) {
+      return NextResponse.json(
+        { error: "A run is already in progress for this event.", code: "run_in_progress" },
+        { status: 409 },
+      );
+    }
+  }
 
   const tier = effectiveTier(ctx.org);
   const waveNumber = event.wave_count + 1;

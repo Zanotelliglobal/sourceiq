@@ -8,6 +8,7 @@ import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
 
@@ -34,14 +35,45 @@ export async function POST(req: NextRequest) {
     }, { status: 402 });
   }
 
+  // A campaign is a live-email-sending, multi-supplier agent run — not a cheap
+  // CRUD call. Cap launches per org, with a distinct `code` from the 402
+  // plan-limit responses above so the client can tell "you're out of plan"
+  // apart from "you're launching too fast."
+  const orgRl = await rateLimit("outreach-launch", String(ctx.orgId), 10, 60);
+  if (!orgRl.ok) {
+    return NextResponse.json(
+      { error: "Too many outreach campaigns launched. Please slow down.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(orgRl.retryAfter) } },
+    );
+  }
+
   const { event_id, supplier_ids } = await req.json();
   const db = getDb();
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; category: string; requirements: string; annual_spend: string;
+    status: string | null; updated_at: string | null;
     outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
   } | undefined;
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Concurrency guard: stop a double-click/replayed request/second tab from
+  // starting an overlapping campaign against the same event, which would
+  // race writes to suppliers/outreach_logs/status. Mirror the GET endpoints'
+  // interruption staleness window (>5 min since the last write) so a
+  // crashed/timed-out campaign doesn't lock the event out of new runs
+  // forever — the DB row's status is never written back on that path, only
+  // downgraded in-memory for the read response.
+  if (event.status === "scouting" || event.status === "outreach") {
+    const updatedMs = event.updated_at ? new Date(event.updated_at).getTime() : 0;
+    const stale = !updatedMs || Date.now() - updatedMs > 5 * 60_000;
+    if (!stale) {
+      return NextResponse.json(
+        { error: "A run is already in progress for this event.", code: "run_in_progress" },
+        { status: 409 },
+      );
+    }
+  }
 
   const buyer = event.outreach_anonymous
     ? null
