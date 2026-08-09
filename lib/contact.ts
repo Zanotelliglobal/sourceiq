@@ -4,6 +4,23 @@
 // email addresses, a contact-page URL, and social handles. This grounds contact
 // discovery in what's actually published, rather than asking an LLM to recall or
 // guess an address. Returns only what it genuinely found; empty strings otherwise.
+//
+// SECURITY (issue #76): `website` here is entirely attacker-influenced — it's
+// whatever a scout LLM / web search turned up for a "supplier", not something
+// a trusted user typed in. Fetching it server-side is a textbook SSRF vector
+// (e.g. `http://169.254.169.254/latest/meta-data/` or `http://127.0.0.1:6379/`).
+// `safeFetch` below resolves DNS and rejects private/loopback/link-local/
+// metadata/reserved addresses before connecting, re-validates on every
+// redirect hop (redirects are followed manually, never automatically), and
+// rejects non-http(s) schemes. This narrows, but doesn't eliminate, the risk —
+// a DNS-rebinding attack (the validated hostname resolves differently by the
+// time `fetch()` itself connects) is a known residual gap that would need a
+// connection-pinning HTTP client to close fully; blocking the vast majority of
+// realistic SSRF payloads (literal internal IPs/hostnames, redirect chains to
+// internal targets) is the goal here.
+
+import dns from "node:dns";
+import net from "node:net";
 
 export type ContactChannels = {
   contact_email: string; // best real email found (prefers info/sales/rfq mailboxes)
@@ -31,6 +48,96 @@ function normalizeSite(website: string): string | null {
   let w = website.trim();
   if (!/^https?:\/\//i.test(w)) w = "https://" + w.replace(/^\/+/, "");
   try { return new URL(w).origin; } catch { return null; }
+}
+
+// ─── SSRF guard ────────────────────────────────────────────────────────────
+// Built on Node's own `dns`/`net` modules only (no new dependency) so this
+// works under a plain `npm ci` with no lockfile changes.
+function ipv4ToInt(ip: string): number {
+  return ip.split(".").reduce((acc, octet) => (acc << 8) + (Number(octet) & 0xff), 0) >>> 0;
+}
+
+function inCidr4(ip: string, base: string, bits: number): boolean {
+  const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+  return (ipv4ToInt(ip) & mask) === (ipv4ToInt(base) & mask);
+}
+
+// RFC 1918/5735/6598 private, loopback, link-local (incl. the 169.254.169.254
+// cloud-metadata address), CGNAT, multicast, and reserved ranges.
+const BLOCKED_V4_RANGES: [string, number][] = [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8],
+  ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24],
+  ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24],
+  ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
+];
+
+function isBlockedIpv4(ip: string): boolean {
+  return BLOCKED_V4_RANGES.some(([base, bits]) => inCidr4(ip, base, bits));
+}
+
+function isBlockedIpv6(ip: string): boolean {
+  const n = ip.toLowerCase();
+  if (n === "::" || n === "::1") return true; // unspecified / loopback
+  const v4embed = n.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped
+  if (v4embed) return isBlockedIpv4(v4embed[1]);
+  const firstHextet = parseInt(n.split(":")[0] || "0", 16) || 0;
+  if ((firstHextet & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((firstHextet & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
+  return false;
+}
+
+function isBlockedAddress(ip: string): boolean {
+  if (net.isIPv4(ip)) return isBlockedIpv4(ip);
+  if (net.isIPv6(ip)) return isBlockedIpv6(ip);
+  return true; // unrecognized format — fail closed
+}
+
+// Resolve + validate a URL is safe to connect to: http(s) only, and every
+// address the hostname resolves to must be public. Rejects on any DNS
+// failure (fail closed) rather than silently proceeding.
+async function isSafeUrl(urlStr: string): Promise<boolean> {
+  let u: URL;
+  try { u = new URL(urlStr); } catch { return false; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  const hostname = u.hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+  if (net.isIP(hostname)) return !isBlockedAddress(hostname);
+  try {
+    const records = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+    if (records.length === 0) return false;
+    return records.every(r => !isBlockedAddress(r.address));
+  } catch {
+    return false;
+  }
+}
+
+const MAX_REDIRECTS = 5;
+
+// fetch() with SSRF validation on the initial URL AND on every redirect hop
+// (redirects are never auto-followed — a same-origin-looking URL could 302 to
+// an internal address, which `redirect: "follow"` would silently honor).
+async function safeFetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response | null> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!(await isSafeUrl(current))) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(current, { ...init, signal: controller.signal, redirect: "manual" });
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (!location) return null;
+      try { current = new URL(location, current).href; } catch { return null; }
+      continue;
+    }
+    return res;
+  }
+  return null; // too many redirects
 }
 
 // Registrable-ish domain: last two labels of a host (e.g. www.ritrama.com →
@@ -64,18 +171,14 @@ function emailScore(email: string): number {
 }
 
 async function fetchHtml(url: string, timeoutMs = 7000): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
+    const res = await safeFetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; SourceIQ-ContactBot/1.0; +https://sourceiq.app)",
         Accept: "text/html,application/xhtml+xml",
       },
-    });
-    if (!res.ok) return null;
+    }, timeoutMs);
+    if (!res || !res.ok) return null;
     const ct = res.headers.get("content-type") || "";
     if (!ct.includes("html")) return null;
     // Cap body size so a giant page can't blow up memory.
@@ -83,8 +186,6 @@ async function fetchHtml(url: string, timeoutMs = 7000): Promise<string | null> 
     return text.slice(0, 500_000);
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -159,20 +260,17 @@ function merge(base: ContactChannels, add: Partial<ContactChannels>): ContactCha
 export async function checkWebsiteLive(website: string, timeoutMs = 5000): Promise<boolean> {
   const origin = normalizeSite(website);
   if (!origin) return false;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const headers = { "User-Agent": "Mozilla/5.0 (compatible; SourceIQ-ContactBot/1.0; +https://sourceiq.app)" };
   try {
-    const head = await fetch(origin, { method: "HEAD", signal: controller.signal, redirect: "follow", headers });
+    const head = await safeFetch(origin, { method: "HEAD", headers }, timeoutMs);
+    if (!head) return false;
     if (head.status === 405 || head.status === 501) {
-      const get = await fetch(origin, { method: "GET", signal: controller.signal, redirect: "follow", headers });
-      return get.ok;
+      const get = await safeFetch(origin, { method: "GET", headers }, timeoutMs);
+      return !!get && get.ok;
     }
     return head.ok;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
