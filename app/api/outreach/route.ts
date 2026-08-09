@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
-import { recordUsage, usageSummary } from "@/lib/usage";
+import { recordUsage, usageSummary, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -24,6 +24,15 @@ export async function POST(req: NextRequest) {
 
   const gate = requireActiveSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
+
+  const tier = effectiveTier(ctx.org);
+  const outreachCheck = checkOutreachAllowed(tier);
+  if (!outreachCheck.ok) {
+    return NextResponse.json({
+      error: `Live supplier outreach isn't included in your ${tier.name} plan. Upgrade to Growth or higher to contact suppliers.`,
+      code: outreachCheck.reason,
+    }, { status: 402 });
+  }
 
   const { event_id, supplier_ids } = await req.json();
   const db = getDb();
@@ -64,6 +73,16 @@ export async function POST(req: NextRequest) {
           send({ type: "usage", cost_usd: s.cost_usd, total_tokens: s.total_tokens, web_searches: s.web_searches });
         })();
       };
+
+      // Campaigns can run long (many suppliers, each with a contact-discovery +
+      // draft + simulated-reply round trip). Touch updated_at periodically so
+      // the GET list/detail endpoints' "interrupted run" staleness heuristic
+      // (>5 min since updated_at while status='outreach') doesn't false-positive
+      // on a healthy long-running campaign — updated_at was previously only
+      // written at campaign start/end.
+      const heartbeat = setInterval(() => {
+        void db.prepare(`UPDATE sourcing_events SET updated_at=datetime('now') WHERE id=?`).run(event.id).catch(() => {});
+      }, 20000);
 
       try {
         await db.prepare(`UPDATE sourcing_events SET status='outreach', updated_at=datetime('now') WHERE id=?`).run(event.id);
@@ -221,6 +240,7 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         send({ type: "error", message: String(err) });
       } finally {
+        clearInterval(heartbeat);
         controller.close();
       }
     }

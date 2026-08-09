@@ -3,8 +3,9 @@ import { getDb } from "@/lib/db";
 import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
-import { recordUsage } from "@/lib/usage";
+import { recordUsage, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
+import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
@@ -70,6 +71,25 @@ export async function POST(req: NextRequest) {
       "UPDATE suppliers SET feedback_signal = ?, feedback_updated_at = datetime('now') WHERE id = ?"
     ).run(signal, supplier_id);
     return NextResponse.json({ success: true });
+  }
+
+  // Per-supplier send actions are the same live-outreach capability as the
+  // batch /api/outreach campaign endpoint, just invoked one supplier at a
+  // time — they need the identical subscription + plan-tier gate, which this
+  // route previously lacked entirely (only tenant ownership was checked
+  // above), letting a free/basic-tier org send live outreach with zero plan
+  // enforcement.
+  if (action === "send_outreach" || action === "send_followup") {
+    const gate = requireActiveSubscription(ctx.org);
+    if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
+    const tier = effectiveTier(ctx.org);
+    const outreachCheck = checkOutreachAllowed(tier);
+    if (!outreachCheck.ok) {
+      return NextResponse.json({
+        error: `Live supplier outreach isn't included in your ${tier.name} plan. Upgrade to Growth or higher to contact suppliers.`,
+        code: outreachCheck.reason,
+      }, { status: 402 });
+    }
   }
 
   if (action === "send_outreach") {
