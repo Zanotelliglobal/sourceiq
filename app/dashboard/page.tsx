@@ -552,6 +552,7 @@ export default function Dashboard() {
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
+                  aria-label={t("Search events and suppliers")}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
