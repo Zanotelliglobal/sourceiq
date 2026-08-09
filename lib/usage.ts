@@ -145,8 +145,10 @@ export async function usageSummary(db: Db, eventId: number): Promise<UsageSummar
 export function effectiveTier(org: Organization): Tier {
   const byPlan = getTier(org.plan);
   if (byPlan) return byPlan;
-  // Trials get generous (Premium) limits; anything unrecognized falls to Free.
-  if (org.subscription_status === "trialing" || org.plan === "trial") return getTier("premium")!;
+  // Trials are cardless (no payment method on file) and must not carry
+  // unbounded LLM cost exposure — cap them at Basic-equivalent limits rather
+  // than Premium. Anything else unrecognized falls to Free.
+  if (org.subscription_status === "trialing" || org.plan === "trial") return getTier("basic")!;
   return getTier("free")!;
 }
 
@@ -214,6 +216,32 @@ export async function checkEventLimit(db: Db, org: Organization): Promise<EventL
   if (usage.events_this_month >= limit) {
     return { ok: false, reason: "event_limit_reached", limit, used: usage.events_this_month };
   }
+  return { ok: true };
+}
+
+export type LimitCheck = { ok: true } | { ok: false; reason: string; limit: number; used: number };
+
+/** Whether the org may run another discovery wave on this event under its tier. */
+export function checkWaveLimit(tier: Tier, waveNumber: number): LimitCheck {
+  const limit = tier.limits.wavesPerEvent;
+  if (limit === UNLIMITED) return { ok: true };
+  if (waveNumber > limit) return { ok: false, reason: "wave_limit_reached", limit, used: waveNumber - 1 };
+  return { ok: true };
+}
+
+/** Whether the event has room for more suppliers under the tier's per-event cap. */
+export async function checkSupplierLimit(db: Db, tier: Tier, eventId: number): Promise<LimitCheck> {
+  const limit = tier.limits.suppliersPerEvent;
+  if (limit === UNLIMITED) return { ok: true };
+  const row = await db.prepare("SELECT COUNT(*)::int AS c FROM suppliers WHERE event_id = ?").get(eventId) as { c: number } | undefined;
+  const used = Number(row?.c ?? 0);
+  if (used >= limit) return { ok: false, reason: "supplier_limit_reached", limit, used };
+  return { ok: true };
+}
+
+/** Whether the tier includes live supplier outreach at all. */
+export function checkOutreachAllowed(tier: Tier): LimitCheck {
+  if (!tier.limits.outreach) return { ok: false, reason: "outreach_not_included", limit: 0, used: 0 };
   return { ok: true };
 }
 
