@@ -260,7 +260,7 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeed
             </div>
             <p className="text-sm text-slate-400 mt-0.5">{[supplier.city, supplier.country].filter(Boolean).join(", ")}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label={t("Close")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6 space-y-6 flex-1">
@@ -632,7 +632,7 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
               <h3 className="font-bold text-slate-900">{anonymous ? t("Anonymous RFI Outreach") : t("RFI Outreach")}</h3>
               <p className="text-xs text-slate-400 mt-0.5">{supplier.name} · {anonymous ? t("Identity protected") : t("Sent under your name")}</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+            <button onClick={onClose} aria-label={t("Close")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
           </div>
           {loading ? (
             <div className="flex flex-col items-center py-12 gap-3">
@@ -901,7 +901,7 @@ function AuditModal({ eventId, onClose }: { eventId: number; onClose: () => void
             <h3 className="font-bold text-slate-900">{t("Activity History")}</h3>
             <p className="text-xs text-slate-400 mt-0.5">{t("Who did what, and when — an append-only governance record")}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label={t("Close")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6">
@@ -981,7 +981,7 @@ function BriefModal({ event, onClose, onSaved }: {
             <h3 className="font-bold text-slate-900">{t("Scouting Brief")}</h3>
             <p className="text-xs text-slate-400 mt-0.5">{t("Review and refine the mandate driving the agents")}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label={t("Close")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -1193,7 +1193,7 @@ function FilterPanel({ filters, onApply, onClose }: {
             <h3 className="font-bold text-slate-900">{t("Filter suppliers")}</h3>
             <p className="text-xs text-slate-400 mt-0.5">{t("Narrow the current list by structured fields")}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label={t("Close")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="px-6 pt-4">

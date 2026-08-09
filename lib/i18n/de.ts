@@ -39,6 +39,7 @@ export const de: Record<string, string> = {
   "Changes apply to the next discovery wave and outreach.": "Änderungen gelten für die nächste Erkennungswelle und Ansprache.",
   "Choose how you appear to suppliers when SourceIQ reaches out on this event.": "Legen Sie fest, wie Sie gegenüber Lieferanten erscheinen, wenn SourceIQ für dieses Event Kontakt aufnimmt.",
   "Click": "Klicken",
+  "Close": "Schließen",
   "Close menu": "Menü schließen",
   "Commodity Category": "Warengruppe",
   "Company Overview": "Unternehmensübersicht",
