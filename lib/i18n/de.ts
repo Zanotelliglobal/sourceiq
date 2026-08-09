@@ -299,7 +299,7 @@ export const de: Record<string, string> = {
   "Find qualified suppliers in": "Finden Sie qualifizierte Lieferanten in",
   "Follow-up automation": "Nachfass-Automatisierung",
   "Free": "Kostenlos",
-  "GDPR compliant": "GDPR-konform",
+  "GDPR aligned": "An der DSGVO ausgerichtet",
   "Germany": "Deutschland",
   "Growth": "Growth",
   "How SourceIQ works": "So funktioniert SourceIQ",
