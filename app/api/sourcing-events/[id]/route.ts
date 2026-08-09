@@ -60,12 +60,22 @@ export async function PATCH(
   // (only values are parameterized), so any key not explicitly rejected could
   // inject arbitrary SQL via a crafted JSON body — and would also let a client
   // silently overwrite system-managed columns (status, wave_count, etc.).
-  const ALLOWED = new Set([
+  // Content fields materially affect supplier qualification in later waves
+  // (#72) — restrict those to admins/owners, same threat model as DELETE.
+  // Preference fields (pinned/archived) are cosmetic bookkeeping and stay
+  // open to any member.
+  const CONTENT_FIELDS = new Set([
     "title", "category", "description", "requirements", "annual_spend",
-    "target_countries", "pinned", "archived",
+    "target_countries",
   ]);
+  const PREFERENCE_FIELDS = new Set(["pinned", "archived"]);
+  const ALLOWED = new Set([...CONTENT_FIELDS, ...PREFERENCE_FIELDS]);
   const keys = Object.keys(body).filter(k => ALLOWED.has(k));
   if (keys.length === 0) return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
+  if (keys.some(k => CONTENT_FIELDS.has(k))) {
+    const denied = requireRole(ctx, "admin");
+    if (denied) return denied;
+  }
   const fields = keys.map(k => `${k} = ?`).join(", ");
   const values = [...keys.map(k => body[k]), id];
   await db.prepare(`UPDATE sourcing_events SET ${fields}, updated_at = datetime('now') WHERE id = ?`).run(...values);

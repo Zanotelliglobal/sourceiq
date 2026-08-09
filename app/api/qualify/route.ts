@@ -8,6 +8,15 @@ import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 
+// Canonical funnel_stage vocabulary (#73). Mirrors every value the app itself
+// ever writes to this column (see STAGES in app/events/[id]/page.tsx plus the
+// server-only "engaged" transition set on inbound-reply classification) — an
+// allowlist here, not a blocklist, so a bad/outdated client can't wedge a
+// supplier into a bucket no UI filter ever matches.
+const VALID_STAGES = new Set([
+  "long_list", "contacted", "responded", "engaged", "shortlisted", "declined",
+]);
+
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,6 +51,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "move_stage") {
+    if (!VALID_STAGES.has(stage)) {
+      return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
+    }
     const before = await db.prepare("SELECT name, event_id, funnel_stage FROM suppliers WHERE id = ?").get(supplier_id) as
       { name: string; event_id: number; funnel_stage: string | null } | undefined;
     await db.prepare("UPDATE suppliers SET funnel_stage = ? WHERE id = ?").run(stage, supplier_id);
