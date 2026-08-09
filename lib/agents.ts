@@ -355,14 +355,29 @@ Your FINAL message must contain ONLY the JSON array (after you have finished sea
   let fullText = "";
   let guard = 0;
 
-  while (guard++ < 8) {
+  // #94: a scout with adaptive thinking + web search can take 90-360s in a
+  // SINGLE call, and used to be allowed up to 8 resumes on top of that —
+  // comfortably enough on its own to blow the orchestrate route's 300s
+  // serverless budget before qualifying/enriching even starts. Bound the
+  // WHOLE scout (all resumes combined) to a wall-clock deadline, passed as a
+  // shrinking per-call timeout, and cut the max resume count so a scout that
+  // keeps pausing can't wait it out one resume at a time. On timeout we fall
+  // through with whatever `fullText` was already produced (the JSON-array
+  // match below throws if it's incomplete, which the caller already treats as
+  // a normal per-agent failure — other scouts in the pool are unaffected).
+  const scoutDeadlineMs = Math.max(30_000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 150_000);
+  const scoutStartedAt = Date.now();
+
+  while (guard++ < 6) {
+    const remainingMs = scoutDeadlineMs - (Date.now() - scoutStartedAt);
+    if (remainingMs <= 0) break;
     const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
       model: AGENT_MODELS.scout,
       max_tokens: 16000,
       thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 12 }],
       messages,
-    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    } as any, { timeout: remainingMs, maxRetries: 0 }); // eslint-disable-line @typescript-eslint/no-explicit-any
     onUsage?.(response.usage); // per-turn usage (web search inflates input on resumes)
 
     fullText = (response.content || [])
