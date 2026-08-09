@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
 import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
-import { recordUsage, usageSummary, effectiveTier, checkWaveLimit } from "@/lib/usage";
+import { recordUsage, usageSummary, effectiveTier, checkCreditsAvailable } from "@/lib/usage";
 import { UNLIMITED } from "@/lib/plans";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
   // The client only ever sends `wave` as its own best-effort read of
-  // event.wave_count + 1 for display/logging purposes — the count that
-  // actually matters for plan enforcement must be computed here, server-side,
-  // from the persisted row. Trusting a client-supplied wave number would let
-  // a caller always send `wave: 1` to dodge a wave-count-based plan cap.
+  // event.wave_count + 1 for display/logging purposes — the wave number that
+  // actually gets recorded (and the org's credit balance that gates this
+  // request, #45) must be computed/checked here, server-side, from persisted
+  // state. Trusting a client-supplied wave number would let a caller spoof it.
   const { event_id } = await req.json();
   const db = getDb();
 
@@ -36,11 +36,16 @@ export async function POST(req: NextRequest) {
 
   const tier = effectiveTier(ctx.org);
   const waveNumber = event.wave_count + 1;
-  const waveCheck = checkWaveLimit(tier, waveNumber);
-  if (!waveCheck.ok) {
+  // #45: discovery waves are the one action metered against the org's shared
+  // monthly credit pool (replaces the old fixed "waves per event" cap) — a
+  // wave-hungry event no longer blocks other events from running once its own
+  // per-event cap was hit; instead, all waves across all of an org's events
+  // draw down the same pool.
+  const creditsCheck = await checkCreditsAvailable(db, ctx.org);
+  if (!creditsCheck.ok) {
     return NextResponse.json({
-      error: `Your ${tier.name} plan includes ${waveCheck.limit} discovery wave${waveCheck.limit === 1 ? "" : "s"} per event — you've already used ${waveCheck.used}. Upgrade for more waves.`,
-      code: waveCheck.reason,
+      error: `Your ${tier.name} plan includes ${creditsCheck.limit} discovery credit${creditsCheck.limit === 1 ? "" : "s"}/month — you've already used ${creditsCheck.used}. Upgrade for more credits.`,
+      code: creditsCheck.reason,
     }, { status: 402 });
   }
 

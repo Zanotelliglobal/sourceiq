@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
-import { checkEventLimit } from "@/lib/usage";
 import { rateLimit, clientIp } from "@/lib/ratelimit";
 import { logAudit } from "@/lib/audit";
 import { captureException, trackEvent } from "@/lib/observability";
@@ -71,15 +70,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Tier quota: block new events once the org exhausts its monthly allowance.
+  // #45 (Epic 6.1-6.3): event creation itself is no longer credit-metered —
+  // credits are charged per discovery wave (see app/api/orchestrate/route.ts),
+  // which is where the actual LLM spend happens. Event creation is still
+  // bounded by the anti-abuse rate limits above.
   const db = getDb();
-  const quota = await checkEventLimit(db, ctx.org);
-  if (!quota.ok) {
-    return NextResponse.json(
-      { error: `Monthly event limit reached (${quota.used}/${quota.limit}). Upgrade your plan for more.`, code: "event_limit_reached", limit: quota.limit, used: quota.used },
-      { status: 402 }
-    );
-  }
 
   const body = await req.json();
   const { title, category, subcategory, description, requirements, annual_spend, target_countries,

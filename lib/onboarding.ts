@@ -4,8 +4,10 @@ type Db = ReturnType<typeof getDb>;
 
 // ─── QUICK-START CHECKLIST ────────────────────────────────────────────────────
 // A per-org activation checklist that fuses onboarding with the referral
-// growth loop: each completed task grants bonus events, the same currency
-// referrals use (see lib/usage.ts's effectiveEventLimit). Three tasks are
+// growth loop: each completed task grants bonus events (stored as
+// organizations.bonus_events), the same currency referrals use — converted to
+// bonus monthly credits at read time by lib/usage.ts's effectiveCreditLimit
+// (#45). Three tasks are
 // auto-detected from existing org data (event created, supplier shortlisted,
 // outreach launched); the fourth (sharing the referral link) is reported
 // explicitly by the client. Progress persists as a JSON {taskKey: isoTimestamp}

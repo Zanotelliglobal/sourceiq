@@ -59,7 +59,7 @@ export default function ReferralCard() {
         <div className="min-w-0">
           <div className="text-sm font-bold text-slate-900">{t("Refer & earn")}</div>
           <div className="text-xs text-slate-400">
-            {t("Share your link. When someone you refer subscribes, you both get bonus events.")}
+            {t("Share your link. When someone you refer subscribes, you both get bonus credits.")}
           </div>
         </div>
       </div>
@@ -85,7 +85,7 @@ export default function ReferralCard() {
       <div className="grid grid-cols-3 gap-2 text-center">
         <Stat label={t("Invited")} value={stats.referred_count} />
         <Stat label={t("Converted")} value={stats.rewarded_count} />
-        <Stat label={t("Bonus events")} value={stats.bonus_events} />
+        <Stat label={t("Bonus credits")} value={stats.bonus_events} />
       </div>
     </div>
   );
