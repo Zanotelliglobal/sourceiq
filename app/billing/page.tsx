@@ -190,11 +190,12 @@ export default function BillingPage() {
 
           {/* Cadence toggle */}
           <div className="flex items-center justify-center">
-            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl" role="group" aria-label={t("Billing cadence")}>
               {CADENCES.map(c => (
                 <button
                   key={c.key}
                   onClick={() => setCadence(c.key)}
+                  aria-pressed={cadence === c.key}
                   className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                     cadence === c.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                   }`}

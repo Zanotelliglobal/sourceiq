@@ -602,11 +602,12 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap" role="group" aria-label={t("Filter by status")}>
                 {FILTERS.map(f => (
                   <button
                     key={f.key}
                     onClick={() => setStatusFilter(f.key)}
+                    aria-pressed={statusFilter === f.key}
                     className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
                       statusFilter === f.key
                         ? "bg-blue-50 text-blue-700 border-blue-200"
@@ -619,6 +620,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setGroupByCategory(v => !v)}
                   title={t("Group by category")}
+                  aria-pressed={groupByCategory}
                   className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
                     groupByCategory
                       ? "bg-violet-50 text-violet-700 border-violet-200"
@@ -631,6 +633,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setShowArchived(v => !v)}
                   title={t("Show archived events")}
+                  aria-pressed={showArchived}
                   className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
                     showArchived
                       ? "bg-slate-800 text-white border-slate-800"
@@ -652,13 +655,19 @@ export default function Dashboard() {
                 <th className="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Event")}</th>
                 <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">{t("Category")}</th>
                 <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Status")}</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">
-                  <button onClick={() => toggleSort("pipeline")} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
+                <th
+                  className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell"
+                  aria-sort={sortKey === "pipeline" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <button onClick={() => toggleSort("pipeline")} aria-pressed={sortKey === "pipeline"} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
                     {t("Pipeline")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "pipeline" ? "text-blue-500" : "text-slate-300"}`} />
                   </button>
                 </th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">
-                  <button onClick={() => toggleSort("initiated")} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
+                <th
+                  className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell"
+                  aria-sort={sortKey === "initiated" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <button onClick={() => toggleSort("initiated")} aria-pressed={sortKey === "initiated"} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
                     {t("Initiated")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "initiated" ? "text-blue-500" : "text-slate-300"}`} />
                   </button>
                 </th>

@@ -409,11 +409,12 @@ export default function NewEventPage() {
                 </span>
               )}
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label={t("Commodity Category")}>
               {CATEGORIES.map(c => (
                 <button
                   key={c} type="button"
                   onClick={() => pickCategory(c)}
+                  aria-pressed={form.category === c}
                   className={`text-left px-3.5 py-2.5 rounded-xl text-sm font-medium border transition-all ${
                     form.category === c
                       ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
@@ -479,13 +480,14 @@ export default function NewEventPage() {
             <p className="text-xs text-slate-400 mb-2.5">
               {t("Select the countries or regions the scout agents should focus on. Leave empty for a global search.")}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("Target Sourcing Geographies")}>
               {GEOGRAPHIES.map(c => {
                 const active = countries.includes(c);
                 return (
                   <button
                     key={c} type="button"
                     onClick={() => toggleCountry(c)}
+                    aria-pressed={active}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       active
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
@@ -499,13 +501,14 @@ export default function NewEventPage() {
             </div>
             {/* Macro-regions: target a whole area instead of listing countries */}
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2">{t("Macro-regions")}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("Macro-regions")}>
               {MACRO_REGIONS.map(c => {
                 const active = countries.includes(c);
                 return (
                   <button
                     key={c} type="button"
                     onClick={() => toggleCountry(c)}
+                    aria-pressed={active}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       active
                         ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-600/20"
@@ -601,7 +604,7 @@ export default function NewEventPage() {
             <p className="text-xs text-slate-400 mb-2.5">
               {t("Choose how you appear to suppliers when SourceIQ reaches out on this event.")}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="group" aria-label={t("Supplier Outreach Identity")}>
               {[
                 { v: "true",  Icon: EyeOff, title: t("Anonymous"), sub: t("SourceIQ contacts suppliers on your behalf — your organisation is never named.") },
                 { v: "false", Icon: Hand, title: t("Disclosed"), sub: t("Your name, role & company appear in the outreach. Copy or send via your own mail client.") },
@@ -611,6 +614,7 @@ export default function NewEventPage() {
                   <button
                     key={opt.v} type="button"
                     onClick={() => set("outreach_anonymous", opt.v)}
+                    aria-pressed={active}
                     className={`text-left px-4 py-3 rounded-xl border transition-all ${
                       active
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
