@@ -986,24 +986,24 @@ function BriefModal({ event, onClose, onSaved }: {
 
         <div className="p-6 space-y-5">
           <div>
-            <label className="label">{t("Event Reference")}</label>
-            <input className="input" value={form.title} onChange={e => set("title", e.target.value)} />
+            <label className="label" htmlFor="brief-title">{t("Event Reference")}</label>
+            <input id="brief-title" className="input" value={form.title} onChange={e => set("title", e.target.value)} />
           </div>
           <div>
-            <label className="label">{t("Commodity Category")}</label>
-            <input className="input" value={form.category} onChange={e => set("category", e.target.value)} />
+            <label className="label" htmlFor="brief-category">{t("Commodity Category")}</label>
+            <input id="brief-category" className="input" value={form.category} onChange={e => set("category", e.target.value)} />
           </div>
           <div>
-            <label className="label">{t("Sourcing Scope & Specification")}</label>
-            <textarea className="input resize-none" rows={4} value={form.description} onChange={e => set("description", e.target.value)} />
+            <label className="label" htmlFor="brief-description">{t("Sourcing Scope & Specification")}</label>
+            <textarea id="brief-description" className="input resize-none" rows={4} value={form.description} onChange={e => set("description", e.target.value)} />
           </div>
           <div>
-            <label className="label">{t("Qualification Criteria & Constraints")}</label>
-            <textarea className="input resize-none" rows={4} value={form.requirements} onChange={e => set("requirements", e.target.value)} />
+            <label className="label" htmlFor="brief-requirements">{t("Qualification Criteria & Constraints")}</label>
+            <textarea id="brief-requirements" className="input resize-none" rows={4} value={form.requirements} onChange={e => set("requirements", e.target.value)} />
             <p className="text-xs text-blue-600 font-medium mt-1.5">{t("AI scoring recalibrates against these criteria on the next wave.")}</p>
           </div>
-          <div>
-            <label className="label">{t("Target Sourcing Geographies")}</label>
+          <div role="group" aria-labelledby="brief-geographies-label">
+            <div id="brief-geographies-label" className="label">{t("Target Sourcing Geographies")}</div>
             <div className="flex flex-wrap gap-2 mb-2">
               {GEOGRAPHIES.map(c => {
                 const active = countries.includes(c);
@@ -1017,6 +1017,7 @@ function BriefModal({ event, onClose, onSaved }: {
             </div>
             <select
               className="input"
+              aria-label={t("+ Add another country…")}
               value=""
               onChange={e => { if (e.target.value) toggle(e.target.value); }}
             >
@@ -1037,8 +1038,8 @@ function BriefModal({ event, onClose, onSaved }: {
             <p className="text-xs text-slate-400 mt-1.5">{t("Empty = global search. Scouts prioritise these countries and search local-language sources.")}</p>
           </div>
           <div>
-            <label className="label">{t("Estimated Annual Spend")}</label>
-            <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
+            <label className="label" htmlFor="brief-annual-spend">{t("Estimated Annual Spend")}</label>
+            <select id="brief-annual-spend" className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
               <option value="">{t("Select range…")}</option>
               {SPEND_RANGES.map(s => <option key={s} value={s}>{t(s)}</option>)}
             </select>
@@ -1198,9 +1199,10 @@ function FilterPanel({ filters, onApply, onClose }: {
 
         <div className="px-6 pt-4">
           <div className="mb-3">
-            <label className="label">{t("AI filter — describe what you're looking for")}</label>
+            <label className="label" htmlFor="filter-ai-query">{t("AI filter — describe what you're looking for")}</label>
             <div className="flex gap-2">
               <input
+                id="filter-ai-query"
                 className="input"
                 placeholder={t('e.g. "ISO-certified manufacturers in Vietnam with 200+ employees"')}
                 value={aiQuery}
@@ -1236,8 +1238,8 @@ function FilterPanel({ filters, onApply, onClose }: {
         <div className="p-6 pt-4 space-y-4">
           {tab === "General" && (
             <>
-              <div>
-                <label className="label">{t("Business type")}</label>
+              <div role="group" aria-labelledby="filter-business-type-label">
+                <div id="filter-business-type-label" className="label">{t("Business type")}</div>
                 <div className="flex flex-wrap gap-2">
                   {BUSINESS_TYPES.map(v => {
                     const active = (draft.business_type ?? []).includes(v);
@@ -1252,14 +1254,14 @@ function FilterPanel({ filters, onApply, onClose }: {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">{t("Founded after (year)")}</label>
-                  <input type="number" className="input" placeholder={t("e.g. 1990")}
+                  <label className="label" htmlFor="filter-founded-after">{t("Founded after (year)")}</label>
+                  <input id="filter-founded-after" type="number" className="input" placeholder={t("e.g. 1990")}
                     value={draft.founded_year_min ?? ""}
                     onChange={e => setDraft(d => ({ ...d, founded_year_min: e.target.value ? Number(e.target.value) : undefined }))} />
                 </div>
                 <div>
-                  <label className="label">{t("Founded before (year)")}</label>
-                  <input type="number" className="input" placeholder={t("e.g. 2015")}
+                  <label className="label" htmlFor="filter-founded-before">{t("Founded before (year)")}</label>
+                  <input id="filter-founded-before" type="number" className="input" placeholder={t("e.g. 2015")}
                     value={draft.founded_year_max ?? ""}
                     onChange={e => setDraft(d => ({ ...d, founded_year_max: e.target.value ? Number(e.target.value) : undefined }))} />
                 </div>
@@ -1268,8 +1270,8 @@ function FilterPanel({ filters, onApply, onClose }: {
           )}
 
           {tab === "Product" && (
-            <div>
-              <label className="label">{t("Capability tags")}</label>
+            <div role="group" aria-labelledby="filter-capability-tags-label">
+              <div id="filter-capability-tags-label" className="label">{t("Capability tags")}</div>
               <div className="flex flex-wrap gap-2">
                 {CAPABILITY_TAGS.map(v => {
                   const active = (draft.capability_tags ?? []).includes(v);
@@ -1286,8 +1288,8 @@ function FilterPanel({ filters, onApply, onClose }: {
 
           {tab === "Profile" && (
             <>
-              <div>
-                <label className="label">{t("Employee count")}</label>
+              <div role="group" aria-labelledby="filter-employee-count-label">
+                <div id="filter-employee-count-label" className="label">{t("Employee count")}</div>
                 <div className="flex flex-wrap gap-2">
                   {EMPLOYEE_BANDS.map(v => {
                     const active = (draft.employee_count ?? []).includes(v);
@@ -1301,8 +1303,8 @@ function FilterPanel({ filters, onApply, onClose }: {
                 </div>
               </div>
               <div>
-                <label className="label">{t("Minimum review score")}</label>
-                <select className="input" value={draft.review_score_min ?? ""}
+                <label className="label" htmlFor="filter-review-score-min">{t("Minimum review score")}</label>
+                <select id="filter-review-score-min" className="input" value={draft.review_score_min ?? ""}
                   onChange={e => setDraft(d => ({ ...d, review_score_min: e.target.value ? Number(e.target.value) : undefined }))}>
                   <option value="">{t("Any")}</option>
                   {[1, 2, 3, 3.5, 4, 4.5].map(n => <option key={n} value={n}>{n}+</option>)}
@@ -1313,8 +1315,9 @@ function FilterPanel({ filters, onApply, onClose }: {
 
           {tab === "Verification" && (
             <div>
-              <label className="label">{t("Certifications")}</label>
+              <label className="label" htmlFor="filter-certifications">{t("Certifications")}</label>
               <input
+                id="filter-certifications"
                 className="input"
                 placeholder={t("Type a certification and press Enter (e.g. ISO 9001:2015)")}
                 onKeyDown={e => {
