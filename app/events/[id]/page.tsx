@@ -394,6 +394,8 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeed
                   <button
                     onClick={() => onFeedback(supplier.id, supplier.feedback_signal === 1 ? 0 : 1)}
                     title={t("Good assessment")}
+                    aria-label={t("Good assessment")}
+                    aria-pressed={supplier.feedback_signal === 1}
                     className={`p-1 rounded-md border transition-colors ${
                       supplier.feedback_signal === 1
                         ? "bg-emerald-50 border-emerald-200 text-emerald-600"
@@ -405,6 +407,8 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeed
                   <button
                     onClick={() => onFeedback(supplier.id, supplier.feedback_signal === -1 ? 0 : -1)}
                     title={t("Poor assessment")}
+                    aria-label={t("Poor assessment")}
+                    aria-pressed={supplier.feedback_signal === -1}
                     className={`p-1 rounded-md border transition-colors ${
                       supplier.feedback_signal === -1
                         ? "bg-red-50 border-red-200 text-red-600"
@@ -1993,8 +1997,9 @@ export default function EventPage() {
           </p>
         </div>
 
-        {/* Live agents */}
-        <div className="px-3 py-3 border-b border-slate-100 space-y-1.5">
+        {/* Live agents — announce status/message updates as they stream in
+            (#92), same live-region pattern as the Activity Log below. */}
+        <div className="px-3 py-3 border-b border-slate-100 space-y-1.5" role="status" aria-live="polite" aria-label={t("Live agents")}>
           {liveAgents.length > 0 ? liveAgents.map(a => (
             <div key={a.agent_id} className={`flex items-start gap-2 p-2 rounded-lg border text-xs ${
               a.status === "running" || a.status === "qualifying" ? "border-blue-200 bg-blue-50" :
@@ -2280,7 +2285,7 @@ export default function EventPage() {
                 {(running || serverWorking) && suppliers.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-2" role="status" aria-live="polite">
                         <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                         {t("Agents discovering suppliers...")}
                       </div>

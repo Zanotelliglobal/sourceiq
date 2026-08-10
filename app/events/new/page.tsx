@@ -356,7 +356,7 @@ export default function NewEventPage() {
           <div>
             <label className="label">
               {t("Event Reference")}
-              <span className="ml-1 text-red-400">*</span>
+              <span className="ml-1 text-red-600">*</span>
             </label>
             <input
               className="input text-base"
@@ -372,7 +372,7 @@ export default function NewEventPage() {
           <div>
             <label className="label">
               {t("Sourcing Scope & Specification")}
-              <span className="ml-1 text-red-400">*</span>
+              <span className="ml-1 text-red-600">*</span>
             </label>
             <textarea
               className="input resize-none"
@@ -391,7 +391,7 @@ export default function NewEventPage() {
           {/* Category — auto-selected from the description, manually overridable */}
           <div>
             <label className="label flex items-center gap-2">
-              <span>{t("Commodity Category")}<span className="ml-1 text-red-400">*</span></span>
+              <span>{t("Commodity Category")}<span className="ml-1 text-red-600">*</span></span>
               {classifying && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-500">
                   <span className="w-3 h-3 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
@@ -444,7 +444,7 @@ export default function NewEventPage() {
           <div>
             <label className="label">
               {t("Qualification Criteria & Constraints")}
-              <span className="ml-1 text-red-400">*</span>
+              <span className="ml-1 text-red-600">*</span>
             </label>
             <textarea
               className="input resize-none"
@@ -631,15 +631,15 @@ export default function NewEventPage() {
             {form.outreach_anonymous === "false" && (
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <label className="label text-xs">{t("Your Name")}<span className="ml-1 text-red-400">*</span></label>
+                  <label className="label text-xs">{t("Your Name")}<span className="ml-1 text-red-600">*</span></label>
                   <input className="input" placeholder={t("Jane Smith")} value={form.buyer_name} onChange={e => set("buyer_name", e.target.value)} />
                 </div>
                 <div>
-                  <label className="label text-xs">{t("Role")}<span className="ml-1 text-red-400">*</span></label>
+                  <label className="label text-xs">{t("Role")}<span className="ml-1 text-red-600">*</span></label>
                   <input className="input" placeholder={t("Procurement Lead")} value={form.buyer_role} onChange={e => set("buyer_role", e.target.value)} />
                 </div>
                 <div>
-                  <label className="label text-xs">{t("Company")}<span className="ml-1 text-red-400">*</span></label>
+                  <label className="label text-xs">{t("Company")}<span className="ml-1 text-red-600">*</span></label>
                   <input className="input" placeholder={t("Acme Corp")} value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
                 </div>
                 <p className="sm:col-span-3 text-[11px] text-slate-400">
