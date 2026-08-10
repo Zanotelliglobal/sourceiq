@@ -23,6 +23,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency vulnerability audit
+        # Fails the build on any high/critical advisory in the resolved dependency
+        # tree (production + dev). Moderate/low findings are surfaced in the log
+        # but don't block — they're triaged via Dependabot PRs instead (see
+        # .github/dependabot.yml) so CI stays actionable rather than noisy.
+        run: npm audit --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
