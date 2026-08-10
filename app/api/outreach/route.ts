@@ -49,12 +49,17 @@ export async function POST(req: NextRequest) {
 
   // Target: explicit list, else everyone sitting in the long list.
   // Opted-out suppliers are suppressed — never re-contacted, even if selected.
+  // Also exclude anyone on the org's durable suppression list (#98): an email
+  // that opted out (or requested erasure, #99) in a PAST sourcing event must
+  // stay suppressed even though this event's supplier row is brand new.
+  const suppressionClause = `AND (contact_email IS NULL OR LOWER(contact_email) NOT IN (SELECT email FROM suppression_list WHERE org_id=?))`;
   const targets = (Array.isArray(supplier_ids) && supplier_ids.length > 0
     ? await db.prepare(
-        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND id IN (${supplier_ids.map(() => "?").join(",")})`
-      ).all(event.id, ...supplier_ids)
-    : await db.prepare("SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND funnel_stage='long_list' ORDER BY ai_score DESC")
-        .all(event.id)) as {
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND id IN (${supplier_ids.map(() => "?").join(",")})`
+      ).all(event.id, ctx.orgId, ...supplier_ids)
+    : await db.prepare(
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND funnel_stage='long_list' ORDER BY ai_score DESC`
+      ).all(event.id, ctx.orgId)) as {
     id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null;
   }[];
 
