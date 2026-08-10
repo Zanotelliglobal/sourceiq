@@ -32,6 +32,42 @@ function serializeError(err: unknown): { message: string; stack?: string; name?:
   return { message: typeof err === "string" ? err : JSON.stringify(err) };
 }
 
+// ─── PII SCRUBBING (#84) ───────────────────────────────────────────────────
+// captureException's `context` is a grab-bag: call sites pass whatever was in
+// scope at the point of failure (raw errors from sendEmail, supplier
+// contact-scrape failures, client-side beacon payloads with page state), and
+// any of those can carry a supplier or user email/phone straight into the
+// message, stack, or context values. That's fine for the server console.error
+// line (an in-house, access-controlled log), but forwardToSentry ships the
+// record to a third party — so scrub PII from exactly the payload that
+// leaves the process, not the local log.
+//
+// Deliberately narrow (email + phone patterns) rather than a generic
+// allow/deny-list scrubber: broader heuristics risk mangling legitimate
+// diagnostic text (supplier names, URLs, error codes) for marginal benefit.
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+// Phone-ish: 7+ digits, optionally grouped with spaces/dashes/dots/parens, optional leading +.
+const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/g;
+
+function scrubString(s: string): string {
+  return s.replace(EMAIL_RE, "[redacted-email]").replace(PHONE_RE, "[redacted-phone]");
+}
+
+/** Recursively redact email/phone-shaped substrings from a value bound for a third party. */
+export function scrubPii<T>(value: T, depth = 0): T {
+  if (depth > 6) return value; // guard against pathological/circular shapes
+  if (typeof value === "string") return scrubString(value) as unknown as T;
+  if (Array.isArray(value)) return value.map((v) => scrubPii(v, depth + 1)) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = scrubPii(v, depth + 1);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 // Fire-and-forget POST to Sentry's Store API using the DSN, if configured.
 // Implements just enough of the protocol to record an exception; failures are
 // swallowed so telemetry never affects the request path.
@@ -84,12 +120,15 @@ export function captureException(err: unknown, context: ObsContext = {}): void {
   if (isServer) {
     // Structured line → picked up by the host's log pipeline.
     console.error(`[obs] ${JSON.stringify(record)}`);
+    // Scrub PII only for the payload actually leaving the process — the
+    // console.error line above stays at full fidelity for our own debugging.
+    const scrubbedMessage = scrubString(record.message);
     void forwardToSentry({
-      message: record.message,
+      message: scrubbedMessage,
       level: record.level,
       platform: "javascript",
-      exception: { values: [{ type: record.name ?? "Error", value: record.message, stacktrace: record.stack ? { frames: [] } : undefined }] },
-      extra: record.context,
+      exception: { values: [{ type: record.name ?? "Error", value: scrubbedMessage, stacktrace: record.stack ? { frames: [] } : undefined }] },
+      extra: scrubPii(record.context),
       timestamp: Date.now() / 1000,
     });
   } else {
