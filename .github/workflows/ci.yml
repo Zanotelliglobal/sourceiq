@@ -25,10 +25,14 @@ jobs:
 
       - name: Dependency vulnerability audit
         # Fails the build on any high/critical advisory in the resolved dependency
-        # tree (production + dev). Moderate/low findings are surfaced in the log
-        # but don't block — they're triaged via Dependabot PRs instead (see
-        # .github/dependabot.yml) so CI stays actionable rather than noisy.
-        run: npm audit --audit-level=high
+        # tree (production + dev) that isn't on the reviewed allowlist in
+        # .github/audit-allowlist.json (see scripts/check-audit.mjs for why a bare
+        # `npm audit --audit-level=high` isn't enough: some advisories have no fix
+        # published yet, so an unconditional gate would be permanently red).
+        # Moderate/low findings are surfaced in the log but don't block — they're
+        # triaged via Dependabot PRs instead (see .github/dependabot.yml) so CI
+        # stays actionable rather than noisy.
+        run: node scripts/check-audit.mjs
 
       - name: Typecheck
         run: npm run typecheck
