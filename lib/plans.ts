@@ -21,6 +21,14 @@ export type TierLimits = {
   seats: number;
   outreach: boolean;
   export: boolean;
+  /**
+   * Hard per-event ceiling (USD) on cumulative AI/agent spend (see
+   * token_usage.cost_usd in lib/usage.ts). Unlike the other limits above,
+   * this caps a dollar amount rather than a count, so a single event can
+   * never run away on cost even on an otherwise-unlimited tier. UNLIMITED =
+   * no cap.
+   */
+  maxEventSpendUsd: number;
 };
 
 export type Tier = {
@@ -40,21 +48,21 @@ export const TIERS: Tier[] = [
     name: "Free",
     blurb: "Try SourceIQ with a single sourcing event.",
     monthlyEur: 0,
-    limits: { eventsPerMonth: 1, wavesPerEvent: 1, suppliersPerEvent: 25, seats: 1, outreach: false, export: false },
+    limits: { eventsPerMonth: 1, wavesPerEvent: 1, suppliersPerEvent: 25, seats: 1, outreach: false, export: false, maxEventSpendUsd: 5 },
   },
   {
     key: "basic",
     name: "Basic",
     blurb: "For occasional sourcing with exports and a small team.",
     monthlyEur: 49,
-    limits: { eventsPerMonth: 5, wavesPerEvent: 3, suppliersPerEvent: 150, seats: 3, outreach: false, export: true },
+    limits: { eventsPerMonth: 5, wavesPerEvent: 3, suppliersPerEvent: 150, seats: 3, outreach: false, export: true, maxEventSpendUsd: 20 },
   },
   {
     key: "growth",
     name: "Growth",
     blurb: "Live supplier outreach for growing sourcing teams.",
     monthlyEur: 89,
-    limits: { eventsPerMonth: 12, wavesPerEvent: 6, suppliersPerEvent: 400, seats: 5, outreach: true, export: true },
+    limits: { eventsPerMonth: 12, wavesPerEvent: 6, suppliersPerEvent: 400, seats: 5, outreach: true, export: true, maxEventSpendUsd: 60 },
   },
   {
     key: "premium",
@@ -62,14 +70,17 @@ export const TIERS: Tier[] = [
     blurb: "Unlimited discovery depth plus live supplier outreach.",
     monthlyEur: 149,
     featured: true,
-    limits: { eventsPerMonth: 20, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: 10, outreach: true, export: true },
+    limits: { eventsPerMonth: 20, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: 10, outreach: true, export: true, maxEventSpendUsd: 150 },
   },
   {
     key: "pro",
     name: "Pro",
     blurb: "Unlimited everything for high-volume procurement teams.",
     monthlyEur: 399,
-    limits: { eventsPerMonth: UNLIMITED, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true },
+    // Even "unlimited everything" keeps a (generous) hard cost ceiling per
+    // event — this is a runaway-cost safety net, not a monetization gate, so
+    // no tier is truly cost-unbounded on a single event.
+    limits: { eventsPerMonth: UNLIMITED, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true, maxEventSpendUsd: 400 },
   },
 ];
 

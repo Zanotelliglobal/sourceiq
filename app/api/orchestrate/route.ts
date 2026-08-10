@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
 import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
-import { recordUsage, usageSummary, effectiveTier, checkWaveLimit } from "@/lib/usage";
+import { recordUsage, usageSummary, effectiveTier, checkWaveLimit, checkSpendCeiling } from "@/lib/usage";
 import { UNLIMITED } from "@/lib/plans";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
@@ -41,6 +41,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       error: `Your ${tier.name} plan includes ${waveCheck.limit} discovery wave${waveCheck.limit === 1 ? "" : "s"} per event — you've already used ${waveCheck.used}. Upgrade for more waves.`,
       code: waveCheck.reason,
+    }, { status: 402 });
+  }
+
+  // Hard per-event cost ceiling (#65) — protects against runaway AI spend on
+  // a single event regardless of how much wave/event/supplier headroom
+  // remains under the plan's count-based limits above.
+  const spendCheck = await checkSpendCeiling(db, tier, event.id);
+  if (!spendCheck.ok) {
+    return NextResponse.json({
+      error: `This event has reached its $${spendCheck.limit} AI-spend ceiling (used $${spendCheck.used.toFixed(2)}). Contact support to raise the limit before running more discovery.`,
+      code: spendCheck.reason,
     }, { status: 402 });
   }
 

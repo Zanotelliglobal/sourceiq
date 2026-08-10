@@ -245,6 +245,26 @@ export function checkOutreachAllowed(tier: Tier): LimitCheck {
   return { ok: true };
 }
 
+/**
+ * Whether this event's cumulative AI/agent spend is still under the tier's
+ * hard per-event cost ceiling (#65). Unlike the count-based checks above,
+ * `limit`/`used` here are USD amounts, not counts — callers should format
+ * them as currency. Every agent-invoking action that has an event_id in
+ * scope (discovery waves, outreach, follow-ups, contact discovery) should
+ * call this before spending more, so a single event can never blow through
+ * its cost cap even mid-run.
+ */
+export async function checkSpendCeiling(db: Db, tier: Tier, eventId: number): Promise<LimitCheck> {
+  const limit = tier.limits.maxEventSpendUsd;
+  if (limit === UNLIMITED) return { ok: true };
+  const row = await db.prepare(
+    "SELECT COALESCE(SUM(cost_usd),0) AS c FROM token_usage WHERE event_id = ?"
+  ).get(eventId) as { c: number } | undefined;
+  const used = Number(row?.c ?? 0);
+  if (used >= limit) return { ok: false, reason: "spend_ceiling_reached", limit, used };
+  return { ok: true };
+}
+
 export type OrgUsageSummary = {
   org_id: number;
   input_tokens: number;

@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
 import { randomBytes } from "crypto";
-import { recordUsage, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
+import { recordUsage, effectiveTier, checkOutreachAllowed, checkSpendCeiling } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -107,6 +107,17 @@ export async function POST(req: NextRequest) {
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    // Hard per-event cost ceiling (#65) — same cap the batch /api/outreach
+    // campaign endpoint enforces, applied here since this route sends the
+    // identical live outreach one supplier at a time.
+    const spendCheck = await checkSpendCeiling(db, effectiveTier(ctx.org), supplier.event_id);
+    if (!spendCheck.ok) {
+      return NextResponse.json({
+        error: `This event has reached its $${spendCheck.limit} AI-spend ceiling (used $${spendCheck.used.toFixed(2)}). Contact support to raise the limit before contacting more suppliers.`,
+        code: spendCheck.reason,
+      }, { status: 402 });
+    }
+
     // Contact discovery: if we don't yet have an email, resolve the best available
     // channel (scrape the site, then web-search fallback) before drafting.
     if (!supplier.contact_email) {
@@ -173,6 +184,15 @@ export async function POST(req: NextRequest) {
       contact_email: string | null; reply_token: string | null; category: string;
     } | undefined;
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Hard per-event cost ceiling (#65).
+    const spendCheck = await checkSpendCeiling(db, effectiveTier(ctx.org), supplier.event_id);
+    if (!spendCheck.ok) {
+      return NextResponse.json({
+        error: `This event has reached its $${spendCheck.limit} AI-spend ceiling (used $${spendCheck.used.toFixed(2)}). Contact support to raise the limit before sending more follow-ups.`,
+        code: spendCheck.reason,
+      }, { status: 402 });
+    }
 
     // Find the subject of the last outbound RFI to reference in the nudge.
     const lastOut = await db.prepare(
