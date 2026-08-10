@@ -312,7 +312,17 @@ export default function Dashboard() {
       <tr
         key={event.id}
         onClick={() => router.push(`/events/${event.id}`)}
-        className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
+        onKeyDown={e => {
+          // Keyboard equivalent of the row click (#86) — Enter/Space open the
+          // event, same as clicking anywhere on the row.
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            router.push(`/events/${event.id}`);
+          }
+        }}
+        tabIndex={0}
+        aria-label={t("Open {value}", { value: cleanTitle(event.title) })}
+        className="hover:bg-slate-50/60 transition-colors group cursor-pointer focus:outline-none focus-visible:bg-slate-50"
       >
         <td className="px-6 py-4">
           <div className="flex items-center gap-1.5">
