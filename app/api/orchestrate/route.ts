@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
 import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
+import { createTaskPool } from "@/lib/task-pool";
 import { recordUsage, usageSummary, effectiveTier, checkWaveLimit } from "@/lib/usage";
 import { UNLIMITED } from "@/lib/plans";
 import { getOrgContext } from "@/lib/tenant";
@@ -174,6 +175,13 @@ export async function POST(req: NextRequest) {
         // each supplier's background scrape task lands here so we can drain them
         // all before the stream closes, instead of awaiting them inline.
         const backgroundTasks: Promise<void>[] = [];
+        // #96: cap how many of those background tasks (enrich/scrape/website-check)
+        // actually run at once across the whole wave. Without this, a wave that
+        // qualifies dozens of suppliers fires 3x that many concurrent LLM/fetch
+        // calls at once — unrelated to, and far exceeding, the
+        // SCOUT_CONCURRENCY/QUAL_CONCURRENCY pools below that were sized against
+        // provider rate limits.
+        const backgroundSchedule = createTaskPool(Math.max(1, Number(process.env.BACKGROUND_TASK_CONCURRENCY) || 8));
 
         // Run one scout end-to-end: scout → dedup claim → qualify/enrich pool.
         const runScout = async (agent: (typeof plan.agents)[number]) => {
@@ -229,6 +237,7 @@ export async function POST(req: NextRequest) {
           const processSupplier = makeProcessSupplier({
             db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
             annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
+            schedule: backgroundSchedule,
           }, agent);
           // #41 (Epic 8.5): default raised 4->6. Most qualifier calls are Haiku
           // (cheap, high rate limits); only the thin-evidence band escalates to
