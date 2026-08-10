@@ -119,8 +119,12 @@ const ALLOWED_CONTEXT_KEYS = new Set([
 /** Drop every `context` key that isn't on the vetted allowlist above. */
 function allowlistContext(context: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const key of ALLOWED_CONTEXT_KEYS) {
-    if (key in context) out[key] = context[key];
+  // Iterate the (small) context object's own keys rather than the Set: this
+  // repo's tsconfig has no explicit `target`, which defaults to ES3, and
+  // `for...of` over a `Set` requires --downlevelIteration or an ES2015+
+  // target. `Object.keys(...)` returns a plain array, which iterates fine.
+  for (const key of Object.keys(context)) {
+    if (ALLOWED_CONTEXT_KEYS.has(key)) out[key] = context[key];
   }
   return out;
 }
