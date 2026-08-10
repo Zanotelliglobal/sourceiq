@@ -7,6 +7,7 @@ import { recordUsage, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
+import { claimOutreachSend, releaseOutreachClaim, claimFollowupSend, releaseFollowupClaim } from "@/lib/outreach-claim";
 
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
@@ -102,65 +103,93 @@ export async function POST(req: NextRequest) {
       id: number; event_id: number; name: string; country: string; contact_email: string | null;
       category: string; requirements: string; annual_spend: string;
       outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
-      website: string | null;
+      website: string | null; outreach_status: string;
     } | undefined;
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Contact discovery: if we don't yet have an email, resolve the best available
-    // channel (scrape the site, then web-search fallback) before drafting.
-    if (!supplier.contact_email) {
-      try {
-        const found = await resolveSupplierContact(
-          supplier.name, supplier.country, supplier.website || "",
-          (u) => { void recordUsage(db, supplier.event_id, "contact_finder", u as never, AGENT_MODELS.contactFinder); }
-        );
-        if (found.contact_email || found.contact_url || found.phone || found.linkedin) {
-          supplier.contact_email = found.contact_email || supplier.contact_email;
-          await db.prepare(
-            "UPDATE suppliers SET contact_email=COALESCE(NULLIF(?,''), contact_email), contact_url=COALESCE(NULLIF(?,''), contact_url), contact_phone=COALESCE(NULLIF(?,''), contact_phone), contact_linkedin=COALESCE(NULLIF(?,''), contact_linkedin) WHERE id=?"
-          ).run(found.contact_email, found.contact_url, found.phone, found.linkedin, supplier.id);
-        }
-      } catch { /* non-fatal — proceed without an address (draft/copy still works) */ }
+    // Atomic claim (#62): two concurrent requests for the same supplier
+    // (double-click, two open tabs) must not both draft+send. Only the
+    // request whose UPDATE actually matches a row proceeds; the loser gets a
+    // 409 instead of sending a duplicate email. originalStatus is what we
+    // roll back to if drafting/sending fails below, so a genuine retry isn't
+    // permanently blocked.
+    const originalStatus = supplier.outreach_status;
+    const claim = await claimOutreachSend(db, supplier_id);
+    if (!claim.ok) {
+      return NextResponse.json({ error: "Outreach already sent or already in progress for this supplier." }, { status: 409 });
     }
 
-    const buyer = supplier.outreach_anonymous
-      ? null
-      : { name: supplier.buyer_name, role: supplier.buyer_role, company: supplier.buyer_company };
-
-    const email = await runOutreachAgent(
-      supplier.name, supplier.country, supplier.category, supplier.requirements, supplier.annual_spend,
-      (u) => { void recordUsage(db, supplier.event_id, "outreach", u as never, AGENT_MODELS.outreach); },
-      buyer
-    );
-
-    const replyToken = randomBytes(9).toString("base64url");
-    await db.prepare("UPDATE suppliers SET reply_token=? WHERE id=?").run(replyToken, supplier_id);
-
-    const live = isMailLive();
-    let delivery;
     try {
-      delivery = await sendEmail({
-        to: supplier.contact_email,
-        subject: email.subject,
-        body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
-        replyTo: replyToAddress(replyToken) ?? undefined,
-      });
+      // Contact discovery: if we don't yet have an email, resolve the best available
+      // channel (scrape the site, then web-search fallback) before drafting.
+      if (!supplier.contact_email) {
+        try {
+          const found = await resolveSupplierContact(
+            supplier.name, supplier.country, supplier.website || "",
+            (u) => { void recordUsage(db, supplier.event_id, "contact_finder", u as never, AGENT_MODELS.contactFinder); }
+          );
+          if (found.contact_email || found.contact_url || found.phone || found.linkedin) {
+            supplier.contact_email = found.contact_email || supplier.contact_email;
+            await db.prepare(
+              "UPDATE suppliers SET contact_email=COALESCE(NULLIF(?,''), contact_email), contact_url=COALESCE(NULLIF(?,''), contact_url), contact_phone=COALESCE(NULLIF(?,''), contact_phone), contact_linkedin=COALESCE(NULLIF(?,''), contact_linkedin) WHERE id=?"
+            ).run(found.contact_email, found.contact_url, found.phone, found.linkedin, supplier.id);
+          }
+        } catch { /* non-fatal — proceed without an address (draft/copy still works) */ }
+      }
+
+      const buyer = supplier.outreach_anonymous
+        ? null
+        : { name: supplier.buyer_name, role: supplier.buyer_role, company: supplier.buyer_company };
+
+      let email;
+      try {
+        email = await runOutreachAgent(
+          supplier.name, supplier.country, supplier.category, supplier.requirements, supplier.annual_spend,
+          (u) => { void recordUsage(db, supplier.event_id, "outreach", u as never, AGENT_MODELS.outreach); },
+          buyer
+        );
+      } catch (err) {
+        await releaseOutreachClaim(db, supplier_id, originalStatus);
+        return NextResponse.json({ error: `Draft failed: ${String(err)}` }, { status: 502 });
+      }
+
+      const replyToken = randomBytes(9).toString("base64url");
+      await db.prepare("UPDATE suppliers SET reply_token=? WHERE id=?").run(replyToken, supplier_id);
+
+      const live = isMailLive();
+      let delivery;
+      try {
+        delivery = await sendEmail({
+          to: supplier.contact_email,
+          subject: email.subject,
+          body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
+          replyTo: replyToAddress(replyToken) ?? undefined,
+        });
+      } catch (err) {
+        await releaseOutreachClaim(db, supplier_id, originalStatus);
+        return NextResponse.json({ error: `Send failed: ${String(err)}` }, { status: 502 });
+      }
+
+      if (live && !delivery.sent) {
+        // Live mode but couldn't deliver (typically no contact email on file).
+        // Release the claim so a corrected retry (e.g. after adding an email) isn't blocked.
+        await releaseOutreachClaim(db, supplier_id, originalStatus);
+        return NextResponse.json({ email, delivery, warning: delivery.reason }, { status: 200 });
+      }
+
+      await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
+        .run(supplier_id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
+      await db.prepare("UPDATE suppliers SET outreach_status='sent', outreach_sent_at=datetime('now'), funnel_stage='contacted' WHERE id=?")
+        .run(supplier_id);
+
+      return NextResponse.json({ email, delivery });
     } catch (err) {
-      return NextResponse.json({ error: `Send failed: ${String(err)}` }, { status: 502 });
+      // Belt-and-suspenders: any unexpected throw releases the claim too,
+      // rather than leaving the supplier stuck at outreach_status='sending'.
+      await releaseOutreachClaim(db, supplier_id, originalStatus);
+      return NextResponse.json({ error: `Send outreach failed: ${String(err)}` }, { status: 500 });
     }
-
-    if (live && !delivery.sent) {
-      // Live mode but couldn't deliver (typically no contact email on file).
-      return NextResponse.json({ email, delivery, warning: delivery.reason }, { status: 200 });
-    }
-
-    await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
-      .run(supplier_id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
-    await db.prepare("UPDATE suppliers SET outreach_status='sent', outreach_sent_at=datetime('now'), funnel_stage='contacted' WHERE id=?")
-      .run(supplier_id);
-
-    return NextResponse.json({ email, delivery });
   }
 
   if (action === "send_followup") {
@@ -174,41 +203,65 @@ export async function POST(req: NextRequest) {
     } | undefined;
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Find the subject of the last outbound RFI to reference in the nudge.
-    const lastOut = await db.prepare(
-      "SELECT subject FROM outreach_logs WHERE supplier_id=? AND direction='outbound' ORDER BY sent_at DESC LIMIT 1"
-    ).get(supplier_id) as { subject: string | null } | undefined;
+    // Atomic claim (#62): guards against two concurrent send_followup
+    // requests for the same supplier both drafting + sending. Unlike
+    // send_outreach there's no persistent "already followed up" state (a
+    // supplier can legitimately get more than one follow-up over time), so
+    // this only locks the concurrent-request window, not the supplier long-term.
+    const followupClaim = await claimFollowupSend(db, supplier_id);
+    if (!followupClaim.ok) {
+      return NextResponse.json({ error: "A follow-up is already being sent for this supplier." }, { status: 409 });
+    }
 
-    const email = await runFollowUpAgent(
-      supplier.name, supplier.country, supplier.category, lastOut?.subject || "our recent inquiry",
-      (u) => { void recordUsage(db, supplier.event_id, "followup", u as never, AGENT_MODELS.followUp); }
-    );
-
-    let delivery;
     try {
-      delivery = await sendEmail({
-        to: supplier.contact_email,
-        subject: email.subject,
-        body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
-        replyTo: supplier.reply_token ? (replyToAddress(supplier.reply_token) ?? undefined) : undefined,
+      // Find the subject of the last outbound RFI to reference in the nudge.
+      const lastOut = await db.prepare(
+        "SELECT subject FROM outreach_logs WHERE supplier_id=? AND direction='outbound' ORDER BY sent_at DESC LIMIT 1"
+      ).get(supplier_id) as { subject: string | null } | undefined;
+
+      let email;
+      try {
+        email = await runFollowUpAgent(
+          supplier.name, supplier.country, supplier.category, lastOut?.subject || "our recent inquiry",
+          (u) => { void recordUsage(db, supplier.event_id, "followup", u as never, AGENT_MODELS.followUp); }
+        );
+      } catch (err) {
+        await releaseFollowupClaim(db, supplier_id);
+        return NextResponse.json({ error: `Draft failed: ${String(err)}` }, { status: 502 });
+      }
+
+      let delivery;
+      try {
+        delivery = await sendEmail({
+          to: supplier.contact_email,
+          subject: email.subject,
+          body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
+          replyTo: supplier.reply_token ? (replyToAddress(supplier.reply_token) ?? undefined) : undefined,
+        });
+      } catch (err) {
+        await releaseFollowupClaim(db, supplier_id);
+        return NextResponse.json({ error: `Send failed: ${String(err)}` }, { status: 502 });
+      }
+
+      if (isMailLive() && !delivery.sent) {
+        await releaseFollowupClaim(db, supplier_id);
+        return NextResponse.json({ email, delivery, warning: delivery.reason }, { status: 200 });
+      }
+
+      await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
+        .run(supplier_id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
+      await logAudit({
+        orgId: ctx.orgId, eventId: Number(supplier.event_id), actorId: ctx.userId,
+        action: "followup.send",
+        summary: `Sent follow-up to ${supplier.name}`,
+        metadata: { supplier_id, live: isMailLive() },
       });
+      await releaseFollowupClaim(db, supplier_id);
+      return NextResponse.json({ email, delivery, followup: true });
     } catch (err) {
-      return NextResponse.json({ error: `Send failed: ${String(err)}` }, { status: 502 });
+      await releaseFollowupClaim(db, supplier_id);
+      return NextResponse.json({ error: `Send follow-up failed: ${String(err)}` }, { status: 500 });
     }
-
-    if (isMailLive() && !delivery.sent) {
-      return NextResponse.json({ email, delivery, warning: delivery.reason }, { status: 200 });
-    }
-
-    await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
-      .run(supplier_id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
-    await logAudit({
-      orgId: ctx.orgId, eventId: Number(supplier.event_id), actorId: ctx.userId,
-      action: "followup.send",
-      summary: `Sent follow-up to ${supplier.name}`,
-      metadata: { supplier_id, live: isMailLive() },
-    });
-    return NextResponse.json({ email, delivery, followup: true });
   }
 
   if (action === "mark_engaged") {
