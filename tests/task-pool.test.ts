@@ -2,17 +2,22 @@ import { describe, it, expect } from "vitest";
 import { createTaskPool } from "@/lib/task-pool";
 
 /** A task that increments `active` on start, records the running peak, then
- * waits for an external `release` signal before resolving and decrementing. */
+ * waits for an external `release` signal before resolving and decrementing.
+ * `run` must stay lazy — the pool only gates concurrency if the task's work
+ * doesn't begin until `schedule` actually invokes it, so the async body lives
+ * inside the returned `run` function rather than an IIFE kicked off eagerly
+ * at task-construction time (which would start all tasks before the pool
+ * ever gets a chance to bound them). */
 function makeTrackedTask(state: { active: number; peak: number }) {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  const promise = (async () => {
+  const run = async () => {
     state.active++;
     state.peak = Math.max(state.peak, state.active);
     await gate;
     state.active--;
-  })();
-  return { run: () => promise, release };
+  };
+  return { run, release };
 }
 
 describe("createTaskPool (#96)", () => {
