@@ -29,7 +29,7 @@ function fakeDb() {
         },
       };
     },
-  } as unknown as ReturnType<typeof import("@/lib/db").getDb>;
+  } as unknown as ReturnType<typeof import("@/lib/db").getDb> & { rows: typeof rows };
 }
 
 describe("normalizeEmail", () => {
