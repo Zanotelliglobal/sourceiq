@@ -458,6 +458,7 @@ export default function NewEventPage() {
                 <button
                   key={c} type="button"
                   onClick={() => pickCategory(c)}
+                  aria-pressed={form.category === c}
                   className={`text-left px-3.5 py-2.5 rounded-xl text-sm font-medium border transition-all ${
                     form.category === c
                       ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
@@ -526,13 +527,14 @@ export default function NewEventPage() {
             <p className="text-xs text-slate-500 mb-2.5">
               {t("Select the countries or regions the scout agents should focus on. Leave empty for a global search.")}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("Target Sourcing Geographies")}>
               {GEOGRAPHIES.map(c => {
                 const active = countries.includes(c);
                 return (
                   <button
                     key={c} type="button"
                     onClick={() => toggleCountry(c)}
+                    aria-pressed={active}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       active
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
@@ -546,13 +548,14 @@ export default function NewEventPage() {
             </div>
             {/* Macro-regions: target a whole area instead of listing countries */}
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mt-4 mb-2">{t("Macro-regions")}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("Macro-regions")}>
               {MACRO_REGIONS.map(c => {
                 const active = countries.includes(c);
                 return (
                   <button
                     key={c} type="button"
                     onClick={() => toggleCountry(c)}
+                    aria-pressed={active}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       active
                         ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-600/20"
@@ -776,6 +779,7 @@ export default function NewEventPage() {
                   <button
                     key={opt.v} type="button"
                     onClick={() => set("outreach_anonymous", opt.v)}
+                    aria-pressed={active}
                     className={`text-left px-4 py-3 rounded-xl border transition-all ${
                       active
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
