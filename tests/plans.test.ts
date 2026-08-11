@@ -29,7 +29,7 @@ describe("tier limits", () => {
     const free = getTier("free")!;
     expect(free.limits.export).toBe(false);
     expect(free.limits.outreach).toBe(false);
-    expect(free.limits.eventsPerMonth).toBe(1);
+    expect(free.limits.monthlyCredits).toBe(1);
   });
 
   it("paid tiers allow export", () => {
@@ -40,7 +40,7 @@ describe("tier limits", () => {
 
   it("pro is unlimited across numeric limits", () => {
     const pro = getTier("pro")!;
-    expect(pro.limits.eventsPerMonth).toBe(UNLIMITED);
+    expect(pro.limits.monthlyCredits).toBe(UNLIMITED);
     expect(pro.limits.seats).toBe(UNLIMITED);
     expect(pro.limits.suppliersPerEvent).toBe(UNLIMITED);
   });
@@ -54,13 +54,17 @@ describe("tier limits", () => {
 
   it("growth sits between basic and premium, unlocking outreach", () => {
     const growth = getTier("growth")!;
-    expect(growth.limits.eventsPerMonth).toBe(12);
-    expect(growth.limits.wavesPerEvent).toBe(6);
+    expect(growth.limits.monthlyCredits).toBe(30);
     expect(growth.limits.suppliersPerEvent).toBe(400);
     expect(growth.limits.seats).toBe(5);
     expect(growth.limits.outreach).toBe(true);
     expect(growth.limits.export).toBe(true);
     expect(growth.featured).toBeFalsy();
+  });
+
+  it("#45: monthlyCredits (or UNLIMITED) is non-decreasing across ascending-price tiers", () => {
+    const values = TIERS.map(t => t.limits.monthlyCredits === UNLIMITED ? Infinity : t.limits.monthlyCredits);
+    expect(values).toEqual([...values].sort((a, b) => a - b));
   });
 });
 

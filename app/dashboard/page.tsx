@@ -96,9 +96,9 @@ export default function Dashboard() {
   const [trial, setTrial] = useState<{ status: string; trial_ends_at: string | null; active: boolean } | null>(null);
   const [usage, setUsage] = useState<{
     tier: string; tier_name: string; unlimited: number;
-    events_this_month: number; events_remaining: number | null;
+    credits_used: number; credits_remaining: number | null;
     tokens_used: number; cost_usd: number;
-    limits: { eventsPerMonth: number };
+    limits: { monthlyCredits: number };
   } | null>(null);
 
   useEffect(() => {
@@ -489,10 +489,10 @@ export default function Dashboard() {
           <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div>
               <div className="text-sm font-bold text-slate-900">
-                {usage.events_this_month}
-                <span className="font-normal text-slate-400"> / {usage.limits.eventsPerMonth === usage.unlimited ? t("Unlimited") : usage.limits.eventsPerMonth}</span>
+                {usage.credits_used}
+                <span className="font-normal text-slate-400"> / {usage.limits.monthlyCredits === usage.unlimited ? t("Unlimited") : usage.limits.monthlyCredits}</span>
               </div>
-              <div className="text-xs text-slate-400">{t("Sourcing events")}</div>
+              <div className="text-xs text-slate-400">{t("Discovery credits")}</div>
             </div>
             <div>
               <div className="text-sm font-bold text-slate-900">{fmtTokens(usage.tokens_used)}</div>
@@ -503,7 +503,7 @@ export default function Dashboard() {
               <div className="text-xs text-slate-400">{t("Estimated cost")}</div>
             </div>
           </div>
-          {usage.events_remaining !== null && usage.events_remaining <= 1 && (
+          {usage.credits_remaining !== null && usage.credits_remaining <= 1 && (
             <Link href="/billing" className="text-xs font-semibold text-blue-700 hover:underline whitespace-nowrap">
               {t("Upgrade plan")}
             </Link>

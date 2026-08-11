@@ -325,8 +325,7 @@ function TierCard({
 }) {
   const price = displayPrice(tier, cadence);
   const rows: [string, string][] = [
-    [t("Sourcing events / mo"), limitLabel(tier.limits.eventsPerMonth, t)],
-    [t("Discovery waves / event"), limitLabel(tier.limits.wavesPerEvent, t)],
+    [t("Discovery credits / mo"), limitLabel(tier.limits.monthlyCredits, t)],
     [t("Suppliers per event"), limitLabel(tier.limits.suppliersPerEvent, t)],
     [t("Team seats"), limitLabel(tier.limits.seats, t)],
   ];

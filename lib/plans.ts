@@ -14,14 +14,24 @@ export type Cadence = "weekly" | "monthly" | "yearly";
 // Numeric limits use -1 to mean "unlimited".
 export const UNLIMITED = -1;
 
+// #45 (Epic 6.1-6.3): a single monthly credit pool replaces the old flat
+// "N events/month" + "M discovery waves/event" pair of numeric caps. One
+// discovery wave (the action that actually drives LLM spend) costs
+// CREDIT_COST_PER_WAVE credits; creating a sourcing event is no longer
+// separately metered — see lib/usage.ts's getTierUsage/checkCreditsAvailable
+// for how monthly consumption is computed (from the audit trail, not a new
+// counter column) and app/api/sourcing-events, app/api/orchestrate for the
+// call sites this replaced.
 export type TierLimits = {
-  eventsPerMonth: number;
-  wavesPerEvent: number;
+  monthlyCredits: number;
   suppliersPerEvent: number;
   seats: number;
   outreach: boolean;
   export: boolean;
 };
+
+/** Credits charged for one discovery wave. The only metered action today. */
+export const CREDIT_COST_PER_WAVE = 1;
 
 export type Tier = {
   key: TierKey;
@@ -34,27 +44,31 @@ export type Tier = {
   featured?: boolean;
 };
 
+// PROVISIONAL: monthlyCredits below are engineering defaults chosen to land
+// roughly where each tier's old (eventsPerMonth × wavesPerEvent) ceiling did,
+// not a finalized pricing decision — flag for business/pricing sign-off
+// before this ships to paying customers.
 export const TIERS: Tier[] = [
   {
     key: "free",
     name: "Free",
     blurb: "Try SourceIQ with a single sourcing event.",
     monthlyEur: 0,
-    limits: { eventsPerMonth: 1, wavesPerEvent: 1, suppliersPerEvent: 25, seats: 1, outreach: false, export: false },
+    limits: { monthlyCredits: 1, suppliersPerEvent: 25, seats: 1, outreach: false, export: false },
   },
   {
     key: "basic",
     name: "Basic",
     blurb: "For occasional sourcing with exports and a small team.",
     monthlyEur: 49,
-    limits: { eventsPerMonth: 5, wavesPerEvent: 3, suppliersPerEvent: 150, seats: 3, outreach: false, export: true },
+    limits: { monthlyCredits: 8, suppliersPerEvent: 150, seats: 3, outreach: false, export: true },
   },
   {
     key: "growth",
     name: "Growth",
     blurb: "Live supplier outreach for growing sourcing teams.",
     monthlyEur: 89,
-    limits: { eventsPerMonth: 12, wavesPerEvent: 6, suppliersPerEvent: 400, seats: 5, outreach: true, export: true },
+    limits: { monthlyCredits: 30, suppliersPerEvent: 400, seats: 5, outreach: true, export: true },
   },
   {
     key: "premium",
@@ -62,14 +76,14 @@ export const TIERS: Tier[] = [
     blurb: "Unlimited discovery depth plus live supplier outreach.",
     monthlyEur: 149,
     featured: true,
-    limits: { eventsPerMonth: 20, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: 10, outreach: true, export: true },
+    limits: { monthlyCredits: 60, suppliersPerEvent: UNLIMITED, seats: 10, outreach: true, export: true },
   },
   {
     key: "pro",
     name: "Pro",
     blurb: "Unlimited everything for high-volume procurement teams.",
     monthlyEur: 399,
-    limits: { eventsPerMonth: UNLIMITED, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true },
+    limits: { monthlyCredits: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true },
   },
 ];
 

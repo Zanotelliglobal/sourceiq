@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import type { Organization } from "@/lib/db";
-import { getTier, UNLIMITED, type Tier, type TierLimits } from "@/lib/plans";
+import { getTier, UNLIMITED, CREDIT_COST_PER_WAVE, type Tier, type TierLimits } from "@/lib/plans";
 type Db = ReturnType<typeof getDb>;
 
 // ─── TOKEN ACCOUNTING ─────────────────────────────────────────────────────────
@@ -155,32 +155,45 @@ export function effectiveTier(org: Organization): Tier {
 export type TierUsage = {
   tier: Tier;
   limits: TierLimits;
-  events_this_month: number;
   tokens_used: number;
   cost_usd: number;
-  bonus_events: number;        // extra monthly events earned via referrals
-  effective_limit: number | null; // plan limit + bonus (null = unlimited)
-  events_remaining: number | null; // null = unlimited
+  bonus_credits: number;           // extra monthly credits earned via referrals
+  credits_used: number;            // discovery waves run this month × CREDIT_COST_PER_WAVE
+  effective_limit: number | null;  // plan credits + bonus (null = unlimited)
+  credits_remaining: number | null; // null = unlimited
 };
 
 /**
- * The effective monthly event allowance for an org: the plan's base limit plus
- * any referral bonus events. Returns UNLIMITED unchanged.
+ * The effective monthly credit allowance for an org: the plan's base credit
+ * pool plus any referral bonus. Referral rewards are still earned/stored as
+ * `organizations.bonus_events` (lib/referrals.ts, lib/onboarding.ts — untouched
+ * by #45, no data migration needed) and are converted to bonus credits here,
+ * at read time, 1:1. Returns UNLIMITED unchanged.
  */
-export function effectiveEventLimit(org: Organization, baseLimit: number): number {
+export function effectiveCreditLimit(org: Organization, baseLimit: number): number {
   if (baseLimit === UNLIMITED) return UNLIMITED;
   return baseLimit + Math.max(0, Number(org.bonus_events ?? 0));
 }
 
-/** Current-month consumption for an org measured against its effective tier. */
+/**
+ * Current-month credit consumption for an org measured against its effective
+ * tier. #45 (Epic 6.1-6.3): a single monthly credit pool replaces the old
+ * flat "N events/month" + "M waves/event" caps. Credits consumed are
+ * recomputed from the audit trail (each discovery wave logs a `discovery.run`
+ * row in app/api/orchestrate/route.ts) rather than a separate counter, matching
+ * this file's existing "recompute from source truth" pattern. Creating a
+ * sourcing event is no longer itself credit-metered — it's still bounded by
+ * the anti-abuse rate limits in app/api/sourcing-events/route.ts.
+ */
 export async function getTierUsage(db: Db, org: Organization): Promise<TierUsage> {
   const tier = effectiveTier(org);
 
-  const evtRow = await db.prepare(
-    `SELECT COUNT(*) AS c FROM sourcing_events
-      WHERE org_id = ? AND created_at >= date_trunc('month', now())`
+  const waveRow = await db.prepare(
+    `SELECT COUNT(*) AS c FROM audit_log
+      WHERE org_id = ? AND action = 'discovery.run' AND created_at >= date_trunc('month', now())`
   ).get(org.id) as Record<string, unknown> | undefined;
-  const eventsThisMonth = Number(evtRow?.c ?? 0);
+  const wavesThisMonth = Number(waveRow?.c ?? 0);
+  const creditsUsed = wavesThisMonth * CREDIT_COST_PER_WAVE;
 
   const tokRow = await db.prepare(
     `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
@@ -189,43 +202,31 @@ export async function getTierUsage(db: Db, org: Organization): Promise<TierUsage
       WHERE org_id = ? AND created_at >= date_trunc('month', now())`
   ).get(org.id) as Record<string, unknown> | undefined;
 
-  const baseLimit = tier.limits.eventsPerMonth;
-  const limit = effectiveEventLimit(org, baseLimit);
-  const eventsRemaining = limit === UNLIMITED ? null : Math.max(0, limit - eventsThisMonth);
+  const baseLimit = tier.limits.monthlyCredits;
+  const limit = effectiveCreditLimit(org, baseLimit);
+  const creditsRemaining = limit === UNLIMITED ? null : Math.max(0, limit - creditsUsed);
 
   return {
     tier,
     limits: tier.limits,
-    events_this_month: eventsThisMonth,
     tokens_used: Number(tokRow?.tokens ?? 0),
     cost_usd: Number(tokRow?.cost ?? 0),
-    bonus_events: Math.max(0, Number(org.bonus_events ?? 0)),
+    bonus_credits: Math.max(0, Number(org.bonus_events ?? 0)),
+    credits_used: creditsUsed,
     effective_limit: limit === UNLIMITED ? null : limit,
-    events_remaining: eventsRemaining,
+    credits_remaining: creditsRemaining,
   };
-}
-
-export type EventLimitCheck = { ok: true } | { ok: false; reason: string; limit: number; used: number };
-
-/** Whether the org may create another sourcing event this month under its tier. */
-export async function checkEventLimit(db: Db, org: Organization): Promise<EventLimitCheck> {
-  const usage = await getTierUsage(db, org);
-  const baseLimit = usage.limits.eventsPerMonth;
-  if (baseLimit === UNLIMITED) return { ok: true };
-  const limit = effectiveEventLimit(org, baseLimit);
-  if (usage.events_this_month >= limit) {
-    return { ok: false, reason: "event_limit_reached", limit, used: usage.events_this_month };
-  }
-  return { ok: true };
 }
 
 export type LimitCheck = { ok: true } | { ok: false; reason: string; limit: number; used: number };
 
-/** Whether the org may run another discovery wave on this event under its tier. */
-export function checkWaveLimit(tier: Tier, waveNumber: number): LimitCheck {
-  const limit = tier.limits.wavesPerEvent;
-  if (limit === UNLIMITED) return { ok: true };
-  if (waveNumber > limit) return { ok: false, reason: "wave_limit_reached", limit, used: waveNumber - 1 };
+/** Whether the org has monthly credit headroom to run another discovery wave. */
+export async function checkCreditsAvailable(db: Db, org: Organization): Promise<LimitCheck> {
+  const usage = await getTierUsage(db, org);
+  if (usage.effective_limit === null) return { ok: true };
+  if (usage.credits_used + CREDIT_COST_PER_WAVE > usage.effective_limit) {
+    return { ok: false, reason: "credits_exhausted", limit: usage.effective_limit, used: usage.credits_used };
+  }
   return { ok: true };
 }
 

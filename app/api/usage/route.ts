@@ -18,8 +18,9 @@ export async function GET() {
     tier_name: usage.tier.name,
     limits: usage.limits,
     unlimited: UNLIMITED,
-    events_this_month: usage.events_this_month,
-    events_remaining: usage.events_remaining,
+    credits_used: usage.credits_used,
+    credits_remaining: usage.credits_remaining,
+    bonus_credits: usage.bonus_credits,
     tokens_used: usage.tokens_used,
     cost_usd: usage.cost_usd,
   });
