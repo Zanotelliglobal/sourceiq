@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
-import { sendEmail, isMailLive, replyToAddress } from "@/lib/mail";
+import { sendEmail, isMailLive, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
+import { isSuppressed } from "@/lib/suppression";
+
+// Every funnel_stage value the app actually understands (see STAGES/FUNNEL in
+// app/events/[id]/page.tsx and the "disqualified" dimmed-row treatment there).
+// The suppliers.funnel_stage column has no DB-level CHECK constraint, so this
+// endpoint is the only gate against writing an arbitrary string into it.
+const FUNNEL_STAGES = new Set([
+  "long_list", "contacted", "responded", "shortlisted", "declined", "engaged", "disqualified",
+]);
 
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
@@ -42,6 +51,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "move_stage") {
+    if (typeof stage !== "string" || !FUNNEL_STAGES.has(stage)) {
+      return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
+    }
     const before = await db.prepare("SELECT name, event_id, funnel_stage FROM suppliers WHERE id = ?").get(supplier_id) as
       { name: string; event_id: number; funnel_stage: string | null } | undefined;
     await db.prepare("UPDATE suppliers SET funnel_stage = ? WHERE id = ?").run(stage, supplier_id);
@@ -102,10 +114,21 @@ export async function POST(req: NextRequest) {
       id: number; event_id: number; name: string; country: string; contact_email: string | null;
       category: string; requirements: string; annual_spend: string;
       outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
-      website: string | null;
+      website: string | null; opted_out: boolean | null;
     } | undefined;
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // This single-supplier send path shares the same suppression obligations
+    // as the batch /api/outreach campaign endpoint (#98): a supplier who
+    // opted out — on this row, or via the org-wide durable suppression list
+    // from a past event — must never be re-contacted here either.
+    if (supplier.opted_out) {
+      return NextResponse.json({ error: "This supplier has opted out and cannot be contacted." }, { status: 409 });
+    }
+    if (await isSuppressed(db, ctx.orgId, supplier.contact_email)) {
+      return NextResponse.json({ error: "This contact is on the do-not-contact list and cannot be emailed." }, { status: 409 });
+    }
 
     // Contact discovery: if we don't yet have an email, resolve the best available
     // channel (scrape the site, then web-search fallback) before drafting.
@@ -137,14 +160,24 @@ export async function POST(req: NextRequest) {
     const replyToken = randomBytes(9).toString("base64url");
     await db.prepare("UPDATE suppliers SET reply_token=? WHERE id=?").run(replyToken, supplier_id);
 
+    // Every outbound RFI carries a compliant unsubscribe footer + headers
+    // (CAN-SPAM/GDPR), same as the batch campaign path. Send only the
+    // localized body — the dual-language block is logged, not sent.
+    const formUrl = rfiUrl(replyToken);
+    const bodyWithCta = formUrl
+      ? `${email.body}\n\nPrefer a quick web form? You can respond in one minute here:\n${formUrl}`
+      : email.body;
+    const rfiBody = withComplianceFooter(bodyWithCta, replyToken);
+
     const live = isMailLive();
     let delivery;
     try {
       delivery = await sendEmail({
         to: supplier.contact_email,
         subject: email.subject,
-        body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
+        body: rfiBody,
         replyTo: replyToAddress(replyToken) ?? undefined,
+        headers: unsubscribeHeaders(replyToken),
       });
     } catch (err) {
       return NextResponse.json({ error: `Send failed: ${String(err)}` }, { status: 502 });
@@ -171,8 +204,18 @@ export async function POST(req: NextRequest) {
     `).get(supplier_id) as {
       id: number; event_id: number; name: string; country: string;
       contact_email: string | null; reply_token: string | null; category: string;
+      opted_out: boolean | null;
     } | undefined;
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Same suppression obligations as send_outreach above (#98) — a follow-up
+    // nudge is still an unsolicited contact and must honor an opt-out.
+    if (supplier.opted_out) {
+      return NextResponse.json({ error: "This supplier has opted out and cannot be contacted." }, { status: 409 });
+    }
+    if (await isSuppressed(db, ctx.orgId, supplier.contact_email)) {
+      return NextResponse.json({ error: "This contact is on the do-not-contact list and cannot be emailed." }, { status: 409 });
+    }
 
     // Find the subject of the last outbound RFI to reference in the nudge.
     const lastOut = await db.prepare(
@@ -184,13 +227,24 @@ export async function POST(req: NextRequest) {
       (u) => { void recordUsage(db, supplier.event_id, "followup", u as never, AGENT_MODELS.followUp); }
     );
 
+    // Same compliance footer + List-Unsubscribe headers as the initial RFI
+    // (#98/CAN-SPAM) — a follow-up is still commercial email and needs a
+    // working opt-out. Fall back to a fresh reply token if one was never
+    // minted (e.g. the original RFI predates reply-token support).
+    const followupToken = supplier.reply_token || randomBytes(9).toString("base64url");
+    if (!supplier.reply_token) {
+      await db.prepare("UPDATE suppliers SET reply_token=? WHERE id=?").run(followupToken, supplier_id);
+    }
+    const followupBody = withComplianceFooter(`${email.body}`, followupToken);
+
     let delivery;
     try {
       delivery = await sendEmail({
         to: supplier.contact_email,
         subject: email.subject,
-        body: `${email.body}\n\n---\n[EN] ${email.body_en}`,
-        replyTo: supplier.reply_token ? (replyToAddress(supplier.reply_token) ?? undefined) : undefined,
+        body: followupBody,
+        replyTo: replyToAddress(followupToken) ?? undefined,
+        headers: unsubscribeHeaders(followupToken),
       });
     } catch (err) {
       return NextResponse.json({ error: `Send failed: ${String(err)}` }, { status: 502 });

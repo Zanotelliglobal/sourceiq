@@ -95,6 +95,14 @@ export function withComplianceFooter(body: string, token: string): string {
   const url = unsubscribeUrl(token);
   const addr = postalAddress();
   const lines: string[] = [body, "", "—"];
+  // AI-authorship disclosure (#100): every outbound RFI/follow-up is drafted
+  // by an AI agent on the buyer's behalf. This is disclosure/transparency,
+  // distinct from the CAN-SPAM/GDPR opt-out text below — recipients are
+  // entitled to know a message was AI-generated, separately from being able
+  // to stop receiving it.
+  lines.push(
+    "This message was drafted by an AI assistant on behalf of the buyer named above; a human reviews supplier responses."
+  );
   lines.push(
     "You received this message because SourceIQ is conducting a supplier sourcing search on behalf of a buyer. If this is not relevant to your business, you can opt out and we will not contact you again" +
       (url ? `: ${url}` : ".")

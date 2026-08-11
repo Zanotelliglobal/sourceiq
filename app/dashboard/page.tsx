@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown, Trash2, Layers, Pin, Archive, ArchiveRestore, Pencil, X } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { useToasts, ToastStack } from "@/components/Toast";
 import { sortEventRows } from "@/lib/event-list";
 
 type EventRow = {
@@ -85,6 +87,13 @@ export default function Dashboard() {
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [pinningId, setPinningId] = useState<number | null>(null);
   const [archivingId, setArchivingId] = useState<number | null>(null);
+  // In-app confirm/prompt modals (#74) — replace window.confirm()/window.prompt(),
+  // which block the tab and can't be styled or unit-tested. Holding the target
+  // row (not just a boolean) lets the dialog render its own title/message.
+  const [deleteTarget, setDeleteTarget] = useState<EventRow | null>(null);
+  const [renameTarget, setRenameTarget] = useState<EventRow | null>(null);
+  // Toasts (#74) replace blocking window.alert() for error notifications.
+  const { toasts, pushToast, dismissToast } = useToasts();
   // Archive (#40): hidden from the default list; toggled on to review/restore them.
   const [showArchived, setShowArchived] = useState(false);
   // Cross-project search (#40): the existing `query` box already filters the
@@ -209,31 +218,43 @@ export default function Dashboard() {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  // Delete an event after confirmation. Optimistically drops it from the list;
-  // reloads on failure so the UI never diverges from the server.
-  const handleDelete = async (event: EventRow, e: React.MouseEvent) => {
+  // Delete an event — opens the in-app confirm dialog (#74); the actual
+  // request only fires from confirmDelete() once the user confirms there.
+  const handleDelete = (event: EventRow, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(t("Delete “{title}”? This permanently removes the event and all its suppliers.", { title: cleanTitle(event.title) }))) return;
+    setDeleteTarget(event);
+  };
+
+  // Optimistically drops the event from the list; reloads on failure so the
+  // UI never diverges from the server. Invoked by ConfirmDialog's onConfirm.
+  const confirmDelete = async () => {
+    const event = deleteTarget;
+    if (!event) return;
+    setDeleteTarget(null);
     setDeletingId(event.id);
     try {
       const res = await fetch(`/api/sourcing-events/${event.id}`, { method: "DELETE" });
       if (res.ok) setEvents(prev => prev.filter(x => x.id !== event.id));
-      else alert(t("Couldn't delete this event. Please try again."));
+      else pushToast("error", t("Couldn't delete this event. Please try again."));
     } catch {
-      alert(t("Couldn't delete this event. Please try again."));
+      pushToast("error", t("Couldn't delete this event. Please try again."));
     } finally {
       setDeletingId(null);
     }
   };
 
-  // Rename an event's display title (#40). Uses a native prompt, matching the
-  // codebase's existing lightweight window.confirm()-based action pattern
-  // rather than a bespoke inline-edit UI.
-  const handleRename = async (event: EventRow, e: React.MouseEvent) => {
+  // Rename an event's display title (#40) — opens the in-app prompt dialog
+  // (#74) instead of a native window.prompt(); confirmRename() does the work.
+  const handleRename = (event: EventRow, e: React.MouseEvent) => {
     e.stopPropagation();
-    const next = window.prompt(t("Rename event"), cleanTitle(event.title));
-    if (next == null) return;
-    const title = next.trim();
+    setRenameTarget(event);
+  };
+
+  const confirmRename = async (value?: string) => {
+    const event = renameTarget;
+    setRenameTarget(null);
+    if (!event) return;
+    const title = (value ?? "").trim();
     if (!title || title === event.title) return;
     setRenamingId(event.id);
     try {
@@ -243,9 +264,9 @@ export default function Dashboard() {
         body: JSON.stringify({ title }),
       });
       if (res.ok) setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, title } : x)));
-      else alert(t("Couldn't rename this event. Please try again."));
+      else pushToast("error", t("Couldn't rename this event. Please try again."));
     } catch {
-      alert(t("Couldn't rename this event. Please try again."));
+      pushToast("error", t("Couldn't rename this event. Please try again."));
     } finally {
       setRenamingId(null);
     }
@@ -267,7 +288,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error();
     } catch {
       setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, pinned: !pinned } : x)));
-      alert(t("Couldn't update pin status. Please try again."));
+      pushToast("error", t("Couldn't update pin status. Please try again."));
     } finally {
       setPinningId(null);
     }
@@ -289,7 +310,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error();
     } catch {
       setEvents(prev => prev.map(x => (x.id === event.id ? { ...x, archived: !archived } : x)));
-      alert(t("Couldn't update archive status. Please try again."));
+      pushToast("error", t("Couldn't update archive status. Please try again."));
     } finally {
       setArchivingId(null);
     }
@@ -312,7 +333,17 @@ export default function Dashboard() {
       <tr
         key={event.id}
         onClick={() => router.push(`/events/${event.id}`)}
-        className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
+        onKeyDown={e => {
+          // Keyboard equivalent of the row click (#86) — Enter/Space open the
+          // event, same as clicking anywhere on the row.
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            router.push(`/events/${event.id}`);
+          }
+        }}
+        tabIndex={0}
+        aria-label={t("Open {value}", { value: cleanTitle(event.title) })}
+        className="hover:bg-slate-50/60 transition-colors group cursor-pointer focus:outline-none focus-visible:bg-slate-50"
       >
         <td className="px-6 py-4">
           <div className="flex items-center gap-1.5">
@@ -554,6 +585,7 @@ export default function Dashboard() {
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
+                  aria-label={t("Search events and suppliers")}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
@@ -713,6 +745,32 @@ export default function Dashboard() {
           </table>
         </div>
       )}
+
+      {/* In-app confirm/prompt modals (#74) — replace window.confirm()/window.prompt() */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("Delete event")}
+        message={
+          deleteTarget
+            ? t("Delete “{title}”? This permanently removes the event and all its suppliers.", { title: cleanTitle(deleteTarget.title) })
+            : ""
+        }
+        confirmLabel={t("Delete")}
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+      <ConfirmDialog
+        open={renameTarget !== null}
+        title={t("Rename event")}
+        message={t("Enter a new name for this event.")}
+        confirmLabel={t("Save")}
+        inputDefaultValue={renameTarget ? cleanTitle(renameTarget.title) : ""}
+        inputPlaceholder={t("Event name")}
+        onConfirm={confirmRename}
+        onCancel={() => setRenameTarget(null)}
+      />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

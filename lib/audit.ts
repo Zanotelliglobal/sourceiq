@@ -15,7 +15,8 @@ export type AuditAction =
   | "supplier.stage_change"
   | "responders.shortlist"
   | "followup.send"
-  | "suppliers.export";
+  | "suppliers.export"
+  | "gdpr.erasure";
 
 export async function logAudit(input: {
   orgId: number;
