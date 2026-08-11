@@ -350,11 +350,11 @@ export default function Dashboard() {
             {event.pinned && <Pin className="w-3 h-3 text-amber-500 fill-current flex-shrink-0" aria-label={t("Pinned")} />}
             <div className="font-semibold text-slate-900 text-sm truncate max-w-[160px] sm:max-w-[220px] lg:max-w-[300px] xl:max-w-[360px]">{cleanTitle(event.title)}</div>
           </div>
-          <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
             {event.wave_count > 0 && (
               <span>{event.wave_count === 1 ? t("{count} wave", { count: event.wave_count }) : t("{count} waves", { count: event.wave_count })}</span>
             )}
-            {event.wave_count > 0 && <span className="text-slate-300">·</span>}
+            {event.wave_count > 0 && <span className="text-slate-500">·</span>}
             <span>{t("updated {time}", { time: relativeTime(event.updated_at || event.created_at, t) })}</span>
           </div>
         </td>
@@ -377,14 +377,14 @@ export default function Dashboard() {
         <td className="px-4 py-4 hidden lg:table-cell">
           <div className="text-sm text-slate-700 font-medium flex items-center gap-1.5">
             {cfg.working && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" title={t("Discovering live")} />}
-            <span>{event.supplier_count || 0}<span className="font-normal text-slate-400"> {t("found")}</span></span>
+            <span>{event.supplier_count || 0}<span className="font-normal text-slate-500"> {t("found")}</span></span>
           </div>
           {(event.shortlisted_count || 0) > 0 && (
-            <div className="text-xs text-amber-600 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>
+            <div className="text-xs text-amber-800 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>
           )}
         </td>
         <td className="px-4 py-4 hidden xl:table-cell">
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500">
             {new Date(event.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
           </span>
         </td>
@@ -395,7 +395,7 @@ export default function Dashboard() {
               disabled={renamingId === event.id}
               title={t("Rename event")}
               aria-label={t("Rename event")}
-              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
             >
               {renamingId === event.id
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -407,7 +407,7 @@ export default function Dashboard() {
               title={event.pinned ? t("Unpin event") : t("Pin event")}
               aria-label={event.pinned ? t("Unpin event") : t("Pin event")}
               className={`inline-flex items-center justify-center p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                event.pinned ? "text-amber-500 hover:bg-amber-50" : "text-slate-300 hover:text-amber-600 hover:bg-amber-50"
+                event.pinned ? "text-amber-500 hover:bg-amber-50" : "text-slate-500 hover:text-amber-700 hover:bg-amber-50"
               }`}
             >
               {pinningId === event.id
@@ -419,7 +419,7 @@ export default function Dashboard() {
               disabled={archivingId === event.id}
               title={event.archived ? t("Unarchive event") : t("Archive event")}
               aria-label={event.archived ? t("Unarchive event") : t("Archive event")}
-              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
             >
               {archivingId === event.id
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -430,13 +430,13 @@ export default function Dashboard() {
               disabled={deletingId === event.id}
               title={t("Delete event")}
               aria-label={t("Delete event")}
-              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
             >
               {deletingId === event.id
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Trash2 className="w-3.5 h-3.5" />}
             </button>
-            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors ml-1" />
+            <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-blue-500 transition-colors ml-1" />
           </div>
         </td>
       </tr>
@@ -495,9 +495,9 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
           { label: t("Active Events"),      value: stats.active,     sub: t("{total} total events", { total: stats.total }),        Icon: Zap,           color: "text-blue-600",   iconColor: "text-blue-500" },
-          { label: t("Suppliers Identified"),value: stats.suppliers,  sub: t("across all events"),                  Icon: Factory,       color: "text-slate-900",  iconColor: "text-slate-400" },
-          { label: t("Short Listed"),       value: stats.shortlisted, sub: t("approved for RFI"),                  Icon: Star,          color: "text-amber-600",  iconColor: "text-amber-500" },
-          { label: t("Total Events"),       value: stats.total,       sub: t("all time"),                           Icon: ClipboardList, color: "text-slate-600",  iconColor: "text-slate-400" },
+          { label: t("Suppliers Identified"),value: stats.suppliers,  sub: t("across all events"),                  Icon: Factory,       color: "text-slate-900",  iconColor: "text-slate-500" },
+          { label: t("Short Listed"),       value: stats.shortlisted, sub: t("approved for RFI"),                  Icon: Star,          color: "text-amber-800",  iconColor: "text-amber-500" },
+          { label: t("Total Events"),       value: stats.total,       sub: t("all time"),                           Icon: ClipboardList, color: "text-slate-600",  iconColor: "text-slate-500" },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div className="flex items-center justify-between mb-2">
@@ -505,7 +505,7 @@ export default function Dashboard() {
             </div>
             <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
             <div className="text-sm font-semibold text-slate-700 mt-0.5">{s.label}</div>
-            <div className="text-xs text-slate-400">{s.sub}</div>
+            <div className="text-xs text-slate-500">{s.sub}</div>
           </div>
         ))}
       </div>
@@ -515,23 +515,23 @@ export default function Dashboard() {
         <div className="card px-4 sm:px-6 py-4 mb-8 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
           <div className="flex items-center gap-2">
             <span className="badge badge-blue">{t(usage.tier_name)}</span>
-            <span className="text-xs text-slate-400">{t("Usage this month")}</span>
+            <span className="text-xs text-slate-500">{t("Usage this month")}</span>
           </div>
           <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div>
               <div className="text-sm font-bold text-slate-900">
                 {usage.events_this_month}
-                <span className="font-normal text-slate-400"> / {usage.limits.eventsPerMonth === usage.unlimited ? t("Unlimited") : usage.limits.eventsPerMonth}</span>
+                <span className="font-normal text-slate-500"> / {usage.limits.eventsPerMonth === usage.unlimited ? t("Unlimited") : usage.limits.eventsPerMonth}</span>
               </div>
-              <div className="text-xs text-slate-400">{t("Sourcing events")}</div>
+              <div className="text-xs text-slate-500">{t("Sourcing events")}</div>
             </div>
             <div>
               <div className="text-sm font-bold text-slate-900">{fmtTokens(usage.tokens_used)}</div>
-              <div className="text-xs text-slate-400">{t("Tokens used")}</div>
+              <div className="text-xs text-slate-500">{t("Tokens used")}</div>
             </div>
             <div>
               <div className="text-sm font-bold text-slate-900">${usage.cost_usd.toFixed(2)}</div>
-              <div className="text-xs text-slate-400">{t("Estimated cost")}</div>
+              <div className="text-xs text-slate-500">{t("Estimated cost")}</div>
             </div>
           </div>
           {usage.events_remaining !== null && usage.events_remaining <= 1 && (
@@ -563,7 +563,7 @@ export default function Dashboard() {
             <Search className="w-7 h-7 text-blue-600" />
           </div>
           <h2 className="text-lg font-bold text-slate-700 mb-2">{t("No sourcing events yet")}</h2>
-          <p className="text-sm text-slate-400 max-w-sm mx-auto mb-6">
+          <p className="text-sm text-slate-500 max-w-sm mx-auto mb-6">
             {t("Create your first sourcing event to deploy AI agents across global supplier networks and build a qualified long list in minutes.")}
           </p>
           <Link href="/events/new" className="btn-primary">
@@ -576,11 +576,11 @@ export default function Dashboard() {
           <div className="px-4 sm:px-6 py-3 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
             <div className="flex items-center gap-3 flex-shrink-0">
               <h2 className="text-sm font-bold text-slate-700">{t("Sourcing Events")}</h2>
-              <span className="text-xs text-slate-400">{visible.length === 1 ? t("{count} event", { count: visible.length }) : t("{count} events", { count: visible.length })}</span>
+              <span className="text-xs text-slate-500">{visible.length === 1 ? t("{count} event", { count: visible.length }) : t("{count} events", { count: visible.length })}</span>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   aria-label={t("Search events and suppliers")}
@@ -597,7 +597,7 @@ export default function Dashboard() {
                     onClick={() => setQuery("")}
                     title={t("Clear search")}
                     aria-label={t("Clear search")}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-300 hover:text-slate-500 hover:bg-slate-100"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-500 hover:text-slate-600 hover:bg-slate-100"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -608,12 +608,12 @@ export default function Dashboard() {
                 {searchFocused && query.trim().length >= 2 && (
                   <div className="absolute z-20 top-full left-0 mt-1 w-80 max-h-80 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg">
                     {searchingSuppliers ? (
-                      <div className="px-3 py-3 text-xs text-slate-400">{t("Searching…")}</div>
+                      <div className="px-3 py-3 text-xs text-slate-500">{t("Searching…")}</div>
                     ) : supplierResults.length === 0 ? (
-                      <div className="px-3 py-3 text-xs text-slate-400">{t("No matching suppliers found.")}</div>
+                      <div className="px-3 py-3 text-xs text-slate-500">{t("No matching suppliers found.")}</div>
                     ) : (
                       <>
-                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100">
                           {t("Suppliers across your projects")}
                         </div>
                         {supplierResults.map(s => (
@@ -623,9 +623,9 @@ export default function Dashboard() {
                             className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
                           >
                             <div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div>
-                            <div className="text-xs text-slate-400 truncate">
+                            <div className="text-xs text-slate-500 truncate">
                               {s.country ? `${s.country} · ` : ""}{t("in")} {cleanTitle(s.event_title)}
-                              {s.event_archived && <span className="ml-1 text-slate-300">({t("archived")})</span>}
+                              {s.event_archived && <span className="ml-1 text-slate-500">({t("archived")})</span>}
                             </div>
                           </button>
                         ))}
@@ -681,17 +681,17 @@ export default function Dashboard() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Event")}</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">{t("Category")}</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Status")}</th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">
+                <th className="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("Event")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 hidden md:table-cell">{t("Category")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("Status")}</th>
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 hidden lg:table-cell">
                   <button onClick={() => toggleSort("pipeline")} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
-                    {t("Pipeline")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "pipeline" ? "text-blue-500" : "text-slate-300"}`} />
+                    {t("Pipeline")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "pipeline" ? "text-blue-500" : "text-slate-500"}`} />
                   </button>
                 </th>
-                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:table-cell">
+                <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 hidden xl:table-cell">
                   <button onClick={() => toggleSort("initiated")} className="inline-flex items-center gap-1 hover:text-slate-600 uppercase tracking-wider">
-                    {t("Initiated")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "initiated" ? "text-blue-500" : "text-slate-300"}`} />
+                    {t("Initiated")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "initiated" ? "text-blue-500" : "text-slate-500"}`} />
                   </button>
                 </th>
                 <th className="px-4 py-3 w-10" />
@@ -700,7 +700,7 @@ export default function Dashboard() {
             <tbody className="divide-y divide-slate-100">
               {visible.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-400">
+                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
                     {showArchived ? t("No archived events.") : t("No events match your search.")}
                   </td>
                 </tr>
@@ -709,7 +709,7 @@ export default function Dashboard() {
                   <Fragment key={category}>
                     <tr className="bg-slate-50/70">
                       <td colSpan={6} className="px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        {category} <span className="text-slate-400 font-semibold">· {rows.length}</span>
+                        {category} <span className="text-slate-500 font-semibold">· {rows.length}</span>
                       </td>
                     </tr>
                     {rows.map(renderRow)}

@@ -40,7 +40,7 @@ export default function FunnelExplainer() {
         onClick={dismiss}
         disabled={dismissing}
         aria-label={t("Dismiss")}
-        className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40"
+        className="absolute top-2.5 right-2.5 text-slate-500 hover:text-slate-600 transition-colors disabled:opacity-40"
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -53,9 +53,9 @@ export default function FunnelExplainer() {
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-2 py-1">
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
               <span className="text-[11px] font-bold text-slate-700">{t(s.label)}</span>
-              <span className="text-[11px] text-slate-400">— {t(s.hint)}</span>
+              <span className="text-[11px] text-slate-500">— {t(s.hint)}</span>
             </span>
-            {i < STAGES.length - 1 && <ArrowRight className="w-3 h-3 text-slate-300" />}
+            {i < STAGES.length - 1 && <ArrowRight className="w-3 h-3 text-slate-500" />}
           </span>
         ))}
       </div>

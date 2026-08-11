@@ -29,7 +29,7 @@ export default function LanguageSwitcher() {
         aria-label="Change language"
         className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all"
       >
-        <Globe className="w-4 h-4 text-slate-400" />
+        <Globe className="w-4 h-4 text-slate-500" />
         <span className="hidden sm:inline">{active.flag}</span>
         <span className="uppercase text-xs font-semibold tracking-wide">{active.code}</span>
       </button>
