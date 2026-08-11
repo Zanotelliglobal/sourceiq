@@ -22,7 +22,7 @@ export default function TopNav() {
               </svg>
             </div>
             <span className="font-bold text-slate-900 tracking-tight">SourceIQ</span>
-            <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-widest text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded">
+            <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-widest text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded">
               BETA
             </span>
           </Link>
@@ -41,7 +41,7 @@ export default function TopNav() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
             {t("Agents ready")}
           </div>

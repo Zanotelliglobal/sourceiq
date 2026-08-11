@@ -86,7 +86,7 @@ export default function OnboardingChecklist() {
         onClick={dismiss}
         disabled={dismissing}
         aria-label={t("Dismiss")}
-        className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40"
+        className="absolute top-4 right-4 text-slate-500 hover:text-slate-600 transition-colors disabled:opacity-40"
       >
         <X className="w-4 h-4" />
       </button>
@@ -135,7 +135,7 @@ export default function OnboardingChecklist() {
             <ArrowRight className="w-4 h-4" />
           </Link>
         )}
-        <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+        <span className="inline-flex items-center gap-1 text-xs text-slate-500">
           <Gift className="w-3.5 h-3.5" />
           {t("{count} bonus events earned so far", { count: state.bonusEventsEarned })}
         </span>

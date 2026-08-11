@@ -277,6 +277,14 @@ async function initSchema(): Promise<void> {
     -- separate audit table (fine for a v1 quality signal, not a legal record).
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS feedback_signal SMALLINT;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS feedback_updated_at TIMESTAMPTZ;
+    -- #62: atomic-claim timestamps so concurrent send_outreach/send_followup
+    -- requests for the same supplier (double-click, two open tabs) can't both
+    -- pass the read-then-write gap and send duplicate emails. A claim is a
+    -- timestamp, not just a boolean, so a request that crashes mid-send
+    -- (leaving the claim set) self-heals after STALE_CLAIM_MINUTES instead of
+    -- locking the supplier out of outreach forever — see lib/outreach-claim.ts.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS outreach_claimed_at TIMESTAMPTZ;
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS followup_claimed_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,

@@ -45,7 +45,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
           {children}
         </div>
-        <p className="text-[11px] text-slate-400 text-center mt-6">
+        <p className="text-[11px] text-slate-500 text-center mt-6">
           Sent by SourceIQ on behalf of a buyer conducting a supplier sourcing search.
         </p>
       </div>
@@ -103,18 +103,18 @@ export default async function SupplierRfiPage({
 
       <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 mb-6 space-y-2">
         <div>
-          <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Requirement</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Requirement</div>
           <p className="text-sm text-slate-700 mt-0.5 whitespace-pre-wrap">{row.requirements}</p>
         </div>
         {row.annual_spend && (
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Indicative annual spend</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Indicative annual spend</div>
             <p className="text-sm text-slate-700 mt-0.5">{row.annual_spend}</p>
           </div>
         )}
         {disclosed && (row.buyer_name || row.buyer_role) && (
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Buyer contact</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Buyer contact</div>
             <p className="text-sm text-slate-700 mt-0.5">
               {[row.buyer_name, row.buyer_role].filter(Boolean).join(" · ")}
             </p>

@@ -35,7 +35,7 @@ export default function SettingsPage() {
             </div>
             <div className="min-w-0">
               <div className="text-sm font-bold text-slate-900">{t("Account")}</div>
-              <div className="text-xs text-slate-400 truncate">
+              <div className="text-xs text-slate-500 truncate">
                 {user?.primaryEmailAddress?.emailAddress || user?.fullName || t("Manage your profile and security")}
               </div>
             </div>
@@ -50,7 +50,7 @@ export default function SettingsPage() {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold text-slate-900">{t("Workspace")}</div>
-            <div className="text-xs text-slate-400 truncate">
+            <div className="text-xs text-slate-500 truncate">
               {organization?.name || t("Your personal workspace")}
             </div>
           </div>
@@ -73,7 +73,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <div className="text-sm font-bold text-slate-900">{t("Language")}</div>
-              <div className="text-xs text-slate-400">{t("Choose your interface language")}</div>
+              <div className="text-xs text-slate-500">{t("Choose your interface language")}</div>
             </div>
           </div>
           <LanguageSwitcher />
@@ -86,7 +86,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <div className="text-sm font-bold text-slate-900">{t("Billing & plan")}</div>
-            <div className="text-xs text-slate-400">{t("View your subscription, usage, and invoices")}</div>
+            <div className="text-xs text-slate-500">{t("View your subscription, usage, and invoices")}</div>
           </div>
         </Link>
 
@@ -97,7 +97,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <div className="text-sm font-bold text-slate-900">{t("Support")}</div>
-            <div className="text-xs text-slate-400">{t("Get help from our team")}</div>
+            <div className="text-xs text-slate-500">{t("Get help from our team")}</div>
           </div>
         </a>
       </div>

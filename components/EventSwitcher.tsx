@@ -86,9 +86,9 @@ export default function EventSwitcher({ currentEventId }: { currentEventId: numb
       {open && (
         <div id="event-switcher-menu" role="menu" aria-label={t("Switch project")} className="absolute left-0 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1">
           {events === null ? (
-            <div className="px-3 py-3 text-xs text-slate-400">{t("Loading…")}</div>
+            <div className="px-3 py-3 text-xs text-slate-500">{t("Loading…")}</div>
           ) : recent.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-slate-400">{t("No other projects yet.")}</div>
+            <div className="px-3 py-3 text-xs text-slate-500">{t("No other projects yet.")}</div>
           ) : (
             recent.map(ev => (
               <Link
