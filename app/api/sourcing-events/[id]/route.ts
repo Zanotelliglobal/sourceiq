@@ -97,9 +97,35 @@ export async function DELETE(
 
   const db = getDb();
   const id = Number(params.id);
-  const owner = await db.prepare("SELECT org_id, title FROM sourcing_events WHERE id = ?").get(id) as { org_id?: number; title?: string } | undefined;
+  const owner = await db.prepare("SELECT org_id, title, status FROM sourcing_events WHERE id = ?").get(id) as { org_id?: number; title?: string; status?: string } | undefined;
   // 404 (not 403) for other tenants' events so we don't leak existence.
   if (!owner || Number(owner.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // #71: deleting an event out from under an in-flight scout/qualify wave or a
+  // live outreach send orphans whatever background work is mid-flight (it keeps
+  // writing to agent_runs/suppliers rows that ON DELETE CASCADE just removed,
+  // and any in-progress send_outreach call loses its supplier row mid-send).
+  // Block the delete while a run is genuinely active. Mirrors the GET route's
+  // >5min-since-updated_at staleness check so a truly abandoned run (crashed
+  // serverless function, disconnected client) doesn't block deletion forever —
+  // orchestrate's own maxDuration=300s guarantees nothing is really still
+  // running past that window.
+  const activeRun = await db.prepare(
+    `SELECT id FROM agent_runs WHERE event_id = ? AND status IN ('queued','running')
+     AND created_at > now() - make_interval(mins => 5) LIMIT 1`
+  ).get(id);
+  if (activeRun) {
+    return NextResponse.json(
+      { error: "This event has an active scouting/qualifying run. Wait for it to finish before deleting." },
+      { status: 409 }
+    );
+  }
+  if (owner.status === "outreach") {
+    return NextResponse.json(
+      { error: "This event has outreach in progress. Wait for it to finish before deleting." },
+      { status: 409 }
+    );
+  }
 
   // Child rows (suppliers, agent_runs, token_usage, audit_log) all have
   // ON DELETE CASCADE, so deleting the event removes them atomically.
