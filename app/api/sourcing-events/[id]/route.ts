@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { usageSummary } from "@/lib/usage";
 import { getOrgContext, requireRole } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
+import { reapStuckAgentRuns } from "@/lib/agent-runs-reaper";
 
 export async function GET(
   _req: NextRequest,
@@ -33,6 +34,10 @@ export async function GET(
     }
   }
 
+  // #67: reap any agent_runs rows abandoned by a crashed/timed-out orchestrate
+  // request before reading them, so the response reflects reality instead of
+  // a permanent "running" spinner.
+  await reapStuckAgentRuns(db, id);
   const agents = await db.prepare(
     "SELECT * FROM agent_runs WHERE event_id = ? ORDER BY wave ASC, created_at ASC"
   ).all(id);
