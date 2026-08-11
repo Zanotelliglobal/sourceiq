@@ -1268,11 +1268,13 @@ function FilterPanel({ filters, onApply, onClose }: {
             {aiError && <p className="text-xs text-red-600 mt-1.5">{aiError}</p>}
           </div>
 
-          <div className="flex items-center gap-1 border-b border-slate-200">
+          <div className="flex items-center gap-1 border-b border-slate-200" role="tablist">
             {FILTER_TABS.map(tb => (
               <button
                 key={tb}
                 onClick={() => setTab(tb)}
+                role="tab"
+                aria-selected={tab === tb}
                 className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-all ${
                   tab === tb ? "border-slate-900 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-600"
                 }`}
@@ -1293,6 +1295,7 @@ function FilterPanel({ filters, onApply, onClose }: {
                     const active = (draft.business_type ?? []).includes(v);
                     return (
                       <button key={v} type="button" onClick={() => toggleIn("business_type", v)}
+                        aria-pressed={active}
                         className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
                         {active && <Check className="w-3 h-3" />}{v}
                       </button>
@@ -1325,6 +1328,7 @@ function FilterPanel({ filters, onApply, onClose }: {
                   const active = (draft.capability_tags ?? []).includes(v);
                   return (
                     <button key={v} type="button" onClick={() => toggleIn("capability_tags", v)}
+                      aria-pressed={active}
                       className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
                       {active && <Check className="w-3 h-3" />}{v}
                     </button>
@@ -1343,6 +1347,7 @@ function FilterPanel({ filters, onApply, onClose }: {
                     const active = (draft.employee_count ?? []).includes(v);
                     return (
                       <button key={v} type="button" onClick={() => toggleIn("employee_count", v)}
+                        aria-pressed={active}
                         className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"}`}>
                         {active && <Check className="w-3 h-3" />}{v}
                       </button>
@@ -2156,7 +2161,7 @@ export default function EventPage() {
 
           {/* Funnel progression bar */}
           {suppliers.length > 0 && (
-            <div className="flex items-stretch gap-1 mt-4">
+            <div className="flex items-stretch gap-1 mt-4" role="group" aria-label={t("Filter by funnel stage")}>
               {FUNNEL.map((f, i) => {
                 const count = suppliers.filter(s => s.funnel_stage === f.key).length;
                 const active = stageFilter === f.key;
@@ -2164,6 +2169,7 @@ export default function EventPage() {
                   <button
                     key={f.key}
                     onClick={() => setStageFilter(f.key)}
+                    aria-pressed={active}
                     className={`group relative flex-1 text-left rounded-lg border px-3 py-2 transition-all ${
                       active ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-300 bg-white"
                     }`}
@@ -2186,11 +2192,12 @@ export default function EventPage() {
 
         {/* Filter bar */}
         <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-1 overflow-x-auto">
+          <div className="flex items-center gap-1 overflow-x-auto" role="group" aria-label={t("Filter by funnel stage")}>
             {STAGES.filter(s => stageCounts[s.key] > 0 || s.key === "all").map(s => (
               <button
                 key={s.key}
                 onClick={() => setStageFilter(s.key)}
+                aria-pressed={stageFilter === s.key}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   stageFilter === s.key
                     ? "bg-slate-900 text-white"
@@ -2240,6 +2247,7 @@ export default function EventPage() {
               <button
                 onClick={() => setGroupByType(v => !v)}
                 title={t("Group by business type")}
+                aria-pressed={groupByType}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${
                   groupByType
                     ? "bg-violet-50 text-violet-700 border-violet-200"
@@ -2250,15 +2258,18 @@ export default function EventPage() {
               </button>
             )}
             <span className="text-[10px] text-slate-500 uppercase tracking-wide">{t("Sort:")}</span>
+            <span role="group" aria-label={t("Sort by")} className="inline-flex items-center gap-1">
             {(["score", "name", "wave"] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSortBy(s)}
+                aria-pressed={sortBy === s}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${sortBy === s ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
               >
                 {s === "score" ? <span className="inline-flex items-center gap-0.5">{t("Score")} <ArrowDown className="w-3 h-3" /></span> : s === "name" ? t("Name") : t("Wave")}
               </button>
             ))}
+            </span>
             {suppliers.length > 0 && (
               canExport ? (
                 <div className="relative ml-1" ref={exportMenuRef}>
