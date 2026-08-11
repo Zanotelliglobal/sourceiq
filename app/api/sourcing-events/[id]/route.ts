@@ -69,7 +69,10 @@ export async function PATCH(
     "target_countries",
   ]);
   const PREFERENCE_FIELDS = new Set(["pinned", "archived"]);
-  const ALLOWED = new Set([...CONTENT_FIELDS, ...PREFERENCE_FIELDS]);
+  // Array.from (not a spread) here: spreading a Set directly requires
+  // --downlevelIteration/ES2015+ target, which this repo's tsconfig doesn't
+  // set, so `tsc --noEmit` fails with TS2802 on `[...aSet, ...anotherSet]`.
+  const ALLOWED = new Set([...Array.from(CONTENT_FIELDS), ...Array.from(PREFERENCE_FIELDS)]);
   const keys = Object.keys(body).filter(k => ALLOWED.has(k));
   if (keys.length === 0) return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
   if (keys.some(k => CONTENT_FIELDS.has(k))) {
