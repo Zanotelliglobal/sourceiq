@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       id: number; event_id: number; name: string; country: string; contact_email: string | null;
       category: string; requirements: string; annual_spend: string;
       outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
-      website: string | null; outreach_status: string; opted_out: boolean | null;
+      website: string | null; outreach_status: string; opted_out: boolean | null; contact_url: string | null;
     } | undefined;
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -217,8 +217,22 @@ export async function POST(req: NextRequest) {
       }
 
       if (live && !delivery.sent) {
-        // Live mode but couldn't deliver (typically no contact email on file).
-        // Release the claim so a corrected retry (e.g. after adding an email) isn't blocked.
+        // Live mode but couldn't deliver — usually no contact email on file.
+        if (supplier.contact_url) {
+          // Website-contact channel: log the drafted RFI so the buyer can
+          // paste it into that site's form (there's no general server-side
+          // browser automation here to submit an arbitrary third-party
+          // form). Leaves the supplier in a distinct "needs manual action"
+          // state instead of silently releasing the claim back to normal —
+          // see POST /api/outreach/mark-sent for the buyer's confirm step.
+          await db.prepare(
+            "INSERT INTO outreach_logs (supplier_id, direction, subject, body, channel) VALUES (?, 'outbound', ?, ?, 'website_form')"
+          ).run(supplier_id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
+          await db.prepare(`UPDATE suppliers SET outreach_status='awaiting_manual_send' WHERE id=?`).run(supplier_id);
+          return NextResponse.json({ email, delivery, awaiting_manual: true });
+        }
+        // Genuinely unreachable (no email, no contact page either). Release
+        // the claim so a corrected retry (e.g. after adding an email) isn't blocked.
         await releaseOutreachClaim(db, supplier_id, originalStatus);
         return NextResponse.json({ email, delivery, warning: delivery.reason }, { status: 200 });
       }
