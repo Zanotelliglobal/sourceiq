@@ -110,7 +110,7 @@ export default function LandingContent() {
             ))}
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 mt-12 text-xs font-semibold text-slate-500">
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> {t("GDPR compliant")}</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> {t("GDPR aligned")}</span>
             <span className="inline-flex items-center gap-1.5"><Lock className="w-4 h-4" /> {t("Anonymous outreach")}</span>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> {t("SOC 2 aligned")}</span>
           </div>

@@ -54,6 +54,17 @@ export default function EventSwitcher({ currentEventId }: { currentEventId: numb
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  // Close on Escape — keyboard-only users have no other way to dismiss the
+  // panel without tabbing all the way through its contents.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
   const recent = events
     ? sortEventRows(events, { showArchived: false, sortKey: "activity", sortDir: "desc" }).slice(0, 8)
     : [];
@@ -64,13 +75,16 @@ export default function EventSwitcher({ currentEventId }: { currentEventId: numb
         onClick={() => setOpen(o => !o)}
         className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 bg-white px-2.5 py-1 rounded-lg transition-colors"
         title={t("Switch to another project")}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls="event-switcher-menu"
       >
         <Clock className="w-3 h-3" />
         {t("Switch project")}
         <ChevronDown className="w-3 h-3" />
       </button>
       {open && (
-        <div role="menu" className="absolute left-0 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1">
+        <div id="event-switcher-menu" role="menu" aria-label={t("Switch project")} className="absolute left-0 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1">
           {events === null ? (
             <div className="px-3 py-3 text-xs text-slate-500">{t("Loading…")}</div>
           ) : recent.length === 0 ? (
