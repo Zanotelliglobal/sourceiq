@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     : await db.prepare(
         `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND funnel_stage='long_list' ORDER BY ai_score DESC`
       ).all(event.id, ctx.orgId)) as {
-    id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null;
+    id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null; contact_url: string | null;
   }[];
 
   const live = isMailLive();
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
             : `📨 DRAFT outreach (simulation) — no real emails sent (${status.reason}). Engaging ${targets.length} suppliers...`,
         });
 
-        let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0, failed = 0;
+        let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0, failed = 0, awaitingManual = 0;
 
         // Each target's chain (contact discovery → draft/send → simulated reply)
         // is ~15-40s of agent + network latency. Processing targets one at a time
@@ -187,6 +187,28 @@ export async function POST(req: NextRequest) {
             email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach", AGENT_MODELS.outreach), buyer);
           } catch (err) {
             send({ type: "supplier_error", supplier_id: s.id, message: String(err) });
+            return;
+          }
+
+          // ── Website-contact channel ──
+          // No email address, but we do have a contact page: we can't reliably
+          // auto-submit an arbitrary third-party form (every site has a
+          // different schema, and there's no server-side browser automation
+          // here), so log the drafted RFI for the buyer to paste in manually
+          // instead of silently marking the supplier "skipped". This is a
+          // distinct terminal-for-now state (outreach_status='awaiting_manual_send')
+          // that the event detail page surfaces with a "Contact via website"
+          // action (open contact_url + copy draft + mark sent).
+          if (!s.contact_email && s.contact_url) {
+            await db.prepare(
+              "INSERT INTO outreach_logs (supplier_id, direction, subject, body, channel) VALUES (?, 'outbound', ?, ?, 'website_form')"
+            ).run(s.id, email.subject, `${email.body}\n\n---\n[EN] ${email.body_en}`);
+            await db.prepare(`UPDATE suppliers SET outreach_status='awaiting_manual_send' WHERE id=?`).run(s.id);
+            awaitingManual++;
+            send({
+              type: "awaiting_manual_contact", supplier_id: s.id, supplier_name: s.name,
+              contact_url: s.contact_url, subject: email.subject, body: email.body,
+            });
             return;
           }
 
@@ -296,7 +318,7 @@ export async function POST(req: NextRequest) {
         await Promise.all(Array.from({ length: Math.min(outreachConcurrency, targets.length) }, tWorker));
 
         await db.prepare(`UPDATE sourcing_events SET status='reviewing', updated_at=datetime('now') WHERE id=?`).run(event.id);
-        send({ type: "campaign_complete", live, sent, positive, declined, awaiting, skipped });
+        send({ type: "campaign_complete", live, sent, positive, declined, awaiting, skipped, awaiting_manual: awaitingManual });
 
         // Notify the org if any outreach couldn't be delivered (hard send errors
         // or, in live mode, suppliers skipped for a missing/invalid address).

@@ -12,6 +12,7 @@ export type AuditAction =
   | "event.delete"
   | "discovery.run"
   | "outreach.launch"
+  | "outreach.manual_send_confirmed"
   | "supplier.stage_change"
   | "responders.shortlist"
   | "followup.send"

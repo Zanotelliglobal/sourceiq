@@ -205,6 +205,18 @@ async function initSchema(): Promise<void> {
     -- deleting any of its data (suppliers/outreach history stay intact).
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false;
+    -- Multi-user visibility: the Clerk user id of whoever created the event.
+    -- Admins/owners see every event in the org (plus who started it); regular
+    -- members are scoped to their own (see GET /api/sourcing-events). Nullable
+    -- so pre-existing rows (created before this column existed) stay visible
+    -- to everyone rather than being silently orphaned.
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS created_by TEXT;
+    -- Advanced search: buyer-specified filters/attributes beyond the base
+    -- brief (required certifications, employee/revenue floors, excluded
+    -- countries, must-have keywords) captured on the "advanced brief" form.
+    -- Stored as a JSON object and folded into the scout/qualifier prompts at
+    -- discovery time — see effectiveRequirements in app/api/orchestrate/route.ts.
+    ALTER TABLE sourcing_events ADD COLUMN IF NOT EXISTS advanced_filters TEXT;
 
     CREATE TABLE IF NOT EXISTS suppliers (
       id            BIGSERIAL PRIMARY KEY,
@@ -324,6 +336,14 @@ async function initSchema(): Promise<void> {
       body          TEXT NOT NULL,
       sent_at       TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- Website-contact outreach channel: when a supplier has no email but does
+    -- have a contact_url, we can't submit an arbitrary third-party form
+    -- automatically, so we draft the RFI text and log it here tagged
+    -- channel='website_form' for the buyer to paste in manually, instead of
+    -- silently skipping the supplier. Defaults to 'email' for every existing
+    -- and ordinary outbound/inbound row.
+    ALTER TABLE outreach_logs ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'email';
 
     CREATE TABLE IF NOT EXISTS audit_log (
       id            BIGSERIAL PRIMARY KEY,

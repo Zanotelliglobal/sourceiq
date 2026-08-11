@@ -3,9 +3,10 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Sparkles, Check, X, EyeOff, Hand } from "lucide-react";
+import { Sparkles, Check, X, EyeOff, Hand, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import { useModalA11y } from "@/hooks/useModalA11y";
+import { BUSINESS_TYPES, EMPLOYEE_BANDS, CAPABILITY_TAGS } from "@/lib/taxonomy";
 
 const CATEGORIES = [
   "Precision Machining & CNC",
@@ -83,6 +84,45 @@ export default function NewEventPage() {
   // destination market suppliers must be able to deliver/export to.
   const [regionInput, setRegionInput] = useState("");
   const [shipTo, setShipTo] = useState("");
+  // Advanced search filters: optional, additional attribute constraints layered
+  // on top of the base brief. Collapsed by default so casual users never see
+  // them; when filled in, they're folded into the discovery prompt server-side
+  // (see app/api/orchestrate/route.ts) without changing the scout's signature.
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [advFilters, setAdvFilters] = useState({
+    business_type: "",
+    min_employee_band: "",
+    capabilities: [] as string[],
+    certifications: "",
+    excluded_countries: [] as string[],
+  });
+  const toggleCapability = (tag: string) => {
+    setAdvFilters(prev => ({
+      ...prev,
+      capabilities: prev.capabilities.includes(tag)
+        ? prev.capabilities.filter(c => c !== tag)
+        : [...prev.capabilities, tag],
+    }));
+  };
+  const toggleExcludedCountry = (country: string) => {
+    setAdvFilters(prev => ({
+      ...prev,
+      excluded_countries: prev.excluded_countries.includes(country)
+        ? prev.excluded_countries.filter(c => c !== country)
+        : [...prev.excluded_countries, country],
+    }));
+  };
+  const buildAdvancedFilters = (): Record<string, unknown> | null => {
+    const out: Record<string, unknown> = {};
+    if (advFilters.business_type) out.business_type = advFilters.business_type;
+    if (advFilters.min_employee_band) out.min_employee_band = advFilters.min_employee_band;
+    if (advFilters.capabilities.length) out.capabilities = advFilters.capabilities;
+    if (advFilters.certifications.trim()) {
+      out.certifications = advFilters.certifications.split(",").map(s => s.trim()).filter(Boolean);
+    }
+    if (advFilters.excluded_countries.length) out.excluded_countries = advFilters.excluded_countries;
+    return Object.keys(out).length > 0 ? out : null;
+  };
   // Quick Source: a single-line entry that infers everything and auto-launches
   // discovery. The detailed form lives behind the "Advanced brief" toggle.
   const [mode, setMode] = useState<"quick" | "advanced">("quick");
@@ -232,7 +272,7 @@ export default function NewEventPage() {
         : form.description;
       const res = await fetch("/api/sourcing-events", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries, ship_to: shipTo || null }),
+        body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries, ship_to: shipTo || null, advanced_filters: buildAdvancedFilters() }),
       });
       // Billing gate: trial ended or no active plan → guide the user to upgrade
       // instead of surfacing an opaque failure.
@@ -603,6 +643,121 @@ export default function NewEventPage() {
               onChange={e => setShipTo(e.target.value)}
               placeholder={t("e.g. Italy, European Union, United States")}
             />
+          </div>
+
+          {/* Advanced search filters — optional attribute constraints layered on
+              top of the base brief (distinct from the Quick/Advanced brief toggle
+              above: this is about *what suppliers must look like*, not *how much
+              detail you gave*). Collapsed by default. */}
+          <div className="border border-slate-200 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFilters(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left"
+              aria-expanded={showAdvancedFilters}
+              aria-controls="advanced-filters-panel"
+            >
+              <span className="flex items-center gap-2 font-semibold text-sm text-slate-700">
+                <SlidersHorizontal className="w-4 h-4 text-slate-500" />
+                {t("Advanced search filters")}
+                <span className="font-normal text-slate-500 text-xs">{t("— optional")}</span>
+              </span>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showAdvancedFilters ? "rotate-180" : ""}`} />
+            </button>
+            {showAdvancedFilters && (
+              <div id="advanced-filters-panel" className="px-4 pb-4 space-y-4 border-t border-slate-100">
+                <p className="text-xs text-slate-500 pt-3">
+                  {t("Narrow discovery to suppliers matching these attributes. Agents will weigh these alongside your brief above.")}
+                </p>
+
+                <div>
+                  <label className="label text-xs" htmlFor="adv-business-type">{t("Business type")}</label>
+                  <select
+                    id="adv-business-type"
+                    className="input"
+                    value={advFilters.business_type}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, business_type: e.target.value }))}
+                  >
+                    <option value="">{t("Any")}</option>
+                    {BUSINESS_TYPES.map(bt => <option key={bt} value={bt}>{bt}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label text-xs" htmlFor="adv-employee-band">{t("Minimum company size (employees)")}</label>
+                  <select
+                    id="adv-employee-band"
+                    className="input"
+                    value={advFilters.min_employee_band}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, min_employee_band: e.target.value }))}
+                  >
+                    <option value="">{t("Any")}</option>
+                    {EMPLOYEE_BANDS.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="label text-xs">{t("Required capabilities")}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CAPABILITY_TAGS.map(tag => {
+                      const active = advFilters.capabilities.includes(tag);
+                      return (
+                        <button
+                          key={tag} type="button"
+                          onClick={() => toggleCapability(tag)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                            active
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label text-xs" htmlFor="adv-certifications">{t("Required certifications")}</label>
+                  <input
+                    id="adv-certifications"
+                    className="input"
+                    value={advFilters.certifications}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, certifications: e.target.value }))}
+                    placeholder={t("e.g. ISO 9001, IATF 16949, REACH")}
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">{t("Comma-separated. Agents will prioritise suppliers that can demonstrate these.")}</p>
+                </div>
+
+                <div>
+                  <div className="label text-xs">{t("Exclude countries")}</div>
+                  <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
+                    {ALL_COUNTRIES.map(country => {
+                      const active = advFilters.excluded_countries.includes(country);
+                      return (
+                        <button
+                          key={country} type="button"
+                          onClick={() => toggleExcludedCountry(country)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                            active
+                              ? "bg-red-500 text-white border-red-500"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-red-300"
+                          }`}
+                        >
+                          {country}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {advFilters.excluded_countries.length > 0 && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {t("Agents will avoid: {countries}", { countries: advFilters.excluded_countries.join(", ") })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Outreach identity — anonymous vs. disclosed (per event) */}

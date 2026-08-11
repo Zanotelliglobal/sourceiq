@@ -594,13 +594,35 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
   const [email, setEmail] = useState<{ language?: string; subject: string; body: string; subject_en?: string; body_en?: string } | null>(null);
   const [showEn, setShowEn] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Website-contact channel (no email on file, but a contact page): the
+  // server already logged the drafted RFI and parked the supplier in
+  // outreach_status='awaiting_manual_send' — the confirm button below must
+  // call /api/outreach/mark-sent to actually persist the buyer's "I sent it"
+  // confirmation, rather than only updating local UI state.
+  const [awaitingManual, setAwaitingManual] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     fetch("/api/qualify", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "send_outreach", supplier_id: supplier.id }),
-    }).then(r => r.json()).then(d => { setEmail(d.email); setLoading(false); });
+    }).then(r => r.json()).then(d => { setEmail(d.email); setAwaitingManual(!!d.awaiting_manual); setLoading(false); });
   }, [supplier.id]);
+
+  const confirmSent = async () => {
+    if (!awaitingManual) { onSent(supplier.id); onClose(); return; }
+    setConfirming(true);
+    try {
+      const res = await fetch("/api/outreach/mark-sent", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier_id: supplier.id }),
+      });
+      if (!res.ok) throw new Error();
+    } catch { /* best-effort — local state still advances so the UI isn't stuck */ }
+    setConfirming(false);
+    onSent(supplier.id);
+    onClose();
+  };
 
   const isForeign = email?.language && email.language.toLowerCase() !== "english";
 
@@ -676,6 +698,12 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
                 </div>
               )}
 
+              {awaitingManual && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
+                  <Globe className="w-4 h-4 flex-shrink-0" /> {t("This supplier has no email on file — open their contact page, paste the draft into their form, then confirm below.")}
+                </div>
+              )}
+
               {/* Copy / send-via-own-client — always available, primary path when disclosed */}
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={copyDraft} className="btn-secondary justify-center py-2.5 text-sm">
@@ -708,8 +736,8 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
                 )}
               </div>
 
-              <button onClick={() => { onSent(supplier.id); onClose(); }} className="btn-primary w-full justify-center py-3">
-                {t("Confirm & Log RFI Sent")}
+              <button onClick={confirmSent} disabled={confirming} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
+                {confirming ? t("Confirming...") : awaitingManual ? t("Confirm I sent it via their website") : t("Confirm & Log RFI Sent")}
               </button>
             </div>
           ) : <p className="text-red-500 text-sm">{t("Failed to generate email.")}</p>}
@@ -1727,6 +1755,13 @@ export default function EventPage() {
     }
     if (type === "skipped") {
       addLog(`⤼  ${msg.supplier_name} skipped — ${msg.reason || "no contact email"}`);
+    }
+    if (type === "awaiting_manual_contact") {
+      // No email, but a contact page: the RFI is drafted and logged, but
+      // someone has to paste it into that site's form by hand — see the
+      // "Contact via website" action in the supplier row below.
+      patch(msg.supplier_id as number, { outreach_status: "awaiting_manual_send" });
+      addLog(`✍️  ${msg.supplier_name} — drafted, needs manual send via website`);
     }
     if (type === "usage") {
       setUsage({ cost_usd: msg.cost_usd as number, total_tokens: msg.total_tokens as number, web_searches: msg.web_searches as number });
