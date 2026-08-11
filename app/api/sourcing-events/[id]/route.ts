@@ -67,12 +67,21 @@ export async function PATCH(
   // silently overwrite system-managed columns (status, wave_count, etc.).
   const ALLOWED = new Set([
     "title", "category", "description", "requirements", "annual_spend",
-    "target_countries", "pinned", "archived",
+    "target_countries", "pinned", "archived", "advanced_filters",
   ]);
   const keys = Object.keys(body).filter(k => ALLOWED.has(k));
   if (keys.length === 0) return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
   const fields = keys.map(k => `${k} = ?`).join(", ");
-  const values = [...keys.map(k => body[k]), id];
+  // advanced_filters is a TEXT column storing JSON — serialize object values
+  // (or null-out an explicit clear) rather than writing "[object Object]".
+  const values = [
+    ...keys.map(k => {
+      const v = body[k];
+      if (k === "advanced_filters") return v && typeof v === "object" ? JSON.stringify(v) : null;
+      return v;
+    }),
+    id,
+  ];
   await db.prepare(`UPDATE sourcing_events SET ${fields}, updated_at = datetime('now') WHERE id = ?`).run(...values);
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(id);
 

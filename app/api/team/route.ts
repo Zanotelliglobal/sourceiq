@@ -18,7 +18,11 @@ export async function GET() {
 
   const seats = await seatUsage(ctx.org, ctx.clerkOrgId);
 
-  let members: Array<{ id: string; name: string | null; email: string | null; role: string }> = [];
+  // `id` (the Clerk organization *membership* id) is kept for back-compat with
+  // any existing caller; `user_id` is the actual Clerk *user* id — the same
+  // value stored in sourcing_events.created_by — so the dashboard can match a
+  // "started by" event against a team member.
+  let members: Array<{ id: string; user_id: string | null; name: string | null; email: string | null; role: string }> = [];
   if (ctx.clerkOrgId) {
     try {
       const res = await clerkClient.organizations.getOrganizationMembershipList({
@@ -30,6 +34,7 @@ export async function GET() {
         const name = pud ? [pud.firstName, pud.lastName].filter(Boolean).join(" ") || null : null;
         return {
           id: m.id,
+          user_id: pud?.userId ?? null,
           name,
           email: pud?.identifier ?? null,
           role: mapClerkRole(m.role, true),

@@ -6,6 +6,7 @@ import { checkEventLimit } from "@/lib/usage";
 import { rateLimit, clientIp } from "@/lib/ratelimit";
 import { logAudit } from "@/lib/audit";
 import { captureException, trackEvent } from "@/lib/observability";
+import { atLeast } from "@/lib/roles";
 
 // Safety cap on the list endpoint: the dashboard fetches this array in full
 // and does all filtering/sorting/grouping client-side (see app/dashboard/
@@ -20,6 +21,16 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = getDb();
+
+  // Multi-user visibility: admins/owners see every event in the org (the
+  // dashboard also shows who started each one, resolved client-side against
+  // /api/team); regular members only see events they created themselves.
+  // Legacy rows created before the `created_by` column existed are NULL and
+  // stay visible to everyone, so pre-existing data isn't hidden from anyone.
+  const isAdmin = atLeast(ctx.role, "admin");
+  const visibilityClause = isAdmin ? "" : "AND (se.created_by = ? OR se.created_by IS NULL)";
+  const params = isAdmin ? [ctx.orgId, MAX_EVENTS_RETURNED] : [ctx.orgId, ctx.userId, MAX_EVENTS_RETURNED];
+
   // Effective status: a run only reaches its terminal status ('reviewing') on
   // clean completion. If discovery is interrupted (serverless timeout, tab
   // close, dropped connection) the row is left in a "working" state
@@ -41,12 +52,12 @@ export async function GET() {
         END as effective_status
        FROM sourcing_events se
        LEFT JOIN suppliers s ON s.event_id = se.id
-       WHERE se.org_id = ?
+       WHERE se.org_id = ? ${visibilityClause}
        GROUP BY se.id
        ORDER BY se.pinned DESC, se.created_at DESC
        LIMIT ?`
     )
-    .all(ctx.orgId, MAX_EVENTS_RETURNED) as Array<Record<string, unknown> & { effective_status: string }>;
+    .all(...params) as Array<Record<string, unknown> & { effective_status: string }>;
 
   // Surface the derived status as `status` so the dashboard renders the honest
   // (interruption-aware) state; keep the stored value under `raw_status`.
@@ -92,7 +103,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { title, category, subcategory, description, requirements, annual_spend, target_countries,
-    ship_to, outreach_anonymous, buyer_name, buyer_role, buyer_company } = body;
+    ship_to, outreach_anonymous, buyer_name, buyer_role, buyer_company, advanced_filters } = body;
 
   if (!title || !category || !description || !requirements) {
     return NextResponse.json(
@@ -114,13 +125,21 @@ export async function POST(req: NextRequest) {
   // Tenant scoping: the event belongs to the caller's resolved organization.
   const orgId = ctx.orgId;
 
+  // Advanced filters (Feature 3): buyer-specified constraints beyond the base
+  // brief (certifications, employee band, revenue floor, excluded countries,
+  // keywords). Stored as JSON and folded into the scout/qualifier prompts at
+  // discovery time — see effectiveRequirements in app/api/orchestrate/route.ts.
+  const advancedFilters = advanced_filters && typeof advanced_filters === "object"
+    ? JSON.stringify(advanced_filters)
+    : null;
+
   try {
     const result = await db
       .prepare(
-        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, target_countries, ship_to, outreach_anonymous, buyer_name, buyer_role, buyer_company)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sourcing_events (org_id, title, category, subcategory, description, requirements, annual_spend, target_countries, ship_to, outreach_anonymous, buyer_name, buyer_role, buyer_company, created_by, advanced_filters)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, countries, shipTo, anonymous, bName, bRole, bCompany);
+      .run(orgId, title, category, subcategory || null, description, requirements, annual_spend ?? null, countries, shipTo, anonymous, bName, bRole, bCompany, ctx.userId, advancedFilters);
 
     const event = await db
       .prepare("SELECT * FROM sourcing_events WHERE id = ?")

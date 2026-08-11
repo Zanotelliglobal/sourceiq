@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
     requirements: string; annual_spend: string; wave_count: number; status: string | null; updated_at: string | null;
-    target_countries: string | null; ship_to: string | null;
+    target_countries: string | null; ship_to: string | null; advanced_filters: string | null;
   } | undefined;
 
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -97,9 +97,35 @@ export async function POST(req: NextRequest) {
   // to it are penalised (a Chinese supplier that can't ship to Italy scores
   // lower on geographic risk). Kept in the requirements string to avoid changing
   // every agent signature.
-  const effectiveRequirements = event.ship_to
+  // Advanced search filters (optional, set at event creation — see
+  // app/events/new/page.tsx's "Advanced search filters" panel): hard
+  // constraints on business type, size, capabilities, certifications and
+  // excluded countries. Folded into the same requirements string rather than
+  // threading a new parameter through runScoutAgent/qualifier.
+  let advancedFilters: {
+    business_type?: string; min_employee_band?: string; capabilities?: string[];
+    certifications?: string[]; excluded_countries?: string[];
+  } | null = null;
+  if (event.advanced_filters) {
+    try {
+      const parsed = JSON.parse(event.advanced_filters);
+      if (parsed && typeof parsed === "object") advancedFilters = parsed;
+    } catch { /* malformed/legacy value — ignore */ }
+  }
+  const advancedFiltersText = (() => {
+    if (!advancedFilters) return "";
+    const lines: string[] = [];
+    if (advancedFilters.business_type) lines.push(`Business type must be: ${advancedFilters.business_type}.`);
+    if (advancedFilters.min_employee_band) lines.push(`Company size must be at least the "${advancedFilters.min_employee_band}" employee band — reject smaller suppliers.`);
+    if (advancedFilters.capabilities?.length) lines.push(`Suppliers must demonstrate these capabilities: ${advancedFilters.capabilities.join(", ")}.`);
+    if (advancedFilters.certifications?.length) lines.push(`Suppliers must hold, or be actively pursuing, these certifications: ${advancedFilters.certifications.join(", ")}.`);
+    if (advancedFilters.excluded_countries?.length) lines.push(`Do NOT source suppliers headquartered in: ${advancedFilters.excluded_countries.join(", ")}.`);
+    return lines.length ? `\n\nADVANCED FILTERS (hard constraints set by the buyer):\n${lines.join("\n")}` : "";
+  })();
+
+  const effectiveRequirements = (event.ship_to
     ? `${event.requirements}\n\nSHIP-TO REQUIREMENT: Suppliers MUST be able to deliver, ship, or export to: ${event.ship_to}. Strongly prefer suppliers with proven export capability and logistics to this destination. Penalise suppliers that only serve their domestic market and cannot serve ${event.ship_to}.`
-    : event.requirements;
+    : event.requirements) + advancedFiltersText;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
