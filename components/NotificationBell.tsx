@@ -71,6 +71,17 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  // Close on Escape — keyboard-only users have no other way to dismiss the
+  // panel without tabbing all the way through its contents.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
   async function markRead(id: number) {
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
     setUnread((u) => Math.max(0, u - 1));
@@ -104,6 +115,9 @@ export default function NotificationBell() {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={t("Notifications")}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls="notification-panel"
         className="relative w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
       >
         <Bell className="w-4.5 h-4.5" />
@@ -115,7 +129,11 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-h-[26rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg z-50 flex flex-col">
+        <div
+          id="notification-panel"
+          aria-label={t("Notifications")}
+          className="absolute right-0 mt-2 w-80 max-h-[26rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg z-50 flex flex-col"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <span className="text-sm font-bold text-slate-900">{t("Notifications")}</span>
             {unread > 0 && (

@@ -70,6 +70,7 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
     <button
       type="button"
       onClick={() => setInterested(val)}
+      aria-pressed={interested === val}
       className={`flex-1 rounded-xl border px-3 py-3 text-sm font-semibold transition-colors ${
         interested === val ? tone : "border-slate-200 text-slate-600 hover:bg-slate-50"
       }`}
@@ -81,8 +82,8 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
   return (
     <form onSubmit={submit} className="space-y-5">
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">Are you interested in this opportunity?</label>
-        <div className="flex gap-2">
+        <label className="block text-sm font-semibold text-slate-700 mb-2" id="interested-label">Are you interested in this opportunity?</label>
+        <div className="flex gap-2" role="group" aria-labelledby="interested-label">
           {opt("yes", "Yes, interested", "border-emerald-300 bg-emerald-50 text-emerald-700")}
           {opt("maybe", "Tell me more", "border-blue-300 bg-blue-50 text-blue-700")}
           {opt("no", "Not a fit", "border-slate-300 bg-slate-100 text-slate-700")}
@@ -91,16 +92,18 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Available capacity <span className="font-normal text-slate-400">(optional)</span></label>
+          <label htmlFor="capacity" className="block text-sm font-semibold text-slate-700 mb-1">Available capacity <span className="font-normal text-slate-400">(optional)</span></label>
           <input
+            id="capacity"
             value={capacity} onChange={e => setCapacity(e.target.value)}
             placeholder="e.g. 50k units/year"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Indicative lead time <span className="font-normal text-slate-400">(optional)</span></label>
+          <label htmlFor="lead_time" className="block text-sm font-semibold text-slate-700 mb-1">Indicative lead time <span className="font-normal text-slate-400">(optional)</span></label>
           <input
+            id="lead_time"
             value={leadTime} onChange={e => setLeadTime(e.target.value)}
             placeholder="e.g. 8–10 weeks"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -109,8 +112,9 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">Message</label>
+        <label htmlFor="message" className="block text-sm font-semibold text-slate-700 mb-1">Message</label>
         <textarea
+          id="message"
           value={message} onChange={e => setMessage(e.target.value)}
           rows={5}
           placeholder="Share anything relevant — certifications, relevant references, questions, or your best point of contact."
@@ -119,8 +123,9 @@ export default function RfiForm({ token, ctx }: { token: string; ctx: Ctx }) {
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">Your contact email</label>
+        <label htmlFor="contact_email" className="block text-sm font-semibold text-slate-700 mb-1">Your contact email</label>
         <input
+          id="contact_email"
           type="email" value={email} onChange={e => setEmail(e.target.value)}
           placeholder="name@company.com"
           className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

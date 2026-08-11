@@ -8,6 +8,7 @@ import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
 
@@ -34,14 +35,45 @@ export async function POST(req: NextRequest) {
     }, { status: 402 });
   }
 
+  // A campaign is a live-email-sending, multi-supplier agent run — not a cheap
+  // CRUD call. Cap launches per org, with a distinct `code` from the 402
+  // plan-limit responses above so the client can tell "you're out of plan"
+  // apart from "you're launching too fast."
+  const orgRl = await rateLimit("outreach-launch", String(ctx.orgId), 10, 60);
+  if (!orgRl.ok) {
+    return NextResponse.json(
+      { error: "Too many outreach campaigns launched. Please slow down.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(orgRl.retryAfter) } },
+    );
+  }
+
   const { event_id, supplier_ids } = await req.json();
   const db = getDb();
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; category: string; requirements: string; annual_spend: string;
+    status: string | null; updated_at: string | null;
     outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
   } | undefined;
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Concurrency guard: stop a double-click/replayed request/second tab from
+  // starting an overlapping campaign against the same event, which would
+  // race writes to suppliers/outreach_logs/status. Mirror the GET endpoints'
+  // interruption staleness window (>5 min since the last write) so a
+  // crashed/timed-out campaign doesn't lock the event out of new runs
+  // forever — the DB row's status is never written back on that path, only
+  // downgraded in-memory for the read response.
+  if (event.status === "scouting" || event.status === "outreach") {
+    const updatedMs = event.updated_at ? new Date(event.updated_at).getTime() : 0;
+    const stale = !updatedMs || Date.now() - updatedMs > 5 * 60_000;
+    if (!stale) {
+      return NextResponse.json(
+        { error: "A run is already in progress for this event.", code: "run_in_progress" },
+        { status: 409 },
+      );
+    }
+  }
 
   const buyer = event.outreach_anonymous
     ? null
@@ -49,12 +81,17 @@ export async function POST(req: NextRequest) {
 
   // Target: explicit list, else everyone sitting in the long list.
   // Opted-out suppliers are suppressed — never re-contacted, even if selected.
+  // Also exclude anyone on the org's durable suppression list (#98): an email
+  // that opted out (or requested erasure, #99) in a PAST sourcing event must
+  // stay suppressed even though this event's supplier row is brand new.
+  const suppressionClause = `AND (contact_email IS NULL OR LOWER(contact_email) NOT IN (SELECT email FROM suppression_list WHERE org_id=?))`;
   const targets = (Array.isArray(supplier_ids) && supplier_ids.length > 0
     ? await db.prepare(
-        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND id IN (${supplier_ids.map(() => "?").join(",")})`
-      ).all(event.id, ...supplier_ids)
-    : await db.prepare("SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND funnel_stage='long_list' ORDER BY ai_score DESC")
-        .all(event.id)) as {
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND id IN (${supplier_ids.map(() => "?").join(",")})`
+      ).all(event.id, ctx.orgId, ...supplier_ids)
+    : await db.prepare(
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND funnel_stage='long_list' ORDER BY ai_score DESC`
+      ).all(event.id, ctx.orgId)) as {
     id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null;
   }[];
 
@@ -105,7 +142,18 @@ export async function POST(req: NextRequest) {
 
         let sent = 0, positive = 0, declined = 0, awaiting = 0, skipped = 0, failed = 0;
 
-        for (const s of targets) {
+        // Each target's chain (contact discovery → draft/send → simulated reply)
+        // is ~15-40s of agent + network latency. Processing targets one at a time
+        // guarantees the serverless maxDuration (300s) is blown past ~15-20
+        // suppliers, and any real campaign (up to the plan's supplier cap) will
+        // exceed it by a wide margin (#93). Targets are independent — no shared
+        // per-iteration state besides the campaign-level counters below, which
+        // are simple synchronous increments (safe under Node's single-threaded
+        // event loop, same pattern as orchestrate's newSuppliers += ... ) — so we
+        // fan them out through a bounded worker pool, mirroring the qualifier
+        // pool in app/api/orchestrate/route.ts. Concurrency is env-overridable
+        // in case a mail/agent provider's rate limits need a lower cap.
+        const processTarget = async (s: (typeof targets)[number]) => {
           // 0 ── Contact discovery: resolve the best reachable channel if we have no email.
           if (!s.contact_email) {
             try {
@@ -128,7 +176,7 @@ export async function POST(req: NextRequest) {
             email = await runOutreachAgent(s.name, s.country, event.category, event.requirements, event.annual_spend, track("outreach", AGENT_MODELS.outreach), buyer);
           } catch (err) {
             send({ type: "supplier_error", supplier_id: s.id, message: String(err) });
-            continue;
+            return;
           }
 
           // ── Mint a per-supplier reply token so inbound replies thread back here ──
@@ -159,7 +207,7 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             failed++;
             send({ type: "supplier_error", supplier_id: s.id, message: `Send failed: ${String(err)}` });
-            continue;
+            return;
           }
 
           if (live && !delivery.sent) {
@@ -167,7 +215,7 @@ export async function POST(req: NextRequest) {
             await db.prepare(`UPDATE suppliers SET outreach_status='skipped' WHERE id=?`).run(s.id);
             skipped++;
             send({ type: "skipped", supplier_id: s.id, supplier_name: s.name, reason: delivery.reason });
-            continue;
+            return;
           }
 
           await db.prepare("INSERT INTO outreach_logs (supplier_id, direction, subject, body) VALUES (?, 'outbound', ?, ?)")
@@ -182,7 +230,7 @@ export async function POST(req: NextRequest) {
             // response gate is driven by the inbound webhook, NOT simulated here.
             awaiting++;
             send({ type: "awaiting_reply", supplier_id: s.id, supplier_name: s.name });
-            continue;
+            return;
           }
 
           // ── DRAFT/DEMO mode only: simulate the supplier's reply ──
@@ -220,7 +268,21 @@ export async function POST(req: NextRequest) {
             declined++;
             send({ type: "declined", supplier_id: s.id, supplier_name: s.name, responded: resp.responded, detail: resp });
           }
-        }
+        };
+
+        // Bounded worker pool — the big wall-clock win over sequential (#93).
+        // Default of 5 concurrent targets keeps a 20-supplier campaign inside a
+        // ~60-90s wall clock instead of guaranteeing the 300s timeout; tune down
+        // per-deployment if a mail/agent provider's rate limits need a lower cap.
+        const outreachConcurrency = Math.max(1, Number(process.env.OUTREACH_CONCURRENCY) || 5);
+        let tCursor = 0;
+        const tWorker = async () => {
+          while (tCursor < targets.length) {
+            const idx = tCursor++;
+            await processTarget(targets[idx]);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(outreachConcurrency, targets.length) }, tWorker));
 
         await db.prepare(`UPDATE sourcing_events SET status='reviewing', updated_at=datetime('now') WHERE id=?`).run(event.id);
         send({ type: "campaign_complete", live, sent, positive, declined, awaiting, skipped });

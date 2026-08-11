@@ -1,0 +1,36 @@
+version: 2
+
+# Keeps dependencies patched automatically so vulnerable/outdated versions
+# don't linger unnoticed between manual audits. Complements the
+# `npm audit --audit-level=high` CI gate (.github/workflows/ci.yml): that gate
+# stops a vulnerable dependency from being introduced or from an existing one
+# escalating in severity, while Dependabot proactively opens PRs to fix
+# already-known advisories and keep the toolchain current.
+updates:
+  # npm packages (production + dev dependencies)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    # Group routine patch/minor bumps into one PR to cut down on review noise;
+    # majors (which can be breaking) still get their own individual PR so each
+    # gets a proper look before merging.
+    groups:
+      patch-and-minor:
+        update-types:
+          - "patch"
+          - "minor"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions used by our workflows (e.g. actions/checkout, actions/setup-node)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "github-actions"
