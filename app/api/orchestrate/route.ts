@@ -201,6 +201,23 @@ export async function POST(req: NextRequest) {
         let supplierCapRemaining = supplierLimit === UNLIMITED ? Infinity : Math.max(0, supplierLimit - existing.length);
         let capNoticeSent = false;
 
+        // #94: the per-event cap above is what the tier pays for, but on
+        // unlimited tiers it's Infinity — nothing bounds how many suppliers a
+        // SINGLE wave tries to qualify/enrich within this one request's 300s
+        // serverless budget. Each qualifier call is 30-150s once the grounded
+        // escalation band (score.overall_score 60-82, or thin evidence) kicks
+        // in, so an uncapped wave's critical path can comfortably exceed 300s
+        // before background enrichment/contact-scrape even runs. Soft-cap
+        // suppliers PROCESSED per wave — not stored — so one wave always
+        // finishes inside the budget; buyers on unlimited tiers can simply
+        // launch another wave for more depth. No-op on capped tiers, where the
+        // per-event cap (usually well under this soft cap) already bounds it.
+        const waveSupplierSoftCap = supplierLimit === UNLIMITED
+          ? Math.max(1, Number(process.env.UNLIMITED_TIER_WAVE_SUPPLIER_CAP) || 70)
+          : Infinity;
+        let waveCapRemaining = waveSupplierSoftCap;
+        let waveCapNoticeSent = false;
+
         const groundingOn = process.env.QUALIFIER_GROUNDING !== "0";
         let newSuppliers = 0;
         // Contact scraping runs off the critical path (lib/process-supplier.ts):
@@ -250,6 +267,21 @@ export async function POST(req: NextRequest) {
             }
           }
           if (supplierCapRemaining !== Infinity) supplierCapRemaining -= fresh.length;
+
+          // Soft per-wave cap (#94) — only ever active on unlimited-supplier
+          // tiers (see waveSupplierSoftCap above). Applied after the per-event
+          // cap so the two never fight over which "remaining" number is right.
+          if (waveCapRemaining !== Infinity && fresh.length > waveCapRemaining) {
+            fresh = fresh.slice(0, Math.max(0, waveCapRemaining));
+            if (!waveCapNoticeSent) {
+              waveCapNoticeSent = true;
+              send({
+                type: "wave_supplier_cap_reached", limit: waveSupplierSoftCap,
+                message: `This wave processed its ${waveSupplierSoftCap}-supplier soft cap to stay within time limits — run another wave for more depth.`,
+              });
+            }
+          }
+          if (waveCapRemaining !== Infinity) waveCapRemaining -= fresh.length;
 
           send({ type: "agent_scouted", agent_id: agent.id, count: fresh.length, message: `Found ${fresh.length} suppliers, qualifying...` });
           await db.prepare(`UPDATE agent_runs SET status='qualifying', message=?, suppliers_found=?
