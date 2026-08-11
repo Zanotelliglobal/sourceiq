@@ -45,7 +45,7 @@ export default function TeamSettings() {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold text-slate-900">{t("Team")}</div>
-            <div className="text-xs text-slate-400 truncate">
+            <div className="text-xs text-slate-500 truncate">
               {loading ? (
                 <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> {t("Loading…")}</span>
               ) : data?.is_personal ? (
@@ -77,14 +77,14 @@ export default function TeamSettings() {
               <li key={m.id} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm text-slate-700 truncate">{m.name || m.email || t("Teammate")}</div>
-                  {m.name && m.email && <div className="text-xs text-slate-400 truncate">{m.email}</div>}
+                  {m.name && m.email && <div className="text-xs text-slate-500 truncate">{m.email}</div>}
                 </div>
                 <span className="badge-slate capitalize flex-shrink-0">{t(m.role)}</span>
               </li>
             ))}
           </ul>
           {!canManage && (
-            <p className="mt-3 text-xs text-slate-400">{t("Only owners and admins can manage members.")}</p>
+            <p className="mt-3 text-xs text-slate-500">{t("Only owners and admins can manage members.")}</p>
           )}
         </div>
       )}

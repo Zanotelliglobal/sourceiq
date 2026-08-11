@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
-import { recordUsage, usageSummary, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
+import { recordUsage, usageSummary, effectiveTier, checkOutreachAllowed, checkSpendCeiling } from "@/lib/usage";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -73,6 +73,17 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       );
     }
+  }
+
+  // Hard per-event cost ceiling (#65) — a batch campaign can fan out to many
+  // suppliers at once, so gate the whole run before any contact-discovery /
+  // drafting spend happens.
+  const spendCheck = await checkSpendCeiling(db, tier, event.id);
+  if (!spendCheck.ok) {
+    return NextResponse.json({
+      error: `This event has reached its $${spendCheck.limit} AI-spend ceiling (used $${spendCheck.used.toFixed(2)}). Contact support to raise the limit before sending more outreach.`,
+      code: spendCheck.reason,
+    }, { status: 402 });
   }
 
   const buyer = event.outreach_anonymous

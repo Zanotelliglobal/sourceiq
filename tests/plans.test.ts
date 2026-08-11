@@ -45,6 +45,20 @@ describe("tier limits", () => {
     expect(pro.limits.suppliersPerEvent).toBe(UNLIMITED);
   });
 
+  it("every tier carries a finite hard per-event spend ceiling, even Pro (#65)", () => {
+    // Deliberately NOT UNLIMITED anywhere — the ceiling is a runaway-cost
+    // safety net, not a monetization gate, so no tier is cost-unbounded.
+    for (const key of ["free", "basic", "growth", "premium", "pro"] as const) {
+      expect(getTier(key)!.limits.maxEventSpendUsd).toBeGreaterThan(0);
+      expect(getTier(key)!.limits.maxEventSpendUsd).not.toBe(UNLIMITED);
+    }
+  });
+
+  it("the spend ceiling rises monotonically with plan price", () => {
+    const ceilings = TIERS.map(t => t.limits.maxEventSpendUsd);
+    expect(ceilings).toEqual([...ceilings].sort((a, b) => a - b));
+  });
+
   it("outreach is a growth+ capability", () => {
     expect(getTier("basic")!.limits.outreach).toBe(false);
     expect(getTier("growth")!.limits.outreach).toBe(true);

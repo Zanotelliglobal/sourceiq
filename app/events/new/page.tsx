@@ -271,7 +271,7 @@ export default function NewEventPage() {
 
         {/* Breadcrumb */}
         <div className="mb-8">
-          <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition-colors mb-8">
+          <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-600 transition-colors mb-8">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
@@ -308,7 +308,7 @@ export default function NewEventPage() {
                 onChange={e => { setQuickInput(e.target.value); if (quickError) setQuickError(null); }}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleQuickSubmit(e as unknown as React.FormEvent); }}
               />
-              <p className="text-xs text-slate-400 mt-1.5">
+              <p className="text-xs text-slate-500 mt-1.5">
                 {t("One line is enough — we'll detect the category, region and incumbent, then start discovery automatically.")}
               </p>
               {quickError && <p className="text-xs text-red-500 mt-1.5">{quickError}</p>}
@@ -335,7 +335,7 @@ export default function NewEventPage() {
             <button
               type="button"
               onClick={() => setMode("advanced")}
-              className="w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors"
+              className="w-full text-center text-sm text-slate-500 hover:text-slate-600 transition-colors"
             >
               {t("Need to specify certs, volumes or tolerances? Use the advanced brief →")}
             </button>
@@ -348,7 +348,7 @@ export default function NewEventPage() {
         <button
           type="button"
           onClick={() => setMode("quick")}
-          className="mb-5 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 transition-colors"
+          className="mb-5 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-600 transition-colors"
         >
           ← {t("Back to quick source")}
         </button>
@@ -368,7 +368,7 @@ export default function NewEventPage() {
               onChange={e => set("title", e.target.value)}
               required
             />
-            <p className="text-xs text-slate-400 mt-1.5">{t("Use your internal naming convention for traceability")}</p>
+            <p className="text-xs text-slate-500 mt-1.5">{t("Use your internal naming convention for traceability")}</p>
           </div>
 
           {/* Scope — comes first so the category can be inferred from it */}
@@ -387,7 +387,7 @@ export default function NewEventPage() {
               onBlur={onDescriptionBlur}
               required
             />
-            <p className="text-xs text-slate-400 mt-1.5">
+            <p className="text-xs text-slate-500 mt-1.5">
               {t("The commodity category is detected automatically as you describe the scope — you can override it below.")}
             </p>
           </div>
@@ -408,7 +408,7 @@ export default function NewEventPage() {
                 </span>
               )}
               {!classifying && classifyFailed && !form.category && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
                   {t("Auto-detect unavailable — pick one below")}
                 </span>
               )}
@@ -434,7 +434,7 @@ export default function NewEventPage() {
             <div className="mt-3">
               <label className="label text-xs" htmlFor="event-subcategory">
                 {t("Subcategory")}
-                <span className="font-normal text-slate-400"> {t("— refine the specific commodity")}</span>
+                <span className="font-normal text-slate-500"> {t("— refine the specific commodity")}</span>
               </label>
               <input
                 id="event-subcategory"
@@ -468,7 +468,7 @@ export default function NewEventPage() {
 
           {/* Incumbent */}
           <div>
-            <label className="label" htmlFor="event-incumbent">{t("Incumbent Supplier(s)")} <span className="font-normal text-slate-400">{t("— optional")}</span></label>
+            <label className="label" htmlFor="event-incumbent">{t("Incumbent Supplier(s)")} <span className="font-normal text-slate-500">{t("— optional")}</span></label>
             <input
               id="event-incumbent"
               className="input"
@@ -482,9 +482,9 @@ export default function NewEventPage() {
           <div role="group" aria-labelledby="geographies-label">
             <div id="geographies-label" className="label">
               {t("Target Sourcing Geographies")}
-              <span className="font-normal text-slate-400"> {t("— optional")}</span>
+              <span className="font-normal text-slate-500"> {t("— optional")}</span>
             </div>
-            <p className="text-xs text-slate-400 mb-2.5">
+            <p className="text-xs text-slate-500 mb-2.5">
               {t("Select the countries or regions the scout agents should focus on. Leave empty for a global search.")}
             </p>
             <div className="flex flex-wrap gap-2" role="group" aria-label={t("Target Sourcing Geographies")}>
@@ -507,7 +507,7 @@ export default function NewEventPage() {
               })}
             </div>
             {/* Macro-regions: target a whole area instead of listing countries */}
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2">{t("Macro-regions")}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mt-4 mb-2">{t("Macro-regions")}</p>
             <div className="flex flex-wrap gap-2" role="group" aria-label={t("Macro-regions")}>
               {MACRO_REGIONS.map(c => {
                 const active = countries.includes(c);
@@ -594,9 +594,9 @@ export default function NewEventPage() {
           <div>
             <label className="label" htmlFor="event-ship-to">
               {t("Ship-to destination")}
-              <span className="font-normal text-slate-400"> {t("— optional")}</span>
+              <span className="font-normal text-slate-500"> {t("— optional")}</span>
             </label>
-            <p className="text-xs text-slate-400 mb-2.5">
+            <p className="text-xs text-slate-500 mb-2.5">
               {t("Where must suppliers be able to deliver or export to? Agents will favour suppliers that can serve this market (e.g. a Chinese supplier that ships to Italy).")}
             </p>
             <input
@@ -611,7 +611,7 @@ export default function NewEventPage() {
           {/* Outreach identity — anonymous vs. disclosed (per event) */}
           <div>
             <div id="outreach-identity-label" className="label">{t("Supplier Outreach Identity")}</div>
-            <p className="text-xs text-slate-400 mb-2.5">
+            <p className="text-xs text-slate-500 mb-2.5">
               {t("Choose how you appear to suppliers when SourceIQ reaches out on this event.")}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="group" aria-labelledby="outreach-identity-label">
@@ -634,7 +634,7 @@ export default function NewEventPage() {
                     <div className="flex items-center gap-2 font-semibold text-sm">
                       <opt.Icon className="w-4 h-4" />{opt.title}
                     </div>
-                    <div className={`text-[11px] mt-1 leading-snug ${active ? "text-blue-100" : "text-slate-400"}`}>
+                    <div className={`text-[11px] mt-1 leading-snug ${active ? "text-blue-100" : "text-slate-500"}`}>
                       {opt.sub}
                     </div>
                   </button>
@@ -656,7 +656,7 @@ export default function NewEventPage() {
                   <label className="label text-xs" htmlFor="buyer-company">{t("Company")}<span className="ml-1 text-red-400">*</span></label>
                   <input id="buyer-company" className="input" placeholder={t("Acme Corp")} value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
                 </div>
-                <p className="sm:col-span-3 text-[11px] text-slate-400">
+                <p className="sm:col-span-3 text-[11px] text-slate-500">
                   {t("These details are included in disclosed outreach emails so suppliers know who they're dealing with.")}
                 </p>
               </div>
@@ -694,7 +694,7 @@ export default function NewEventPage() {
               )}
             </button>
             {!complete && (
-              <p className="text-center text-xs text-slate-400">{t("Complete all required fields to proceed")}</p>
+              <p className="text-center text-xs text-slate-500">{t("Complete all required fields to proceed")}</p>
             )}
           </div>
 

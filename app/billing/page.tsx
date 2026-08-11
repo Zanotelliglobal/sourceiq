@@ -152,7 +152,7 @@ export default function BillingPage() {
           {/* Current plan */}
           <div className="card p-6 flex items-center justify-between">
             <div>
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("Current Plan")}</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("Current Plan")}</div>
               <div className="text-xl font-bold text-slate-900 mt-1 capitalize">{status.plan || t("Free")}</div>
               {seats && (
                 <p className="text-sm text-slate-500 mt-1">
@@ -297,7 +297,7 @@ function CancelImpactModal({ loading, impact, onClose, onContinue }: {
           <p className="text-sm text-red-600 mb-5">{t("Couldn't load your usage summary — you can still continue.")}</p>
         )}
 
-        <p className="text-xs text-slate-400 mb-5">
+        <p className="text-xs text-slate-500 mb-5">
           {t("Your data isn't deleted, but a lower plan may limit what you can access or run going forward.")}
         </p>
 
@@ -351,7 +351,7 @@ function TierCard({
         ) : (
           <div className="flex items-baseline gap-1">
             <span className="text-2xl font-extrabold text-slate-900">€{price.toLocaleString()}</span>
-            <span className="text-sm text-slate-400 font-medium">{cadenceSuffix(cadence)}</span>
+            <span className="text-sm text-slate-500 font-medium">{cadenceSuffix(cadence)}</span>
           </div>
         )}
       </div>
@@ -366,7 +366,7 @@ function TierCard({
         {flags.map(([label, on]) => (
           <div key={label} className="flex items-center justify-between text-xs">
             <span className="text-slate-500">{label}</span>
-            {on ? <Check className="w-4 h-4 text-emerald-600" /> : <Minus className="w-4 h-4 text-slate-300" />}
+            {on ? <Check className="w-4 h-4 text-emerald-600" /> : <Minus className="w-4 h-4 text-slate-500" />}
           </div>
         ))}
       </div>
@@ -377,10 +377,10 @@ function TierCard({
             {t("Manage subscription")}
           </button>
         ) : (
-          <div className="text-center text-xs font-semibold text-slate-400 py-2">{t("Current plan")}</div>
+          <div className="text-center text-xs font-semibold text-slate-500 py-2">{t("Current plan")}</div>
         )
       ) : tier.key === "free" ? (
-        <div className="text-center text-xs text-slate-400 py-2">{t("No card required")}</div>
+        <div className="text-center text-xs text-slate-500 py-2">{t("No card required")}</div>
       ) : (
         <button
           className="btn-primary w-full"
