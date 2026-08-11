@@ -296,8 +296,9 @@ export default function NewEventPage() {
         {mode === "quick" && (
           <form onSubmit={handleQuickSubmit} className="space-y-4">
             <div>
-              <label className="label">{t("What are you trying to source?")}</label>
+              <label className="label" htmlFor="quick-source-input">{t("What are you trying to source?")}</label>
               <textarea
+                id="quick-source-input"
                 autoFocus
                 rows={3}
                 className="input text-base resize-none"
@@ -354,11 +355,12 @@ export default function NewEventPage() {
 
           {/* Event name */}
           <div>
-            <label className="label">
+            <label className="label" htmlFor="event-title">
               {t("Event Reference")}
               <span className="ml-1 text-red-400">*</span>
             </label>
             <input
+              id="event-title"
               className="input text-base"
               placeholder={t("e.g. Precision CNC Machined Parts — Hydraulic Subassembly, FY2025-Q3")}
               value={form.title}
@@ -370,11 +372,12 @@ export default function NewEventPage() {
 
           {/* Scope — comes first so the category can be inferred from it */}
           <div>
-            <label className="label">
+            <label className="label" htmlFor="event-description">
               {t("Sourcing Scope & Specification")}
               <span className="ml-1 text-red-400">*</span>
             </label>
             <textarea
+              id="event-description"
               className="input resize-none"
               rows={5}
               placeholder={t("Describe the scope in precise commercial terms. Include:\n• Part or service description, materials, grades\n• Annual volumes or call-off quantities\n• Critical dimensions, tolerances, or performance specs\n• End-use application and sector context")}
@@ -390,7 +393,7 @@ export default function NewEventPage() {
 
           {/* Category — auto-selected from the description, manually overridable */}
           <div>
-            <label className="label flex items-center gap-2">
+            <div id="category-label" className="label flex items-center gap-2">
               <span>{t("Commodity Category")}<span className="ml-1 text-red-400">*</span></span>
               {classifying && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-500">
@@ -408,8 +411,8 @@ export default function NewEventPage() {
                   {t("Auto-detect unavailable — pick one below")}
                 </span>
               )}
-            </label>
-            <div className="grid grid-cols-2 gap-2">
+            </div>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="category-label">
               {CATEGORIES.map(c => (
                 <button
                   key={c} type="button"
@@ -427,11 +430,12 @@ export default function NewEventPage() {
 
             {/* Subcategory — populated by the classifier, freely editable */}
             <div className="mt-3">
-              <label className="label text-xs">
+              <label className="label text-xs" htmlFor="event-subcategory">
                 {t("Subcategory")}
                 <span className="font-normal text-slate-400"> {t("— refine the specific commodity")}</span>
               </label>
               <input
+                id="event-subcategory"
                 className="input"
                 placeholder={t("e.g. 5-axis aluminum machining")}
                 value={form.subcategory}
@@ -442,11 +446,12 @@ export default function NewEventPage() {
 
           {/* Requirements */}
           <div>
-            <label className="label">
+            <label className="label" htmlFor="event-requirements">
               {t("Qualification Criteria & Constraints")}
               <span className="ml-1 text-red-400">*</span>
             </label>
             <textarea
+              id="event-requirements"
               className="input resize-none"
               rows={5}
               placeholder={t("Define mandatory and desirable criteria. Include:\n• Required certifications (ISO 9001, IATF 16949, AS9100, NADCAP)\n• Geographic constraints or preferred regions\n• Minimum capacity or production rate thresholds\n• Lead time requirements and MOQ expectations\n• Country-of-origin restrictions (ITAR, Trade Compliance)")}
@@ -461,8 +466,9 @@ export default function NewEventPage() {
 
           {/* Incumbent */}
           <div>
-            <label className="label">{t("Incumbent Supplier(s)")} <span className="font-normal text-slate-400">{t("— optional")}</span></label>
+            <label className="label" htmlFor="event-incumbent">{t("Incumbent Supplier(s)")} <span className="font-normal text-slate-400">{t("— optional")}</span></label>
             <input
+              id="event-incumbent"
               className="input"
               placeholder={t("e.g. Acme Machining Co., Smith Fabricators (will be excluded from outreach)")}
               value={form.incumbent}
@@ -471,11 +477,11 @@ export default function NewEventPage() {
           </div>
 
           {/* Target geographies */}
-          <div>
-            <label className="label">
+          <div role="group" aria-labelledby="geographies-label">
+            <div id="geographies-label" className="label">
               {t("Target Sourcing Geographies")}
               <span className="font-normal text-slate-400"> {t("— optional")}</span>
-            </label>
+            </div>
             <p className="text-xs text-slate-400 mb-2.5">
               {t("Select the countries or regions the scout agents should focus on. Leave empty for a global search.")}
             </p>
@@ -522,6 +528,7 @@ export default function NewEventPage() {
             <div className="mt-3 flex gap-2">
               <input
                 className="input flex-1"
+                aria-label={t("Add a region or area")}
                 value={regionInput}
                 onChange={e => setRegionInput(e.target.value)}
                 onKeyDown={e => {
@@ -549,6 +556,7 @@ export default function NewEventPage() {
             <div className="mt-3">
               <select
                 className="input"
+                aria-label={t("+ Add another country…")}
                 value=""
                 onChange={e => { if (e.target.value) toggleCountry(e.target.value); }}
               >
@@ -580,7 +588,7 @@ export default function NewEventPage() {
 
           {/* Ship-to destination — serviceability qualification */}
           <div>
-            <label className="label">
+            <label className="label" htmlFor="event-ship-to">
               {t("Ship-to destination")}
               <span className="font-normal text-slate-400"> {t("— optional")}</span>
             </label>
@@ -588,6 +596,7 @@ export default function NewEventPage() {
               {t("Where must suppliers be able to deliver or export to? Agents will favour suppliers that can serve this market (e.g. a Chinese supplier that ships to Italy).")}
             </p>
             <input
+              id="event-ship-to"
               className="input"
               value={shipTo}
               onChange={e => setShipTo(e.target.value)}
@@ -597,11 +606,11 @@ export default function NewEventPage() {
 
           {/* Outreach identity — anonymous vs. disclosed (per event) */}
           <div>
-            <label className="label">{t("Supplier Outreach Identity")}</label>
+            <div id="outreach-identity-label" className="label">{t("Supplier Outreach Identity")}</div>
             <p className="text-xs text-slate-400 mb-2.5">
               {t("Choose how you appear to suppliers when SourceIQ reaches out on this event.")}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="group" aria-labelledby="outreach-identity-label">
               {[
                 { v: "true",  Icon: EyeOff, title: t("Anonymous"), sub: t("SourceIQ contacts suppliers on your behalf — your organisation is never named.") },
                 { v: "false", Icon: Hand, title: t("Disclosed"), sub: t("Your name, role & company appear in the outreach. Copy or send via your own mail client.") },
@@ -631,16 +640,16 @@ export default function NewEventPage() {
             {form.outreach_anonymous === "false" && (
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <label className="label text-xs">{t("Your Name")}<span className="ml-1 text-red-400">*</span></label>
-                  <input className="input" placeholder={t("Jane Smith")} value={form.buyer_name} onChange={e => set("buyer_name", e.target.value)} />
+                  <label className="label text-xs" htmlFor="buyer-name">{t("Your Name")}<span className="ml-1 text-red-400">*</span></label>
+                  <input id="buyer-name" className="input" placeholder={t("Jane Smith")} value={form.buyer_name} onChange={e => set("buyer_name", e.target.value)} />
                 </div>
                 <div>
-                  <label className="label text-xs">{t("Role")}<span className="ml-1 text-red-400">*</span></label>
-                  <input className="input" placeholder={t("Procurement Lead")} value={form.buyer_role} onChange={e => set("buyer_role", e.target.value)} />
+                  <label className="label text-xs" htmlFor="buyer-role">{t("Role")}<span className="ml-1 text-red-400">*</span></label>
+                  <input id="buyer-role" className="input" placeholder={t("Procurement Lead")} value={form.buyer_role} onChange={e => set("buyer_role", e.target.value)} />
                 </div>
                 <div>
-                  <label className="label text-xs">{t("Company")}<span className="ml-1 text-red-400">*</span></label>
-                  <input className="input" placeholder={t("Acme Corp")} value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
+                  <label className="label text-xs" htmlFor="buyer-company">{t("Company")}<span className="ml-1 text-red-400">*</span></label>
+                  <input id="buyer-company" className="input" placeholder={t("Acme Corp")} value={form.buyer_company} onChange={e => set("buyer_company", e.target.value)} />
                 </div>
                 <p className="sm:col-span-3 text-[11px] text-slate-400">
                   {t("These details are included in disclosed outreach emails so suppliers know who they're dealing with.")}
@@ -651,8 +660,8 @@ export default function NewEventPage() {
 
           {/* Spend */}
           <div>
-            <label className="label">{t("Estimated Annual Spend (TCO)")}</label>
-            <select className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
+            <label className="label" htmlFor="event-annual-spend">{t("Estimated Annual Spend (TCO)")}</label>
+            <select id="event-annual-spend" className="input" value={form.annual_spend} onChange={e => set("annual_spend", e.target.value)}>
               <option value="">{t("Select range...")}</option>
               {SPEND_RANGES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
