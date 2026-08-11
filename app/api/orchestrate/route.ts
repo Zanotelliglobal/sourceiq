@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
 import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
+import { createTaskPool } from "@/lib/task-pool";
 import { recordUsage, usageSummary, effectiveTier, checkWaveLimit, checkSpendCeiling } from "@/lib/usage";
 import { UNLIMITED } from "@/lib/plans";
 import { getOrgContext } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
 
@@ -17,6 +19,19 @@ export async function POST(req: NextRequest) {
 
   const gate = requireActiveSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
+
+  // A discovery wave is an expensive multi-agent LLM run (see SSE loop below),
+  // not a cheap CRUD call — cap launches per org so a scripted/looping client
+  // (or a buggy retry) can't fan out unbounded concurrent orchestrator runs.
+  // Distinct `code` from the 402 plan-limit responses above so the client can
+  // tell "you're out of waves" apart from "you're launching too fast."
+  const orgRl = await rateLimit("orchestrate", String(ctx.orgId), 10, 60);
+  if (!orgRl.ok) {
+    return NextResponse.json(
+      { error: "Too many discovery runs launched. Please slow down.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(orgRl.retryAfter) } },
+    );
+  }
 
   // The client only ever sends `wave` as its own best-effort read of
   // event.wave_count + 1 for display/logging purposes — the count that
@@ -28,11 +43,30 @@ export async function POST(req: NextRequest) {
 
   const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
     id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
-    requirements: string; annual_spend: string; wave_count: number;
+    requirements: string; annual_spend: string; wave_count: number; status: string | null; updated_at: string | null;
     target_countries: string | null; ship_to: string | null;
   } | undefined;
 
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Concurrency guard: the UI already disables the launch control while a run
+  // is active, but nothing server-side stopped a second request (double-click,
+  // replayed request, second tab) from starting an overlapping wave against
+  // the same event — which would race writes to agent_runs/suppliers/status.
+  // Mirror the GET endpoints' interruption staleness window (>5 min since the
+  // last write) so a crashed/timed-out run doesn't lock the event out of new
+  // runs forever — the DB row's status is never written back to 'reviewing'/
+  // 'idle' on that path, only downgraded in-memory for the read response.
+  if (event.status === "scouting" || event.status === "outreach") {
+    const updatedMs = event.updated_at ? new Date(event.updated_at).getTime() : 0;
+    const stale = !updatedMs || Date.now() - updatedMs > 5 * 60_000;
+    if (!stale) {
+      return NextResponse.json(
+        { error: "A run is already in progress for this event.", code: "run_in_progress" },
+        { status: 409 },
+      );
+    }
+  }
 
   const tier = effectiveTier(ctx.org);
   const waveNumber = event.wave_count + 1;
@@ -179,12 +213,36 @@ export async function POST(req: NextRequest) {
         let supplierCapRemaining = supplierLimit === UNLIMITED ? Infinity : Math.max(0, supplierLimit - existing.length);
         let capNoticeSent = false;
 
+        // #94: the per-event cap above is what the tier pays for, but on
+        // unlimited tiers it's Infinity — nothing bounds how many suppliers a
+        // SINGLE wave tries to qualify/enrich within this one request's 300s
+        // serverless budget. Each qualifier call is 30-150s once the grounded
+        // escalation band (score.overall_score 60-82, or thin evidence) kicks
+        // in, so an uncapped wave's critical path can comfortably exceed 300s
+        // before background enrichment/contact-scrape even runs. Soft-cap
+        // suppliers PROCESSED per wave — not stored — so one wave always
+        // finishes inside the budget; buyers on unlimited tiers can simply
+        // launch another wave for more depth. No-op on capped tiers, where the
+        // per-event cap (usually well under this soft cap) already bounds it.
+        const waveSupplierSoftCap = supplierLimit === UNLIMITED
+          ? Math.max(1, Number(process.env.UNLIMITED_TIER_WAVE_SUPPLIER_CAP) || 70)
+          : Infinity;
+        let waveCapRemaining = waveSupplierSoftCap;
+        let waveCapNoticeSent = false;
+
         const groundingOn = process.env.QUALIFIER_GROUNDING !== "0";
         let newSuppliers = 0;
         // Contact scraping runs off the critical path (lib/process-supplier.ts):
         // each supplier's background scrape task lands here so we can drain them
         // all before the stream closes, instead of awaiting them inline.
         const backgroundTasks: Promise<void>[] = [];
+        // #96: cap how many of those background tasks (enrich/scrape/website-check)
+        // actually run at once across the whole wave. Without this, a wave that
+        // qualifies dozens of suppliers fires 3x that many concurrent LLM/fetch
+        // calls at once — unrelated to, and far exceeding, the
+        // SCOUT_CONCURRENCY/QUAL_CONCURRENCY pools below that were sized against
+        // provider rate limits.
+        const backgroundSchedule = createTaskPool(Math.max(1, Number(process.env.BACKGROUND_TASK_CONCURRENCY) || 8));
 
         // Run one scout end-to-end: scout → dedup claim → qualify/enrich pool.
         const runScout = async (agent: (typeof plan.agents)[number]) => {
@@ -229,6 +287,21 @@ export async function POST(req: NextRequest) {
           }
           if (supplierCapRemaining !== Infinity) supplierCapRemaining -= fresh.length;
 
+          // Soft per-wave cap (#94) — only ever active on unlimited-supplier
+          // tiers (see waveSupplierSoftCap above). Applied after the per-event
+          // cap so the two never fight over which "remaining" number is right.
+          if (waveCapRemaining !== Infinity && fresh.length > waveCapRemaining) {
+            fresh = fresh.slice(0, Math.max(0, waveCapRemaining));
+            if (!waveCapNoticeSent) {
+              waveCapNoticeSent = true;
+              send({
+                type: "wave_supplier_cap_reached", limit: waveSupplierSoftCap,
+                message: `This wave processed its ${waveSupplierSoftCap}-supplier soft cap to stay within time limits — run another wave for more depth.`,
+              });
+            }
+          }
+          if (waveCapRemaining !== Infinity) waveCapRemaining -= fresh.length;
+
           send({ type: "agent_scouted", agent_id: agent.id, count: fresh.length, message: `Found ${fresh.length} suppliers, qualifying...` });
           await db.prepare(`UPDATE agent_runs SET status='qualifying', message=?, suppliers_found=?
                       WHERE event_id=? AND agent_id=? AND wave=?`)
@@ -240,6 +313,7 @@ export async function POST(req: NextRequest) {
           const processSupplier = makeProcessSupplier({
             db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
             annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
+            schedule: backgroundSchedule,
           }, agent);
           // #41 (Epic 8.5): default raised 4->6. Most qualifier calls are Haiku
           // (cheap, high rate limits); only the thin-evidence band escalates to

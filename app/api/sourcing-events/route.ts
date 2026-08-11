@@ -7,6 +7,14 @@ import { rateLimit, clientIp } from "@/lib/ratelimit";
 import { logAudit } from "@/lib/audit";
 import { captureException, trackEvent } from "@/lib/observability";
 
+// Safety cap on the list endpoint: the dashboard fetches this array in full
+// and does all filtering/sorting/grouping client-side (see app/dashboard/
+// page.tsx), so this isn't a real pagination boundary — it's a backstop
+// against an unbounded query once an org has accumulated hundreds of
+// historical events. Pinned events (surfaced first via ORDER BY) are never
+// pushed out by the cap.
+const MAX_EVENTS_RETURNED = 500;
+
 export async function GET() {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,9 +43,10 @@ export async function GET() {
        LEFT JOIN suppliers s ON s.event_id = se.id
        WHERE se.org_id = ?
        GROUP BY se.id
-       ORDER BY se.pinned DESC, se.created_at DESC`
+       ORDER BY se.pinned DESC, se.created_at DESC
+       LIMIT ?`
     )
-    .all(ctx.orgId) as Array<Record<string, unknown> & { effective_status: string }>;
+    .all(ctx.orgId, MAX_EVENTS_RETURNED) as Array<Record<string, unknown> & { effective_status: string }>;
 
   // Surface the derived status as `status` so the dashboard renders the honest
   // (interruption-aware) state; keep the stored value under `raw_status`.

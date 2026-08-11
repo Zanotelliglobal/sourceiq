@@ -1,0 +1,222 @@
+{
+  "_readme": "Reviewed exceptions for scripts/check-audit.mjs, which CI runs instead of a bare `npm audit --audit-level=high`. Every entry needs a reason and the date it was accepted. An advisory belongs here ONLY if it has no fix published yet, or the fix requires a major-version migration that's tracked separately — never to silently mute something we could just patch. Dependabot (.github/dependabot.yml) opens a PR the moment a real fix ships for any of these; when that PR lands, delete the corresponding entry so the gate stays meaningful. Re-review this whole file whenever `npm audit` output changes shape (new entries appear that aren't listed below, or these IDs stop appearing and can be pruned).",
+  "accepted": [
+    {
+      "id": "GHSA-f82v-jwr5-mffw",
+      "package": "next",
+      "severity": "critical",
+      "reason": "CVE-2025-29927, Next.js middleware auth-bypass. Fixed by the 14.2.35 patch bump already prepared on fix/nextjs-cve-2025-29927. Accepted here only until that branch merges to main and this branch rebases — then this entry (and the other 14.2.x-fixed next advisories below) becomes unused and should be deleted.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-gp8f-8m3g-qvj9",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js cache poisoning, fixed in 14.2.10. Closed by the pending 14.2.35 bump (fix/nextjs-cve-2025-29927); prune once merged.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-7gfc-8cq8-jh5f",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js authorization bypass, fixed in 14.2.15. Closed by the pending 14.2.35 bump (fix/nextjs-cve-2025-29927); prune once merged.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-mwv6-3258-q52c",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js Server Components DoS, fixed in 14.2.34. Closed by the pending 14.2.35 bump (fix/nextjs-cve-2025-29927); prune once merged.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-5j59-xgg2-r9c4",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js Server Components DoS follow-up fix, fixed in 14.2.35. Closed by the pending 14.2.35 bump (fix/nextjs-cve-2025-29927); prune once merged.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-h25m-26qc-wcjf",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js RSC request-deserialization DoS. Not backported to the 14.x line at all — fixed only in 15.0.8+. Requires the (not-yet-scheduled) Next.js 15 major upgrade; the 14.2.35 patch bump does not close this one. Tracked as a follow-up major-version migration.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-q4gf-8mx6-v5v3",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js Server Components DoS, fixed only in 15.5.15+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-8h8q-6873-q5fj",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js Server Components DoS, fixed only in 15.5.16+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-c4j6-fc7j-m34r",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js SSRF via WebSocket upgrades, fixed only in 15.5.16+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-36qx-fr4f-26g5",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js Pages Router i18n middleware/proxy bypass, fixed only in 15.5.16+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-m99w-x7hq-7vfj",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js DoS in App Router Server Actions, fixed only in 15.5.21+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-89xv-2m56-2m9x",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js SSRF in Server Actions on custom servers, fixed only in 15.5.21+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-p9j2-gv94-2wf4",
+      "package": "next",
+      "severity": "high",
+      "reason": "Next.js SSRF in rewrites via attacker-controlled destination hostname, fixed only in 15.5.21+. Not backported to 14.x. Requires the Next.js 15 major upgrade (not yet scheduled).",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-w24r-5266-9c3c",
+      "package": "@clerk/clerk-react",
+      "severity": "high",
+      "reason": "Clerk authorization-bypass advisory (org/billing/reverification-check combinations). No patched @clerk/clerk-react release exists yet as of 2026-08-10. Production auth dependency — highest-priority entry on this list; Dependabot will PR the instant a fix ships, revisit that PR immediately rather than batching it.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-qjx8-664m-686j",
+      "package": "js-cookie",
+      "severity": "high",
+      "reason": "Prototype-hijack advisory in js-cookie's assign(), pulled in transitively via @clerk/shared. No fix published upstream yet. Production dependency (Clerk SDK internals); revisit when Dependabot opens a bump.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-4r6h-8v6p-xvw6",
+      "package": "xlsx",
+      "severity": "high",
+      "reason": "Prototype pollution in SheetJS (community edition, which has no further patched releases on npm). Production dependency used for our own generated supplier exports, not for parsing untrusted uploaded workbooks. Revisit if xlsx import/upload of user-supplied files is ever added.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-5pgg-2g8v-p4x9",
+      "package": "xlsx",
+      "severity": "high",
+      "reason": "ReDoS in SheetJS (community edition, no further patched releases on npm). Same usage/risk profile as GHSA-4r6h-8v6p-xvw6 above.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-5xrq-8626-4rwp",
+      "package": "vitest",
+      "severity": "critical",
+      "reason": "Vitest's `--ui` dev server can be made to read/execute arbitrary files if left listening. We never run `vitest --ui` in CI or any deployed environment — dev-only, opt-in flag we don't use. Full fix requires the vitest 2->3 major bump tracked in issue #81; not yet scheduled pending verification bandwidth.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-6g55-p6wh-862q",
+      "package": "postcss",
+      "severity": "high",
+      "reason": "Arbitrary .map file read via attacker-controlled sourceMappingURL in CSS comments. Build-time-only tool (Tailwind/Next's CSS pipeline processes only our own source, never user-supplied CSS). No fix published yet in the postcss 8.x line pinned here.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-r28c-9q8g-f849",
+      "package": "postcss",
+      "severity": "high",
+      "reason": "Related sourcemap path-traversal advisory, same build-time-only exposure as GHSA-6g55-p6wh-862q above.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-fx2h-pf6j-xcff",
+      "package": "vite",
+      "severity": "high",
+      "reason": "vite dev server `server.fs.deny` bypass on Windows alternate data streams. Dev-only dependency (transitively via vitest); the dev/test server never runs in any deployed environment. No fix published yet.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-5p4m-2wfm-xmqj",
+      "package": "js-yaml",
+      "severity": "high",
+      "reason": "Quadratic-CPU DoS in !!omap resolution, pulled in transitively via eslint's config loader. Dev-only tooling — eslint only ever parses our own repo's config files, never untrusted YAML. No fix backported to the installed js-yaml line yet.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-28wg-ghj8-5hjv",
+      "package": "nanoid",
+      "severity": "high",
+      "reason": "nanoid custom-generator infinite loop on negative size, pulled in transitively via postcss (build-time CSS pipeline). No user input reaches nanoid's generator size parameter here. No fix published yet.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-2v37-7h3g-55p8",
+      "package": "nanoid",
+      "severity": "high",
+      "reason": "Same class of nanoid infinite-loop advisory (size zero) as GHSA-28wg-ghj8-5hjv above, same build-time-only exposure.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-23c5-xmqv-rm74",
+      "package": "minimatch",
+      "severity": "high",
+      "reason": "ReDoS via nested extglobs, pulled in transitively via eslint/@typescript-eslint's glob matching. Dev-only tooling operating only on our own repo's file patterns, never untrusted input. No fix published yet for the installed minimatch line.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-3ppc-4f35-3m26",
+      "package": "minimatch",
+      "severity": "high",
+      "reason": "Same class of minimatch ReDoS (repeated wildcards) as GHSA-23c5-xmqv-rm74 above, same dev-only exposure.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-7r86-cg39-jmmj",
+      "package": "minimatch",
+      "severity": "high",
+      "reason": "Same class of minimatch ReDoS (combinatorial GLOBSTAR backtracking) as GHSA-23c5-xmqv-rm74 above, same dev-only exposure.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-5j98-mcp5-4vw2",
+      "package": "glob",
+      "severity": "high",
+      "reason": "Command injection via glob's CLI `-c`/`--cmd` flag. We never invoke glob's CLI at all — it's a transitive dependency of rimraf/eslint used purely as a library. No fix published yet for the installed glob line.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-3jxr-9vmj-r5cp",
+      "package": "brace-expansion",
+      "severity": "high",
+      "reason": "ReDoS via exponential-time brace expansion, pulled in transitively via eslint/minimatch/glob. Dev-only tooling processing only our own repo's config patterns. No fix published yet for the installed line.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-mh99-v99m-4gvg",
+      "package": "brace-expansion",
+      "severity": "high",
+      "reason": "Same class of brace-expansion DoS (unbounded expansion length) as GHSA-3jxr-9vmj-r5cp above, same dev-only exposure.",
+      "addedDate": "2026-08-10"
+    },
+    {
+      "id": "GHSA-rgw5-rvv9-x895",
+      "package": "brace-expansion",
+      "severity": "high",
+      "reason": "Same class of brace-expansion DoS (unbounded intermediate arrays, bypassing an earlier mitigation) as GHSA-3jxr-9vmj-r5cp above, same dev-only exposure.",
+      "addedDate": "2026-08-10"
+    }
+  ]
+}

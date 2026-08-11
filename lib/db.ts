@@ -371,6 +371,21 @@ async function initSchema(): Promise<void> {
       PRIMARY KEY (bucket, window_start)
     );
 
+    -- Durable, org-wide do-not-contact list (#98). suppliers.opted_out only
+    -- suppresses a single supplier ROW; the same email would still be
+    -- contactable from a brand-new sourcing event (a fresh row, opted_out
+    -- defaults false). This table is keyed by (org_id, normalized email) so
+    -- an opt-out or erasure request is honored across every future event the
+    -- org runs, not just the one where the contact originally unsubscribed.
+    CREATE TABLE IF NOT EXISTS suppression_list (
+      id            BIGSERIAL PRIMARY KEY,
+      org_id        BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      email         TEXT NOT NULL,
+      reason        TEXT NOT NULL DEFAULT 'unsubscribed',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (org_id, email)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_suppliers_event ON suppliers(event_id);
     CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id);
     CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_id);
