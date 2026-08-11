@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { suppressEmail } from "@/lib/suppression";
 
 // ─── UNSUBSCRIBE ENDPOINT ─────────────────────────────────────────────────────
 // Backs the List-Unsubscribe header and the footer link on every outbound RFI.
@@ -7,7 +8,9 @@ import { getDb } from "@/lib/db";
 //                              show a plain confirmation page.
 //   • POST ?t=<reply_token>  → RFC 8058 one-click (mail clients POST here) → 200.
 // Opting out sets suppliers.opted_out; the outreach route suppresses opted-out
-// suppliers, so they are never emailed again.
+// suppliers, so they are never emailed again within THIS event. It also adds
+// the contact's email to the org-wide suppression_list (#98) so a brand-new
+// sourcing event (a fresh suppliers row) can't re-contact them either.
 
 export const runtime = "nodejs";
 
@@ -20,11 +23,31 @@ async function optOut(token: string | null): Promise<boolean> {
     )
     .run(token);
   // Treat an already-opted-out token as success (idempotent), so re-clicks are fine.
-  if (res.changes > 0) return true;
-  const existing = await db
-    .prepare("SELECT id FROM suppliers WHERE reply_token=?")
-    .get(token);
-  return !!existing;
+  if (res.changes === 0) {
+    const existing = await db
+      .prepare("SELECT id FROM suppliers WHERE reply_token=?")
+      .get(token);
+    return !!existing;
+  }
+
+  // Record the durable, org-wide suppression entry (best-effort — the opt-out
+  // above already succeeded and must not be undone by a failure here).
+  try {
+    const supplier = (await db
+      .prepare(
+        `SELECT s.contact_email AS contact_email, se.org_id AS org_id
+         FROM suppliers s JOIN sourcing_events se ON se.id = s.event_id
+         WHERE s.reply_token = ?`
+      )
+      .get(token)) as { contact_email: string | null; org_id: number } | undefined;
+    if (supplier?.contact_email) {
+      await suppressEmail(db, Number(supplier.org_id), supplier.contact_email, "unsubscribed");
+    }
+  } catch {
+    /* best-effort — the per-row opt-out already took effect */
+  }
+
+  return true;
 }
 
 function page(title: string, message: string, status: number): NextResponse {

@@ -23,6 +23,7 @@ import {
   AGENT_MODELS,
 } from "@/lib/agents";
 import { scrapeSupplierContact, checkWebsiteLive } from "@/lib/contact";
+import type { Schedule } from "@/lib/task-pool";
 import {
   normalizeBusinessType,
   normalizeEmployeeBand,
@@ -54,6 +55,12 @@ export type ProcessSupplierDeps = {
   // before closing the SSE stream — nothing is lost, but nothing blocks the
   // critical path (insert + supplier_found) either.
   backgroundTasks: Promise<void>[];
+  // #96: bounds how many of the 3 background tasks below actually run at
+  // once across the whole wave (not just per-supplier) — without this, a
+  // wave with many suppliers fires hundreds of concurrent LLM/fetch calls.
+  // Optional and defaults to unbounded (immediate execution) so existing
+  // callers/tests that don't care about the cap keep working unchanged.
+  schedule?: Schedule;
   // Overrides for testing — default to the real agent/scrape implementations.
   // Injected rather than mocked, matching this repo's no-mocking-framework
   // testing convention (see tests/usage.test.ts).
@@ -76,6 +83,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
   const enricherAgent = deps.runEnricherAgent ?? runEnricherAgent;
   const scrapeContact = deps.scrapeSupplierContact ?? scrapeSupplierContact;
   const websiteLiveCheck = deps.checkWebsiteLive ?? checkWebsiteLive;
+  const schedule: Schedule = deps.schedule ?? (<T>(fn: () => Promise<T>) => fn());
 
   return async (s: ScoutSupplier): Promise<void> => {
     deps.send({ type: "qualifying", agent_id: agent.id, supplier_name: s.name });
@@ -156,7 +164,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     // completion before closing the SSE stream. On failure, fall back to a
     // neutral placeholder (mirrors the prior inline behavior) rather than
     // leaving the card without a recommendation indefinitely.
-    const enrichTask = (async () => {
+    const enrichTask = schedule(async () => {
       let enrichment;
       try {
         enrichment = await enricherAgent(s, score, deps.categoryLabel, deps.track("enricher", AGENT_MODELS.enricher));
@@ -166,7 +174,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
       const enrichmentJson = JSON.stringify(enrichment);
       await deps.db.prepare(`UPDATE suppliers SET enrichment=? WHERE id=?`).run(enrichmentJson, supplierId);
       deps.send({ type: "supplier_updated", id: supplierId, enrichment: enrichmentJson });
-    })();
+    });
     deps.backgroundTasks.push(enrichTask);
 
     // Contact scrape runs OFF the critical path — the card is already
@@ -175,7 +183,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     // the scout didn't already surface an email (mirrors prior behavior).
     if (!s.contact_email && s.website) {
       const website = s.website;
-      const scrapeTask = (async () => {
+      const scrapeTask = schedule(async () => {
         try {
           // Tight budget during bulk discovery: homepage + 2 contact pages, 5s each.
           const c = await scrapeContact(website, { timeoutMs: 5000, maxPages: 2 });
@@ -198,7 +206,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
           // Never throws: this runs unawaited, and an unhandled rejection here
           // would surface as a process-level warning for no benefit.
         }
-      })();
+      });
       deps.backgroundTasks.push(scrapeTask);
     }
 
@@ -209,7 +217,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     // rather than storing a negative result.
     if (s.website) {
       const website = s.website;
-      const badgeTask = (async () => {
+      const badgeTask = schedule(async () => {
         try {
           const live = await websiteLiveCheck(website);
           if (!live) return;
@@ -219,7 +227,7 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
         } catch {
           // Best-effort — never throws into the caller's unawaited task.
         }
-      })();
+      });
       deps.backgroundTasks.push(badgeTask);
     }
   };

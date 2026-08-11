@@ -1,8 +1,14 @@
 /** @type {import('next').NextConfig} */
 
 // Baseline security headers applied to every response. These mitigate
-// clickjacking, MIME sniffing, referrer leakage, and force HTTPS. Clerk,
-// Stripe, and the app's own inline styles/scripts are allowlisted in the CSP.
+// clickjacking, MIME sniffing, referrer leakage, and force HTTPS.
+//
+// NOTE: there is no Content-Security-Policy header here yet. A CSP scoped to
+// Clerk + Stripe origins (with script-src/style-src covering the app's own
+// inline usage) is tracked separately (see issue #77) — it needs to be
+// designed and verified against a real build before shipping, since a
+// misconfigured CSP could silently break the Clerk widget, Stripe checkout,
+// or inline styles instead of failing loudly.
 const securityHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
