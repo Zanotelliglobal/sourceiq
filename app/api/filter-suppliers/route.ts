@@ -10,6 +10,16 @@ export const maxDuration = 30;
 // DB or any tenant data, so no org-context check is needed (mirrors
 // app/api/classify/route.ts).
 export async function POST(req: NextRequest) {
+  // #79: no org context available (stateless route, see comment above), so
+  // IP is the only anti-abuse handle against a free/uncapped LLM call loop.
+  const rl = await rateLimit("filter-suppliers-ip", clientIp(), 60, 3600);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
+  }
+
   const { query } = await req.json();
 
   if (!query || typeof query !== "string" || query.trim().length < 3) {
