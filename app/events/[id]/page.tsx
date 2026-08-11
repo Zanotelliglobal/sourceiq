@@ -733,7 +733,17 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
   return (
     <tr
       onClick={onClick}
-      className={`group border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${supplier.funnel_stage === "disqualified" ? "opacity-40" : ""}`}
+      onKeyDown={e => {
+        // Keyboard equivalent of the row click (#86): Enter/Space open the
+        // supplier detail panel, same as clicking anywhere on the row.
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      tabIndex={0}
+      aria-label={t("View details for {value}", { value: supplier.name })}
+      className={`group border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors focus:outline-none focus-visible:bg-slate-50 ${supplier.funnel_stage === "disqualified" ? "opacity-40" : ""}`}
     >
       {/* Rank */}
       <td className="pl-4 pr-2 py-3 w-8 text-xs text-slate-400 font-mono">{rank}</td>
@@ -811,7 +821,10 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
 
       {/* Action */}
       <td className="px-3 py-3 w-28 text-right" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Visible on hover AND on keyboard focus (#86) — a keyboard user
+            tabbing to these buttons must be able to see them, not just
+            reach them. */}
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           {supplier.funnel_stage === "responded" && (
             <button
               onClick={async () => await onMove(supplier.id, "shortlisted")}
