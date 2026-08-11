@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Check, X, EyeOff, Hand } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 const CATEGORIES = [
   "Precision Machining & CNC",
@@ -96,12 +97,12 @@ export default function NewEventPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryTouchedRef = useRef(false); // user manually picked → stop auto-overriding
 
-  useEffect(() => {
-    if (!showUpgrade) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !upgradeBusy) setShowUpgrade(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [showUpgrade, upgradeBusy]);
+  // Escape/Tab-trap/focus-restore for this modal now lives in UpgradeGateModal
+  // itself via useModalA11y (#90) — only mounted while showUpgrade is true, so
+  // there's no always-on document listener when the gate isn't showing.
+  const closeUpgradeGate = useCallback(() => {
+    if (!upgradeBusy) setShowUpgrade(false);
+  }, [upgradeBusy]);
 
   const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }));
   const toggleCountry = (c: string) =>
@@ -700,30 +701,51 @@ export default function NewEventPage() {
 
       {/* Upgrade gate — shown when event creation is blocked by billing (402) */}
       {showUpgrade && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" role="dialog" aria-modal="true" onClick={() => !upgradeBusy && setShowUpgrade(false)}>
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 animate-slide-in" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-slate-900">{t("Your free trial has ended.")}</h3>
-                <button onClick={() => setShowUpgrade(false)} disabled={upgradeBusy} aria-label={t("Cancel")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-              <p className="text-sm text-slate-500 leading-relaxed mb-5">
-                {t("Subscribe to Pro to create unlimited sourcing events, run multi-wave discovery, and deploy live outreach.")}
-              </p>
-              <div className="flex items-center justify-end gap-2">
-                <Link href="/billing" className="btn-secondary py-2">{t("Manage subscription")}</Link>
-                <button onClick={startCheckout} disabled={upgradeBusy} className="btn-primary py-2">
-                  {upgradeBusy ? (
-                    <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t("Redirecting…")}</>
-                  ) : (
-                    <><Sparkles className="w-3.5 h-3.5" /> {t("Subscribe to Pro")}</>
-                  )}
-                </button>
-              </div>
-            </div>
+        <UpgradeGateModal busy={upgradeBusy} onClose={closeUpgradeGate} onCheckout={startCheckout} />
+      )}
+    </div>
+  );
+}
+
+// Extracted (#90) so useModalA11y's Esc/Tab-trap/focus-restore only run while
+// this dialog is actually mounted, matching the pattern used for every other
+// modal in the app instead of a hand-rolled, always-on Escape listener.
+function UpgradeGateModal({ busy, onClose, onCheckout }: {
+  busy: boolean; onClose: () => void; onCheckout: () => void;
+}) {
+  const t = useT();
+  const dialogRef = useModalA11y(onClose);
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={() => !busy && onClose()}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Your free trial has ended.")}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 animate-slide-in outline-none"
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-slate-900">{t("Your free trial has ended.")}</h3>
+            <button onClick={onClose} disabled={busy} aria-label={t("Cancel")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+          </div>
+          <p className="text-sm text-slate-500 leading-relaxed mb-5">
+            {t("Subscribe to Pro to create unlimited sourcing events, run multi-wave discovery, and deploy live outreach.")}
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <Link href="/billing" className="btn-secondary py-2">{t("Manage subscription")}</Link>
+            <button onClick={onCheckout} disabled={busy} className="btn-primary py-2">
+              {busy ? (
+                <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t("Redirecting…")}</>
+              ) : (
+                <><Sparkles className="w-3.5 h-3.5" /> {t("Subscribe to Pro")}</>
+              )}
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
