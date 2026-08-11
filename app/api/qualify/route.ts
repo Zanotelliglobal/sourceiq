@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { runOutreachAgent, runFollowUpAgent, resolveSupplierContact, AGENT_MODELS } from "@/lib/agents";
 import { sendEmail, isMailLive, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
-import { recordUsage, effectiveTier, checkOutreachAllowed } from "@/lib/usage";
+import { recordUsage, effectiveTier, checkOutreachAllowed, checkSpendCeiling } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
@@ -119,6 +119,17 @@ export async function POST(req: NextRequest) {
     } | undefined;
 
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Hard per-event cost ceiling (#65) — same cap the batch /api/outreach
+    // campaign endpoint enforces, applied here since this route sends the
+    // identical live outreach one supplier at a time.
+    const spendCheck = await checkSpendCeiling(db, effectiveTier(ctx.org), supplier.event_id);
+    if (!spendCheck.ok) {
+      return NextResponse.json({
+        error: `This event has reached its $${spendCheck.limit} AI-spend ceiling (used $${spendCheck.used.toFixed(2)}). Contact support to raise the limit before contacting more suppliers.`,
+        code: spendCheck.reason,
+      }, { status: 402 });
+    }
 
     // This single-supplier send path shares the same suppression obligations
     // as the batch /api/outreach campaign endpoint (#98): a supplier who
@@ -237,6 +248,15 @@ export async function POST(req: NextRequest) {
       opted_out: boolean | null;
     } | undefined;
     if (!supplier) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Hard per-event cost ceiling (#65).
+    const spendCheck = await checkSpendCeiling(db, effectiveTier(ctx.org), supplier.event_id);
+    if (!spendCheck.ok) {
+      return NextResponse.json({
+        error: `This event has reached its $${spendCheck.limit} AI-spend ceiling (used $${spendCheck.used.toFixed(2)}). Contact support to raise the limit before sending more follow-ups.`,
+        code: spendCheck.reason,
+      }, { status: 402 });
+    }
 
     // Same suppression obligations as send_outreach above (#98) — a follow-up
     // nudge is still an unsolicited contact and must honor an opt-out.
