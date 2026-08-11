@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { Zap, Factory, Star, ClipboardList, Search, Plus, Loader2, ChevronRight, ArrowUpDown, Trash2, Layers, Pin, Archive, ArchiveRestore, Pencil, X } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
@@ -16,7 +17,15 @@ type EventRow = {
   wave_count: number; created_at: string; updated_at: string;
   supplier_count: number; shortlisted_count: number;
   pinned: boolean; archived: boolean;
+  // Clerk user id of whoever started the event (nullable for legacy rows).
+  // Only meaningful to admins/owners — non-admins only ever receive their own
+  // events from the API, so this column is hidden for them.
+  created_by?: string | null;
 };
+
+// Team roster shape from /api/team, used to resolve `created_by` into a
+// display name for the admin-only "Started by" column.
+type TeamMember = { user_id: string | null; name: string | null; email: string | null };
 
 // Cross-project search hit shapes returned by /api/search (#40).
 type SearchSupplierHit = {
@@ -75,7 +84,13 @@ type StatusFilter = "all" | "active" | "reviewing" | "outreach" | "completed";
 export default function Dashboard() {
   const t = useT();
   const router = useRouter();
+  const { user } = useUser();
   const [events, setEvents] = useState<EventRow[]>([]);
+  // Team roster (#multi-user visibility): fetched once, not polled, purely to
+  // resolve created_by -> display name for the admin-only "Started by" column
+  // and to know whether the current viewer is an admin/owner at all.
+  const [teamRole, setTeamRole] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -119,7 +134,32 @@ export default function Dashboard() {
       .then(r => r.json())
       .then(d => { if (!d?.error) setUsage(d); })
       .catch(() => {});
+    fetch("/api/team")
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.error) {
+          setTeamRole(d.role ?? null);
+          setTeamMembers(Array.isArray(d.members) ? d.members : []);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  // Only admins/owners get the "Started by" column — regular members already
+  // only ever receive their own events from the API, so the column would be
+  // redundant (and potentially confusing) for them.
+  const isAdmin = teamRole === "admin" || teamRole === "owner";
+
+  // Resolve a Clerk user id (sourcing_events.created_by) into a display label.
+  // Mirrors the fallback pattern used server-side in lib/audit.ts.
+  const starterLabel = (createdBy: string | null | undefined): string => {
+    if (!createdBy) return t("Legacy");
+    if (user && createdBy === user.id) return t("You");
+    if (createdBy === "dev_user") return t("Local dev");
+    const member = teamMembers.find(m => m.user_id === createdBy);
+    if (member) return member.name || member.email || `User ${createdBy.slice(-6)}`;
+    return `User ${createdBy.slice(-6)}`;
+  };
 
   // Human-readable token count (e.g. 12.4K, 3.1M) for the usage meter.
   const fmtTokens = (n: number) =>
@@ -388,6 +428,11 @@ export default function Dashboard() {
             {new Date(event.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
           </span>
         </td>
+        {isAdmin && (
+          <td className="px-4 py-4 hidden lg:table-cell">
+            <span className="text-xs text-slate-600">{starterLabel(event.created_by)}</span>
+          </td>
+        )}
         <td className="px-4 py-4 text-right whitespace-nowrap">
           <div className="inline-flex items-center gap-0.5">
             <button
@@ -703,13 +748,16 @@ export default function Dashboard() {
                     {t("Initiated")} <ArrowUpDown className={`w-3 h-3 ${sortKey === "initiated" ? "text-blue-500" : "text-slate-500"}`} />
                   </button>
                 </th>
+                {isAdmin && (
+                  <th className="text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 hidden lg:table-cell">{t("Started by")}</th>
+                )}
                 <th className="px-4 py-3 w-10" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {visible.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                  <td colSpan={isAdmin ? 7 : 6} className="px-6 py-16 text-center text-sm text-slate-500">
                     {showArchived ? t("No archived events.") : t("No events match your search.")}
                   </td>
                 </tr>
@@ -717,7 +765,7 @@ export default function Dashboard() {
                 grouped.map(([category, rows]) => (
                   <Fragment key={category}>
                     <tr className="bg-slate-50/70">
-                      <td colSpan={6} className="px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <td colSpan={isAdmin ? 7 : 6} className="px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                         {category} <span className="text-slate-500 font-semibold">· {rows.length}</span>
                       </td>
                     </tr>
