@@ -8,6 +8,14 @@ import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 
+// Every funnel_stage value the app actually understands (see STAGES/FUNNEL in
+// app/events/[id]/page.tsx and the "disqualified" dimmed-row treatment there).
+// The suppliers.funnel_stage column has no DB-level CHECK constraint, so this
+// endpoint is the only gate against writing an arbitrary string into it.
+const FUNNEL_STAGES = new Set([
+  "long_list", "contacted", "responded", "shortlisted", "declined", "engaged", "disqualified",
+]);
+
 export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,6 +50,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "move_stage") {
+    if (typeof stage !== "string" || !FUNNEL_STAGES.has(stage)) {
+      return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
+    }
     const before = await db.prepare("SELECT name, event_id, funnel_stage FROM suppliers WHERE id = ?").get(supplier_id) as
       { name: string; event_id: number; funnel_stage: string | null } | undefined;
     await db.prepare("UPDATE suppliers SET funnel_stage = ? WHERE id = ?").run(stage, supplier_id);
