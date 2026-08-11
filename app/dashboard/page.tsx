@@ -402,7 +402,9 @@ export default function Dashboard() {
           <span className="text-sm text-slate-600">{event.category}</span>
         </td>
         <td className="px-4 py-4">
-          <div className="flex items-center gap-2">
+          {/* #92: announce status changes (e.g. idle → scouting → reviewing)
+              to screen-reader users, not just sighted ones watching the badge. */}
+          <div className="flex items-center gap-2" role="status" aria-live="polite">
             {cfg.working ? (
               <Loader2 className="w-3.5 h-3.5 flex-shrink-0 text-blue-500 animate-spin" strokeWidth={2.5} />
             ) : (
@@ -635,6 +637,14 @@ export default function Dashboard() {
                   // Delay so a click on a dropdown result registers before it unmounts.
                   onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
                   placeholder={t("Search events & suppliers…")}
+                  // #92: this is a search-typeahead combobox — expose it as one so
+                  // AT users get "combobox, expanded/collapsed" + the results
+                  // listbox announced, instead of a plain unlabeled text input.
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-haspopup="listbox"
+                  aria-expanded={searchFocused && query.trim().length >= 2}
+                  aria-controls="dashboard-search-results"
                   className="w-full sm:w-64 pl-8 pr-7 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                 />
                 {query && (
@@ -651,7 +661,12 @@ export default function Dashboard() {
                     org matching the query, since suppliers themselves aren't
                     loaded on this page. Clicking jumps to their parent event. */}
                 {searchFocused && query.trim().length >= 2 && (
-                  <div className="absolute z-20 top-full left-0 mt-1 w-80 max-h-80 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg">
+                  <div
+                    id="dashboard-search-results"
+                    role="listbox"
+                    aria-label={t("Suppliers across your projects")}
+                    className="absolute z-20 top-full left-0 mt-1 w-80 max-h-80 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg"
+                  >
                     {searchingSuppliers ? (
                       <div className="px-3 py-3 text-xs text-slate-500">{t("Searching…")}</div>
                     ) : supplierResults.length === 0 ? (
@@ -664,6 +679,8 @@ export default function Dashboard() {
                         {supplierResults.map(s => (
                           <button
                             key={s.id}
+                            role="option"
+                            aria-selected="false"
                             onClick={() => router.push(`/events/${s.event_id}`)}
                             className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
                           >
