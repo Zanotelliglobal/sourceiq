@@ -7,6 +7,7 @@ import TopNav from "@/components/TopNav";
 import SiteFooter from "@/components/SiteFooter";
 import CookieConsent from "@/components/CookieConsent";
 import { LanguageProvider } from "@/components/LanguageProvider";
+import { COMPANY } from "@/lib/legal";
 
 // UI/marketing face — professional but approachable (top-ranked B2B/enterprise pairing).
 const jakarta = Plus_Jakarta_Sans({
@@ -21,9 +22,39 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+const siteUrl = `https://${COMPANY.site}`;
+const title = "SourceIQ — AI Supplier Intelligence";
+const description =
+  "SourceIQ deploys AI agents to discover, score, and shortlist qualified suppliers across global networks — turning weeks of procurement desk research into minutes.";
+
 export const metadata: Metadata = {
-  title: "SourceIQ — AI Supplier Intelligence",
-  description: "Multi-agent supplier discovery and procurement intelligence platform",
+  metadataBase: new URL(siteUrl),
+  title: { default: title, template: "%s — SourceIQ" },
+  description,
+  keywords: [
+    "AI supplier sourcing",
+    "supplier discovery software",
+    "procurement intelligence platform",
+    "AI procurement agent",
+    "supplier scoring and shortlisting",
+    "vendor sourcing automation",
+  ],
+  authors: [{ name: "SourceIQ" }],
+  alternates: { canonical: siteUrl },
+  robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    siteName: "SourceIQ",
+    title,
+    description,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
