@@ -9,12 +9,23 @@
  * matching supplier by id. Only fields present (non-empty) in the event are
  * patched; everything else on the supplier is left as-is. Returns the same
  * array reference when there is nothing to patch, so callers can pass this
- * straight to setState without triggering a pointless re-render. */
+ * straight to setState without triggering a pointless re-render.
+ *
+ * "Deepen into full investigation" (lib/process-supplier.ts's
+ * makeProcessSupplierDeepen) re-processes a quick-scan row through the real
+ * pipeline and emits `supplier_updated` with a full `supplier` object instead
+ * of granular field patches, since nearly every column changes at once
+ * (name/country/score/is_quick_result/etc). When present, that full object
+ * REPLACES the matching row wholesale rather than being merged field-by-field. */
 export function applySupplierUpdated<T extends { id: number }>(
   suppliers: T[],
   msg: Record<string, unknown>
 ): T[] {
   const id = msg.id as number;
+  if (msg.supplier && typeof msg.supplier === "object") {
+    const full = msg.supplier as T;
+    return suppliers.map(s => (s.id === id ? full : s));
+  }
   const patch: Partial<Record<"contact_email" | "contact_url" | "contact_phone" | "contact_linkedin" | "enrichment" | "verification_badges", string>> = {};
   if (typeof msg.contact_email === "string" && msg.contact_email) patch.contact_email = msg.contact_email;
   if (typeof msg.contact_url === "string" && msg.contact_url) patch.contact_url = msg.contact_url;
