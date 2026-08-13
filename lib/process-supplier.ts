@@ -232,3 +232,176 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     }
   };
 }
+
+// ─── QUICK SCAN INSERT (Quick Investigation) ──────────────────────────────────
+// Deliberately NOT a branch inside makeProcessSupplier above — a sibling with
+// a much smaller footprint. A quick-scan candidate is a bare {name, country,
+// website} guess from runQuickScoutAgent's own knowledge (no web_search, no
+// qualification), so there is nothing here to qualify, enrich, or scrape:
+// no qualifier call, no grounded escalation, no enrichment, no contact-scrape,
+// nothing scheduled via lib/task-pool.ts. The row is inserted with
+// is_quick_result=true, wave=0 (never counted against wave_count — see
+// app/api/investigate-quick/route.ts, which never touches wave_count), and
+// ai_score/enrichment left null so the UI can render it as clearly unverified.
+export type QuickScoutCandidate = { name: string; country: string; website: string };
+
+export type ProcessSupplierQuickDeps = {
+  db: Db;
+  eventId: number;
+  send: (data: Record<string, unknown>) => void;
+};
+
+export function makeProcessSupplierQuick(deps: ProcessSupplierQuickDeps) {
+  return async (candidate: QuickScoutCandidate): Promise<Supplier> => {
+    const result = await deps.db.prepare(`
+      INSERT INTO suppliers
+        (event_id, name, country, city, description, capabilities, certifications,
+         employees, annual_revenue, founded, website, contact_email, contact_url, contact_phone, contact_linkedin, data_sources, scout_agent, wave,
+         ai_score, score_rationale, score_breakdown, enrichment, funnel_stage, is_quick_result)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        deps.eventId, candidate.name, candidate.country || "", null, "",
+        JSON.stringify([]), null,
+        null, null, null, candidate.website || null,
+        null, null, null, null,
+        null, "quick-scan", 0,
+        null, null, null,
+        null, "long_list", true
+      );
+
+    const supplierId = result.lastInsertRowid;
+    const saved = await deps.db.prepare("SELECT * FROM suppliers WHERE id=?").get(supplierId) as Supplier;
+    deps.send({ type: "supplier_found", supplier: saved });
+    return saved;
+  };
+}
+
+// ─── DEEPEN: UPDATE-EXISTING-ROW PROCESSING (Quick Investigation) ────────────
+// "Deepen into full investigation" re-runs a quick-scan candidate through the
+// real scout→qualify→enrich→contact pipeline, but against the ALREADY-EXISTING
+// supplier row (by id) instead of inserting a new one — otherwise the buyer
+// would end up with a duplicate card. Qualify/grounded-escalate logic mirrors
+// makeProcessSupplier exactly (same thin-evidence/borderline escalation
+// rule); the only structural difference is UPDATE-by-id instead of INSERT,
+// and flipping is_quick_result back to false once the row holds real,
+// verified data. Enrichment/contact-scrape/website-live badge continue to run
+// off the critical path exactly as they do for a normal wave.
+export function makeProcessSupplierDeepen(deps: ProcessSupplierDeps, agent: AgentPlanEntry) {
+  const qualifierAgent = deps.runQualifierAgent ?? runQualifierAgent;
+  const qualifierAgentGrounded = deps.runQualifierAgentGrounded ?? runQualifierAgentGrounded;
+  const enricherAgent = deps.runEnricherAgent ?? runEnricherAgent;
+  const scrapeContact = deps.scrapeSupplierContact ?? scrapeSupplierContact;
+  const websiteLiveCheck = deps.checkWebsiteLive ?? checkWebsiteLive;
+  const schedule: Schedule = deps.schedule ?? (<T>(fn: () => Promise<T>) => fn());
+
+  return async (supplierId: number, s: ScoutSupplier): Promise<void> => {
+    deps.send({ type: "qualifying", agent_id: agent.id, supplier_name: s.name });
+
+    let score;
+    try {
+      score = await qualifierAgent(s, deps.categoryLabel, deps.effectiveRequirements, deps.annualSpend, deps.track("qualifier", AGENT_MODELS.qualifier));
+    } catch {
+      score = { overall_score: 60, rationale: "Limited qualification data.", breakdown: { capability_fit: 60, quality_signals: 60, geographic_risk: 60, financial_stability: 60, compliance_readiness: 60 } };
+    }
+
+    const thinEvidence = (s.data_sources || []).length === 0;
+    const borderline = score.overall_score >= 60 && score.overall_score <= 82;
+    if (deps.groundingOn && (thinEvidence || borderline)) {
+      try {
+        score = await qualifierAgentGrounded(s, deps.categoryLabel, deps.effectiveRequirements, deps.annualSpend, deps.track("qualifier", AGENT_MODELS.qualifierGrounded));
+      } catch { /* keep the cheap-pass score on failure */ }
+    }
+
+    const business_type = normalizeBusinessType(s.business_type);
+    const employee_count = normalizeEmployeeBand(s.employee_count) ?? normalizeEmployeeBand(s.employees);
+    const founded_year = parseFoundedYear(s.founded_year) ?? parseFoundedYear(s.founded);
+    const review_score = clampReviewScore(s.review_score);
+    const capability_tags = JSON.stringify(filterCapabilityTags(s.capability_tags));
+    const partneredCustomers = sanitizeStringList(s.partnered_customers);
+    const partnered_customers = JSON.stringify(partneredCustomers);
+    const partnered_customer_count = partneredCustomers.length > 0 ? partneredCustomers.length : null;
+    const key_export_markets = JSON.stringify(sanitizeStringList(s.key_export_markets));
+
+    await deps.db.prepare(`
+      UPDATE suppliers SET
+        name=?, country=?, city=?, description=?, capabilities=?, certifications=?,
+        employees=?, annual_revenue=?, founded=?, website=?, contact_email=?, data_sources=?,
+        scout_agent=?, wave=?, ai_score=?, score_rationale=?, score_breakdown=?, enrichment=?,
+        business_type=?, employee_count=?, founded_year=?, review_score=?, capability_tags=?,
+        partnered_customers=?, partnered_customer_count=?, key_export_markets=?, is_quick_result=?
+      WHERE id=?`)
+      .run(
+        s.name, s.country, s.city, s.description,
+        JSON.stringify(s.capabilities), JSON.stringify(s.certifications),
+        s.employees, s.annual_revenue, s.founded, s.website,
+        s.contact_email || null,
+        JSON.stringify(s.data_sources), agent.label, deps.waveNumber,
+        score.overall_score, score.rationale, JSON.stringify(score.breakdown), null,
+        business_type, employee_count, founded_year, review_score, capability_tags,
+        partnered_customers, partnered_customer_count, key_export_markets, false,
+        supplierId
+      );
+
+    const saved = await deps.db.prepare("SELECT * FROM suppliers WHERE id=?").get(supplierId) as Supplier;
+    deps.send({ type: "supplier_updated", id: supplierId, supplier: saved, agent_id: agent.id, agent_label: agent.label });
+
+    // Enrichment runs OFF the critical path — mirrors makeProcessSupplier.
+    const enrichTask = schedule(async () => {
+      let enrichment;
+      try {
+        enrichment = await enricherAgent(s, score, deps.categoryLabel, deps.track("enricher", AGENT_MODELS.enricher));
+      } catch {
+        enrichment = { market_position: "Unknown", key_risks: [], key_strengths: [], recommended_action: "monitor" };
+      }
+      const enrichmentJson = JSON.stringify(enrichment);
+      await deps.db.prepare(`UPDATE suppliers SET enrichment=? WHERE id=?`).run(enrichmentJson, supplierId);
+      deps.send({ type: "supplier_updated", id: supplierId, enrichment: enrichmentJson });
+    });
+    deps.backgroundTasks.push(enrichTask);
+
+    // Contact scrape runs OFF the critical path — only attempted when the
+    // targeted scout didn't already surface an email.
+    if (!s.contact_email && s.website) {
+      const website = s.website;
+      const scrapeTask = schedule(async () => {
+        try {
+          const c = await scrapeContact(website, { timeoutMs: 5000, maxPages: 2 });
+          const contact_email = c.contact_email || "";
+          const contact_url = c.contact_url || "";
+          const contact_phone = c.phone || "";
+          const contact_linkedin = c.linkedin || "";
+          if (!contact_email && !contact_url && !contact_phone && !contact_linkedin) return;
+
+          await deps.db.prepare(
+            `UPDATE suppliers SET contact_email=?, contact_url=?, contact_phone=?, contact_linkedin=? WHERE id=?`
+          ).run(contact_email || null, contact_url || null, contact_phone || null, contact_linkedin || null, supplierId);
+
+          deps.send({
+            type: "supplier_updated", id: supplierId,
+            contact_email, contact_url, contact_phone, contact_linkedin,
+          });
+        } catch {
+          // Best-effort — the supplier simply stays without a contact channel.
+        }
+      });
+      deps.backgroundTasks.push(scrapeTask);
+    }
+
+    // Website-live verification badge — mirrors makeProcessSupplier.
+    if (s.website) {
+      const website = s.website;
+      const badgeTask = schedule(async () => {
+        try {
+          const live = await websiteLiveCheck(website);
+          if (!live) return;
+          const verification_badges = JSON.stringify(["website-live"]);
+          await deps.db.prepare(`UPDATE suppliers SET verification_badges=? WHERE id=?`).run(verification_badges, supplierId);
+          deps.send({ type: "supplier_updated", id: supplierId, verification_badges });
+        } catch {
+          // Best-effort — never throws into the caller's unawaited task.
+        }
+      });
+      deps.backgroundTasks.push(badgeTask);
+    }
+  };
+}
