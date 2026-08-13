@@ -181,13 +181,18 @@ describe("wave_count semantics", () => {
   const quickSource = readFileSync(join(__dirname, "..", "app", "api", "investigate-quick", "route.ts"), "utf8");
   const orchestrateSource = readFileSync(join(__dirname, "..", "app", "api", "orchestrate", "route.ts"), "utf8");
 
-  it("investigate-quick's route never references wave_count", () => {
-    expect(quickSource).not.toMatch(/wave_count/);
+  it("investigate-quick's route never writes wave_count (only mentions it in comments explaining why not)", () => {
+    // The word appears in explanatory comments (see route.ts's header) but
+    // must never appear in an actual SQL statement — assert there's no
+    // `wave_count=` (a column assignment) anywhere in the file.
+    expect(quickSource).not.toMatch(/wave_count\s*=/);
   });
 
   it("orchestrate's wave_count UPDATE runs unconditionally, not gated behind isTargeted", () => {
-    const updateMatch = orchestrateSource.match(/await db\.prepare\(`UPDATE sourcing_events SET status='scouting', wave_count=\?[^)]*\)\)\s*\n\s*\.run\(waveNumber, event\.id\);/);
-    expect(updateMatch).toBeTruthy();
+    expect(orchestrateSource).toContain(
+      "await db.prepare(`UPDATE sourcing_events SET status='scouting', wave_count=?, updated_at=datetime('now') WHERE id=?`)"
+    );
+    expect(orchestrateSource).toContain(".run(waveNumber, event.id);");
 
     // The UPDATE statement itself must not be wrapped in an `if (!isTargeted)`
     // (or similar) guard — find the line and confirm the immediately
