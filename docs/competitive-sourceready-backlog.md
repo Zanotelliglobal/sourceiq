@@ -133,6 +133,33 @@ contact-unlock paywall** — "contacts included" is our positioning wedge.
 > Their point 45 (workspace concept) is **already satisfied** by SourceIQ's Clerk **organizations** —
 > multi-user tenant with its own event pool. No new work; noted for completeness.
 
+### Design reference: SourceReady credit-management UI (screenshots, 2026-08-12)
+
+User supplied 4 screenshots of `app.sourceready.com/[workspaceId]/settings/subscription` as a
+concrete visual reference for whatever Issue L (#45) ends up deciding. **Not an implementation
+trigger** — #45 is still a strategic decision gated on the same PR #120 business call (final
+credit-tier pricing/allocations) as the rest of Epic 6.1–6.3. Captured here so the reference isn't
+lost before that decision lands:
+
+- **Tri-category credits widget** on the subscription page: "Paid credits" / "Free credits" /
+  "Daily credits", each with its own progress bar and remaining/total count.
+- **Daily credits reset messaging**: "Daily credits reset to 30 at 00:00 UTC" — an explicit,
+  visible reset cadence rather than a silent monthly rollover.
+- **"Earn extra credit" CTA button** directly on the credits widget (ties to Epic 7.4, already
+  filed as #42/Issue I — persistent "earn more" sidebar CTA).
+- **Two-tab usage view**: "Usage overview" (aggregate cards — Active users / Inquiries tracked /
+  Features — over a selectable date range) vs. "Activity log" (per-user table: user, credits used,
+  feature/inquiry, billing date).
+- **Plan badge + Upgrade**: "Free Plan $0" badge with an adjacent "Upgrade" button on the same
+  settings page (ties to Epic 7.5 / #42, already filed).
+- **Persistent sidebar "Credits left" widget** outside the settings page too (e.g. "180/230",
+  "Resets daily at 00:00 UTC") plus an "Earn extra 1000+ credits" link — the always-visible version
+  of the same CTA.
+
+If/when #45 resolves in favor of a credit currency, this list is the starting design spec for
+SourceIQ's own credit-management surface (`app/settings/page.tsx` + a persistent nav widget) —
+noting again that the contact-unlock paywall pattern (6.5) stays explicitly out of scope regardless.
+
 ---
 
 ## Epic 7 — Growth flywheel
