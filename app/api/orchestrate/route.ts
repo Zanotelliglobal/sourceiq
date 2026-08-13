@@ -10,6 +10,7 @@ import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { rateLimit } from "@/lib/ratelimit";
+import { normName, domainOf } from "@/lib/dedup";
 
 export const maxDuration = 300;
 
@@ -192,24 +193,10 @@ export async function POST(req: NextRequest) {
         // Get existing suppliers (name + website) to avoid duplicates across waves.
         const existing = await db.prepare("SELECT name, website FROM suppliers WHERE event_id=?").all(event.id) as { name: string; website: string | null }[];
 
-        // Dedup on BOTH a normalized company name and a website domain, so
-        // "Acme Manufacturing Inc." and "Acme Mfg" (or two listings that share a
-        // domain) collapse to one. Exact-string matching leaked obvious dupes.
-        const normName = (n: string) =>
-          (n || "")
-            .toLowerCase()
-            .replace(/\b(inc|llc|ltd|limited|gmbh|corp|corporation|co|company|srl|spa|sa|ag|kg|bv|plc|pvt|pte|group|holding|holdings|industries|manufacturing|mfg)\b/g, "")
-            .replace(/[^a-z0-9]/g, "");
-        const domainOf = (url: string | null | undefined) => {
-          if (!url) return "";
-          return url
-            .toLowerCase()
-            .replace(/^https?:\/\//, "")
-            .replace(/^www\./, "")
-            .split("/")[0]
-            .trim();
-        };
-
+        // normName/domainOf (dedup on BOTH a normalized company name and a
+        // website domain, so "Acme Manufacturing Inc." and "Acme Mfg" — or two
+        // listings that share a domain — collapse to one) now live in
+        // lib/dedup.ts, shared with app/api/investigate-quick/route.ts.
         const seenNames = new Set<string>();
         const seenDomains = new Set<string>();
         for (const s of existing) {
