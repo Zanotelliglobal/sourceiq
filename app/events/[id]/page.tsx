@@ -2115,12 +2115,10 @@ export default function EventPage() {
     logExport("pdf");
   };
 
-  const shortlisted = suppliers.filter(s => s.funnel_stage === "shortlisted").length;
   // Unverified quick-scan rows have not been through outreach/qualification —
   // exclude them from the count that drives "Auto-Outreach (n)" (mirrors the
   // same exclusion already applied server-side in app/api/outreach/route.ts).
   const longListCount = suppliers.filter(s => s.funnel_stage === "long_list" && !s.is_quick_result).length;
-  const avgScore    = suppliers.length ? Math.round(suppliers.reduce((a, s) => a + (s.ai_score ?? 0), 0) / suppliers.length) : 0;
   // Quick Scan and a full wave/deepen share this one concurrency lock — the
   // full-wave button is disabled while a quick scan is in flight and vice
   // versa (Quick Scan button uses `busy || serverWorking` below too).
@@ -2317,25 +2315,6 @@ export default function EventPage() {
                 {event.target_countries && <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded"><Globe className="w-3 h-3" /> {event.target_countries}</span>}
                 {event.wave_count > 0 && <span className="text-xs bg-blue-50 text-blue-600 font-medium px-2 py-0.5 rounded">{t("{n} waves complete", { n: event.wave_count })}</span>}
               </div>
-            </div>
-            {/* KPIs */}
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6 sm:text-right">
-              {[
-                { label: t("Total Found"), value: suppliers.length },
-                { label: t("Avg Score"),   value: avgScore || "—" },
-                { label: t("Short Listed"),value: shortlisted },
-                ...(usage && usage.cost_usd > 0
-                  ? [{
-                      label: t("AI Cost · {tok}k tok", { tok: (usage.total_tokens / 1000).toFixed(0) }),
-                      value: `$${usage.cost_usd.toFixed(2)}`,
-                    }]
-                  : []),
-              ].map(k => (
-                <div key={k.label} title={usage ? t("{tokens} tokens · {searches} web searches", { tokens: usage.total_tokens.toLocaleString(), searches: usage.web_searches }) : undefined}>
-                  <div className="text-2xl font-bold text-slate-900">{k.value}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wide">{k.label}</div>
-                </div>
-              ))}
             </div>
           </div>
 
