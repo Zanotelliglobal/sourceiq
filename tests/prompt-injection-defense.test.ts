@@ -45,6 +45,7 @@ describe("prompt-injection defense (#61)", () => {
     "runEnricherAgent",           // reads the scout's web-derived description/capabilities
     "runContactFinderAgent",      // ingests live web_search results
     "runReplyClassifierAgent",    // reads a real inbound supplier email, verbatim
+    "runTargetedScoutAgent",      // Quick Investigation "Deepen": ingests live web_search results
   ])("%s's prompt includes the injection-defense block", (fnName) => {
     expect(functionBody(fnName)).toContain("${INJECTION_DEFENSE}");
   });
@@ -61,6 +62,7 @@ describe("prompt-injection defense (#61)", () => {
     "runOutreachAgent",     // drafts from buyer/event fields only
     "runFollowUpAgent",     // drafts from buyer/event fields + our own prior subject
     "runSupplierResponseAgent", // simulates a reply, doesn't ingest one
+    "runQuickScoutAgent",   // Quick Investigation: model's own knowledge only, no web_search
   ])("%s is out of scope (no third-party content ingested)", (fnName) => {
     expect(() => functionBody(fnName)).not.toThrow();
   });
