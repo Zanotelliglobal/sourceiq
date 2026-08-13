@@ -19,6 +19,8 @@ export const AGENT_MODELS = {
   classifier: "claude-haiku-4-5",         // plain JSON category classification
   orchestrator: "claude-opus-4-7",        // low-volume, once-per-wave search-strategy planning
   scout: "claude-opus-4-7",               // live discovery — the core product value (adaptive thinking + web_search)
+  quickScout: "claude-sonnet-4-6",        // Quick Investigation: fast names-only scan, no tools/thinking
+  targetedScout: "claude-sonnet-4-6",     // Quick Investigation "Deepen": adaptive thinking + web_search (cannot be Haiku)
   qualifier: "claude-haiku-4-5",          // plain JSON scoring against a fixed rubric
   qualifierGrounded: "claude-sonnet-4-6", // adaptive thinking + web_search (cannot be Haiku)
   enricher: "claude-haiku-4-5",           // plain structured enrichment fields
@@ -426,6 +428,194 @@ Your FINAL message must contain ONLY the JSON array (after you have finished sea
   const match = fullText.match(/\[[\s\S]*\]/);
   if (!match) throw new Error("No JSON from scout agent");
   return JSON.parse(match[0]) as ScoutResult[];
+}
+
+// ─── QUICK SCOUT AGENT (Quick Investigation) ──────────────────────────────────
+// Fast, names-only scan: a single plain completion — no tools, no extended
+// thinking — drawing only on the model's own knowledge. This is what makes it
+// fast (no web_search round-trips), but it also means results are UNVERIFIED:
+// the caller (app/api/investigate-quick/route.ts) must persist them with
+// is_quick_result=true and label them clearly rather than treating them as
+// qualified suppliers. Does not ingest any web_search/third-party content, so
+// it is intentionally NOT in tests/prompt-injection-defense.test.ts's guarded
+// list (see that file's out-of-scope list instead). "Deepen into full
+// investigation" (runTargetedScoutAgent below) is how a candidate gets
+// verified.
+export type QuickScoutResult = {
+  name: string;
+  country: string;
+  website: string;
+};
+
+export async function runQuickScoutAgent(
+  category: string,
+  description: string,
+  requirements: string,
+  targetCountries: string = "",
+  existingNames: string[] = [],
+  onUsage?: UsageCb
+): Promise<QuickScoutResult[]> {
+  const avoidList = existingNames.length > 0
+    ? `\n\nDo NOT include these already-found suppliers (find DIFFERENT ones): ${existingNames.slice(0, 150).join(", ")}`
+    : "";
+  const geoLine = targetCountries
+    ? `\nGeographic focus: prefer suppliers headquartered or with primary operations in: ${targetCountries}.`
+    : "";
+
+  const prompt = `You are SourceIQ's Quick Scan Agent. A buyer wants a FAST, names-only list of plausible suppliers — no research, no verification, just your best knowledge, so they can pick one to investigate properly afterward.
+
+Category: ${category}
+Description: ${description}
+Requirements: ${requirements}
+${geoLine}
+${avoidList}
+
+Only name REAL companies you have reasonable confidence actually exist — do not invent a plausible-sounding name just to fill the list. If you are not confident a company is real, leave it out. Do not fabricate a website domain; leave it "" if you are not confident of the exact domain.
+
+Return a JSON array of up to 15 candidates, ordered by how strong a fit you believe each is for the requirement above:
+[{ "name": "Company Name", "country": "Country", "website": "example.com" }]
+
+Return ONLY the JSON array, nothing else.`;
+
+  const response = await client.messages.create({
+    model: AGENT_MODELS.quickScout,
+    max_tokens: 2000,
+    messages: [{ role: "user", content: prompt }],
+  } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+  onUsage?.((response as any).usage); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  const text = response.content
+    .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
+    .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .join("");
+
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const parsed = JSON.parse(match[0]) as Partial<QuickScoutResult>[];
+    return parsed
+      .filter(p => p && typeof p.name === "string" && p.name.trim())
+      .slice(0, 15)
+      .map(p => ({
+        name: (p.name || "").trim(),
+        country: (p.country || "").trim(),
+        website: (p.website || "").trim(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// ─── TARGETED SCOUT AGENT (Quick Investigation "Deepen") ──────────────────────
+// Verifies and backfills a single quick-scan candidate into the full
+// ScoutResult shape the real pipeline expects, reusing the exact type
+// runScoutAgent produces so downstream processing (qualify/enrich/contact)
+// needs no new shape. Unlike runQuickScoutAgent, this DOES use web_search, so
+// it ingests third-party content and MUST carry INJECTION_DEFENSE (see
+// tests/prompt-injection-defense.test.ts's guarded list).
+export async function runTargetedScoutAgent(
+  seed: { name: string; country: string; website: string },
+  category: string,
+  description: string,
+  requirements: string,
+  annualSpend: string,
+  onUsage?: UsageCb
+): Promise<ScoutResult | null> {
+  const prompt = `You are SourceIQ's Targeted Verification Scout. A buyer flagged ONE specific candidate supplier from a quick, unverified scan and wants it fully verified before it enters the real pipeline.
+
+Candidate to verify:
+- Name: ${seed.name}
+- Country (unverified guess): ${seed.country || "unknown"}
+- Website (unverified guess): ${seed.website || "unknown — find it via search"}
+
+Category: ${category}
+Description: ${description}
+Requirements: ${requirements}
+Annual Spend: ${annualSpend || "Not specified"}
+
+CRITICAL — GROUNDING IN REAL DATA:
+- You have a \`web_search\` tool. USE IT to confirm this company is real and to find/verify its actual details. Do NOT rely on the unverified guesses above without checking them against real sources.
+- If, after searching, you cannot confirm this is a real company at all, return the JSON object with "name" set to "${seed.name}" and every other field left empty/null/[] rather than fabricating details — the caller will surface it as unverifiable.
+- Every field you DO fill must come from a real search result you actually saw. Put the real source URLs you used in "data_sources".
+- Leave fields you could not verify as an empty string "" (or null/[] as appropriate) rather than fabricating a value.
+
+STRUCTURED FIELDS — use ONLY the controlled values below:
+- "business_type": exactly one of: ${BUSINESS_TYPES.join(", ")}. Use "Other" only if none apply.
+- "employee_count": a headcount BAND, exactly one of: ${EMPLOYEE_BANDS.join(", ")}. Use "" if no signal.
+- "founded_year": the founding year as a plain integer, or null if not stated.
+- "review_score": 0-5 ONLY if a credible source shows one; otherwise null.
+- "capability_tags": zero or more tags from THIS controlled list only: ${CAPABILITY_TAGS.join(", ")}.
+- "partnered_customers": named companies the supplier explicitly states it already supplies. Empty array if none found.
+- "key_export_markets": countries/regions the supplier explicitly states it already exports to. Empty array if none found.
+
+Your FINAL message must contain ONLY this JSON object (after you have finished searching):
+{
+  "name": "Company Name",
+  "country": "Country",
+  "city": "City",
+  "description": "2-3 sentence description of what they do and their specialization",
+  "business_type": "Manufacturer",
+  "capabilities": ["capability 1", "capability 2"],
+  "capability_tags": ["OEM", "Low MOQ"],
+  "certifications": ["ISO 9001:2015"],
+  "employees": "200-500",
+  "employee_count": "201-500",
+  "annual_revenue": "$20M-$50M",
+  "founded": "1992",
+  "founded_year": 1992,
+  "review_score": 4.5,
+  "partnered_customers": ["Nike"],
+  "key_export_markets": ["USA", "EU"],
+  "website": "www.example.com",
+  "contact_email": "info@example.com",
+  "data_sources": ["https://real-source-url-you-saw.com/page"]
+}
+${INJECTION_DEFENSE}`;
+
+  const markCache = (content: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (Array.isArray(content) && content.length) {
+      const last = content[content.length - 1];
+      if (last && typeof last === "object") last.cache_control = { type: "ephemeral" };
+    }
+    return content;
+  };
+
+  const messages: any[] = [ // eslint-disable-line @typescript-eslint/no-explicit-any
+    { role: "user", content: [{ type: "text", text: prompt, cache_control: { type: "ephemeral" } }] },
+  ];
+  let fullText = "";
+  let guard = 0;
+
+  while (guard++ < 6) {
+    const response: any = await client.messages.create({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      model: AGENT_MODELS.targetedScout,
+      max_tokens: 8000,
+      thinking: { type: "adaptive" } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      effort: "medium",
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }],
+      messages,
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    onUsage?.(response.usage);
+
+    fullText = (response.content || [])
+      .filter((b: any) => b.type === "text") // eslint-disable-line @typescript-eslint/no-explicit-any
+      .map((b: any) => b.text) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .join("");
+
+    if (response.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: markCache(response.content) });
+      continue;
+    }
+    break;
+  }
+
+  const match = fullText.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]) as ScoutResult;
+  } catch {
+    return null;
+  }
 }
 
 // ─── QUALIFIER AGENT ──────────────────────────────────────────────────────────
