@@ -74,4 +74,31 @@ describe("applySupplierUpdated", () => {
 
     expect(result).toEqual(suppliers);
   });
+
+  // Quick Investigation "Deepen into full investigation" (makeProcessSupplierDeepen)
+  // re-processes a quick-scan row through the real pipeline and sends
+  // `supplier_updated` with a full `supplier` object rather than granular
+  // field patches, since nearly every column changes at once.
+  it("replaces the matching row wholesale when the event carries a full supplier object", () => {
+    const suppliers = [supplier({ id: 1, name: "Acme (unverified)" }), supplier({ id: 2, name: "Other Co" })];
+    const full = { id: 1, name: "Acme Manufacturing", contact_email: "sales@acme.com", contact_url: null, contact_phone: null, contact_linkedin: null, enrichment: JSON.stringify({ market_position: "Established." }), verification_badges: null };
+    const result = applySupplierUpdated(suppliers, { type: "supplier_updated", id: 1, supplier: full });
+
+    expect(result.find(s => s.id === 1)).toEqual(full);
+    // The non-matching supplier is untouched.
+    expect(result.find(s => s.id === 2)).toEqual(suppliers[1]);
+  });
+
+  it("does not treat a full supplier object replace as a no-op even if id has no granular patch fields set", () => {
+    const suppliers = [supplier({ id: 1 })];
+    const full = { id: 1, name: "Acme Manufacturing", contact_email: null, contact_url: null, contact_phone: null, contact_linkedin: null, enrichment: null, verification_badges: null };
+    const result = applySupplierUpdated(suppliers, { type: "supplier_updated", id: 1, supplier: full });
+
+    // A wholesale replace always returns a fresh array (new reference),
+    // even though every individual field is falsy — this must not fall
+    // into the "nothing to patch, return same reference" early-out that
+    // the granular-patch path uses.
+    expect(result).not.toBe(suppliers);
+    expect(result[0]).toEqual(full);
+  });
 });

@@ -33,6 +33,9 @@ type Supplier = {
   score_breakdown: string | null; enrichment: string | null;
   funnel_stage: string; outreach_status: string; response_detail: string | null;
   notes: string | null; created_at: string;
+  // Quick Investigation: true until "Deepen into full investigation" has
+  // re-verified this row through the real pipeline. See lib/db.ts.
+  is_quick_result: boolean;
 };
 
 type SupplierResponse = {
@@ -748,10 +751,17 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
 }
 
 // ─── Supplier row (compact table row) ─────────────────────────────────────────
-function SupplierRow({ supplier, rank, onClick, onMove }: {
+function SupplierRow({ supplier, rank, onClick, onMove, onDeepen, deepenDisabled, deepening }: {
   supplier: Supplier; rank: number;
   onClick: () => void;
   onMove: (id: number, stage: string) => Promise<void>;
+  // Quick-scan candidates (is_quick_result=true) get a "Deepen into full
+  // investigation" action instead of the usual shortlist/decline pair — it
+  // re-runs the real pipeline against this one supplier (see runWave's
+  // `targeted` param) rather than the quick names-only scout.
+  onDeepen?: (id: number) => void;
+  deepenDisabled?: boolean;
+  deepening?: boolean;
 }) {
   const t = useT();
   const caps  = tryParse<string[]>(supplier.capabilities, []);
@@ -793,6 +803,15 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
       <td className="px-3 py-3 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="font-semibold text-slate-900 text-sm leading-tight truncate">{supplier.name}</span>
+          {supplier.is_quick_result ? (
+            <span title={t("Found by Quick Scan — not yet run through the full verification pipeline")} className="inline-flex items-center gap-1 flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+              <Sparkles className="w-2.5 h-2.5" /> {t("Unverified — Quick Scan")}
+            </span>
+          ) : supplier.wave > 0 && (
+            <span title={t("Discovered in wave {n}", { n: supplier.wave })} className="inline-flex items-center flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+              {t("Wave {n}", { n: supplier.wave })}
+            </span>
+          )}
           {(() => {
             // Tiered reachability badge: email → contact page → phone → LinkedIn → none.
             if (supplier.contact_email)
@@ -857,6 +876,21 @@ function SupplierRow({ supplier, rank, onClick, onMove }: {
             tabbing to these buttons must be able to see them, not just
             reach them. */}
         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+          {supplier.is_quick_result && onDeepen && (
+            <button
+              onClick={() => onDeepen(supplier.id)}
+              disabled={deepenDisabled}
+              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed border border-blue-200 px-2 py-1 rounded-lg transition-colors"
+              title={t("Re-run this supplier through the full verification pipeline")}
+            >
+              {deepening ? (
+                <div className="w-2.5 h-2.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Sparkles className="w-2.5 h-2.5" />
+              )}
+              {t("Deepen")}
+            </button>
+          )}
           {supplier.funnel_stage === "responded" && (
             <button
               onClick={async () => await onMove(supplier.id, "shortlisted")}
@@ -1443,6 +1477,26 @@ export default function EventPage() {
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
   const autostartedRef = useRef(false);
+  // Quick Investigation: fast, names-only scan. A single simple loading state
+  // (no step-by-step process feed — deliberate UX decision) that shares the
+  // `busy`/concurrency lock with the full-wave button below, so the two can
+  // never run concurrently against the same event.
+  const [quickScanning, setQuickScanning] = useState(false);
+  // Which quick-scan row's "Deepen into full investigation" is in flight —
+  // purely cosmetic (per-row spinner); the actual concurrency guard is the
+  // same `running` state a plain wave uses, since Deepen IS a real wave.
+  const [deepeningId, setDeepeningId] = useState<number | null>(null);
+  // CSV/PDF/Excel export: unverified quick-scan rows are excluded by default —
+  // opt-in per export via this checkbox.
+  const [includeQuickInExport, setIncludeQuickInExport] = useState(false);
+  // Raw per-event SSE trace (Activity Log) collapsed behind a disclosure by
+  // default — the primary view shows plain-language progress states instead
+  // (see progressPhase below). Still available for debugging/support.
+  const [showActivity, setShowActivity] = useState(false);
+  // Plain-language progress states derived from the existing SSE event
+  // stream (no change to the SSE contract itself — see handleStreamEvent).
+  const [progressPhase, setProgressPhase] = useState<"idle" | "researching" | "evaluating" | "done">("idle");
+  const [progressCount, setProgressCount] = useState(0);
 
   // Resolve export capability from the org's plan once on mount.
   useEffect(() => {
@@ -1541,6 +1595,17 @@ export default function EventPage() {
 
   function handleStreamEvent(msg: Record<string, unknown>) {
     const type = msg.type as string;
+    // Plain-language progress states (presentation-layer only — the SSE
+    // contract emitted by /api/orchestrate is unchanged, see lib/agents.ts
+    // and app/api/orchestrate/route.ts). "researching" while agents are
+    // scouting, "evaluating" once the first batch has been found and is
+    // being qualified, "done" once the wave completes. The raw per-event
+    // trace still lands in the Activity Log below, collapsed by default.
+    if (type === "wave_start")        { setProgressPhase("researching"); setProgressCount(0); }
+    if (type === "agent_scouted")     { setProgressPhase("evaluating"); setProgressCount(c => c + ((msg.count as number) || 0)); }
+    if (type === "wave_complete")     setProgressPhase("done");
+    if (type === "error")             setProgressPhase("idle");
+
     if (type === "wave_start")        addLog(msg.message as string);
     if (type === "strategy")          addLog(`Strategy: ${msg.strategy}`);
     if (type === "agents_registered") {
@@ -1563,8 +1628,10 @@ export default function EventPage() {
     }
     if (type === "supplier_updated") {
       // A background contact scrape (deferred off the critical path — see
-      // lib/process-supplier.ts) resolved after the card was already streamed.
-      // Patch the matching card in place with whatever channels it found.
+      // lib/process-supplier.ts) resolved after the card was already streamed,
+      // OR (Quick Investigation "Deepen") a quick-scan row was just fully
+      // re-verified — see applySupplierUpdated for how a full `supplier`
+      // object replaces the row wholesale in that second case.
       setSuppliers(prev => applySupplierUpdated(prev, msg));
     }
     if (type === "agent_complete") {
@@ -1583,19 +1650,30 @@ export default function EventPage() {
     if (type === "error") { addLog(`ERR ${msg.message}`); pushToast("error", String(msg.message || t("Discovery failed"))); }
   }
 
-  async function runWave() {
+  // `targeted`: Quick Investigation "Deepen into full investigation" — an
+  // existing, unverified quick-scan supplier id to re-process through the
+  // REAL scout→qualify→enrich→contact pipeline instead of discovering new
+  // suppliers. This is still a real wave (consumes wavesPerEvent, goes
+  // through checkWaveLimit/checkSpendCeiling, increments wave_count on the
+  // server — see app/api/orchestrate/route.ts) so it shares the exact same
+  // `running`/abortRef concurrency lock as a plain "Launch Discovery" wave;
+  // `deepeningId` only tracks which row's button should show its own spinner.
+  async function runWave(targeted?: { supplierId: number }[]) {
     setRunning(true);
     setStopping(false);
     setLogs([]);
     setLiveAgents([]);
+    setProgressPhase("researching");
+    setProgressCount(0);
+    if (targeted && targeted.length > 0) setDeepeningId(targeted[0].supplierId);
     const controller = new AbortController();
     abortRef.current = controller;
     const nextWave = (event?.wave_count ?? 0) + 1;
-    addLog(`Initialising Wave ${nextWave}...`);
+    addLog(targeted ? `Deepening ${targeted.length} quick-scan candidate(s)...` : `Initialising Wave ${nextWave}...`);
     try {
       const res = await fetch("/api/orchestrate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_id: id, wave: nextWave }),
+        body: JSON.stringify({ event_id: id, wave: nextWave, ...(targeted ? { targeted } : {}) }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
@@ -1621,7 +1699,53 @@ export default function EventPage() {
       abortRef.current = null;
       setStopping(false);
       setRunning(false);
+      setDeepeningId(null);
       setLiveAgents(prev => prev.map(a => ({ ...a, status: "complete" })));
+    }
+  }
+
+  // Per-row "Deepen into full investigation" action on a quick-scan
+  // candidate (SupplierRow's Deepen button) — this is a REAL wave (it goes
+  // through runWave/orchestrate and increments wave_count), so it shares
+  // the exact same busy/serverWorking concurrency lock as "Launch
+  // Discovery" rather than getting its own guard.
+  function handleDeepen(supplierId: number) {
+    if (busy || serverWorking) return;
+    void runWave([{ supplierId }]);
+  }
+
+  // Quick Investigation: fast, names-only scan. Synchronous JSON response (no
+  // SSE — fast enough not to need streaming, see app/api/investigate-quick/route.ts).
+  // Deliberately ships with ZERO process-visibility beyond a simple loading
+  // state — no step-by-step feed — this is a UX decision, not a shortcut.
+  async function runQuickScan() {
+    if (busy || serverWorking) return;
+    setQuickScanning(true);
+    try {
+      const res = await fetch("/api/investigate-quick", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_id: id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        pushToast("error", data.error || t("Quick scan failed"));
+        return;
+      }
+      const candidates = (data.candidates || []) as Supplier[];
+      // Append the same way `supplier_found` SSE messages currently do.
+      setSuppliers(prev => {
+        const existingIds = new Set(prev.map(s => s.id));
+        return [...prev, ...candidates.filter(c => !existingIds.has(c.id))];
+      });
+      if (candidates.length > 0) {
+        pushToast("success", t("Quick scan found {n} unverified candidate(s).", { n: candidates.length }));
+      } else {
+        pushToast("info", t("Quick scan found no new candidates."));
+      }
+    } catch (err) {
+      pushToast("error", t("Quick scan failed") + `: ${String(err)}`);
+    } finally {
+      setQuickScanning(false);
     }
   }
 
@@ -1906,12 +2030,18 @@ export default function EventPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Unverified quick-scan rows are excluded from every export by default —
+  // opt in via the "Include unverified quick-scan results" checkbox in the
+  // export menu (includeQuickInExport). Mirrors the same default-off
+  // exclusion already applied to longListCount/outreach above.
+  const exportRows = includeQuickInExport ? filtered : filtered.filter(s => !s.is_quick_result);
+
   // Best-effort audit record of the export (format + count + active filter).
   const logExport = (format: "csv" | "xlsx" | "pdf") => {
     void fetch("/api/audit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: Number(id), format, count: filtered.length, stage: stageFilter }),
+      body: JSON.stringify({ event_id: Number(id), format, count: exportRows.length, stage: stageFilter }),
     }).catch(() => {});
   };
 
@@ -1922,7 +2052,7 @@ export default function EventPage() {
     };
     const rows = [
       exportCols.map(c => cell(c.header)).join(","),
-      ...filtered.map(s => exportCols.map(c => cell(c.get(s))).join(",")),
+      ...exportRows.map(s => exportCols.map(c => cell(c.get(s))).join(",")),
     ];
     downloadBlob(new Blob(["﻿" + rows.join("\r\n")], { type: "text/csv;charset=utf-8;" }), exportFilename("csv"));
     logExport("csv");
@@ -1934,7 +2064,7 @@ export default function EventPage() {
     const XLSX = await import("xlsx");
     const aoa = [
       exportCols.map(c => c.header),
-      ...filtered.map(s => exportCols.map(c => { const v = c.get(s); return v == null ? "" : v; })),
+      ...exportRows.map(s => exportCols.map(c => { const v = c.get(s); return v == null ? "" : v; })),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
@@ -1961,13 +2091,13 @@ export default function EventPage() {
     doc.text(event?.title || t("Supplier list"), 40, 58);
     doc.setFontSize(9);
     doc.setTextColor(148, 163, 184);
-    doc.text(`${t("Filter")}: ${stageLabel}  ·  ${filtered.length} ${t("suppliers")}  ·  ${new Date().toISOString().slice(0, 10)}`, 40, 72);
+    doc.text(`${t("Filter")}: ${stageLabel}  ·  ${exportRows.length} ${t("suppliers")}  ·  ${new Date().toISOString().slice(0, 10)}`, 40, 72);
 
     const contactOf = (s: Supplier) => s.contact_email || s.contact_url || s.contact_phone || s.website || "—";
     autoTable(doc, {
       startY: 86,
       head: [[t("Company"), t("Country"), t("Score"), t("Stage"), t("Contact")]],
-      body: filtered.map(s => [
+      body: exportRows.map(s => [
         s.name,
         [s.city, s.country].filter(Boolean).join(", "),
         s.ai_score == null ? "—" : String(s.ai_score),
@@ -1985,10 +2115,22 @@ export default function EventPage() {
     logExport("pdf");
   };
 
-  const shortlisted = suppliers.filter(s => s.funnel_stage === "shortlisted").length;
-  const longListCount = suppliers.filter(s => s.funnel_stage === "long_list").length;
-  const avgScore    = suppliers.length ? Math.round(suppliers.reduce((a, s) => a + (s.ai_score ?? 0), 0) / suppliers.length) : 0;
-  const busy = running || campaigning;
+  // Unverified quick-scan rows have not been through outreach/qualification —
+  // exclude them from the count that drives "Auto-Outreach (n)" (mirrors the
+  // same exclusion already applied server-side in app/api/outreach/route.ts).
+  const longListCount = suppliers.filter(s => s.funnel_stage === "long_list" && !s.is_quick_result).length;
+  // Quick Scan and a full wave/deepen share this one concurrency lock — the
+  // full-wave button is disabled while a quick scan is in flight and vice
+  // versa (Quick Scan button uses `busy || serverWorking` below too).
+  const busy = running || campaigning || quickScanning;
+
+  // Plain-language progress text for the primary view (see handleStreamEvent
+  // for how progressPhase/progressCount are derived from the raw SSE stream —
+  // presentation-layer only, the event contract itself is unchanged).
+  const progressText =
+    progressPhase === "researching" ? t("Researching suppliers…") :
+    progressPhase === "evaluating"  ? t("Found {n}, evaluating fit…", { n: progressCount }) :
+    progressPhase === "done"        ? t("Done") : "";
 
   const AGENT_DOT: Record<string, string> = {
     queued: "bg-slate-300", running: "bg-blue-500 animate-pulse",
@@ -2006,7 +2148,7 @@ export default function EventPage() {
             {(running || serverWorking) && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />}
           </div>
           <button
-            onClick={runWave}
+            onClick={() => void runWave()}
             disabled={busy || serverWorking}
             className="btn-cta w-full justify-center mt-2 py-2"
           >
@@ -2016,6 +2158,23 @@ export default function EventPage() {
               <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> {t("Launch Discovery")}</>
             ) : (
               <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> {t("Wave {n}", { n: (event.wave_count ?? 0) + 1 })}</>
+            )}
+          </button>
+
+          {/* Quick Investigation: fast, names-only scan. Shares the same
+              busy/serverWorking concurrency lock as "Launch Discovery" above
+              (a full wave and a quick scan can never run at once), and ships
+              with a single loading state only — no step-by-step process feed. */}
+          <button
+            onClick={() => void runQuickScan()}
+            disabled={busy || serverWorking}
+            title={t("Fast, unverified name suggestions — no web research. Use \"Deepen\" on a result to verify it for real.")}
+            className="btn-secondary w-full justify-center mt-2 py-2"
+          >
+            {quickScanning ? (
+              <><div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-600 rounded-full animate-spin" /> {t("Scanning...")}</>
+            ) : (
+              <><Sparkles className="w-3.5 h-3.5" /> {t("Quick Scan")}</>
             )}
           </button>
 
@@ -2042,6 +2201,16 @@ export default function EventPage() {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" strokeWidth={2} /></svg>
               {stopping ? t("Stopping...") : t("Stop")}
             </button>
+          )}
+          {/* Primary progress view: a small set of plain-language states
+              derived from the raw SSE stream (see handleStreamEvent) — the
+              raw per-event trace lives in the collapsed "View activity"
+              disclosure below instead of cluttering this view. */}
+          {running && progressText && (
+            <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-[11px] font-semibold text-blue-700 leading-snug">
+              {progressPhase === "done" ? <Check className="w-3.5 h-3.5 flex-shrink-0" /> : <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
+              {progressText}
+            </div>
           )}
           {serverWorking && !running && (
             <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-[10px] font-medium text-blue-700 leading-snug">
@@ -2084,18 +2253,30 @@ export default function EventPage() {
           )}
         </div>
 
-        {/* Activity log */}
+        {/* Raw per-event activity trace — collapsed behind a disclosure by
+            default (off by default) so the plain-language progress banner
+            above stays the primary view; still available here for
+            debugging/support without requiring a change to the SSE
+            contract itself. */}
         <div className="flex flex-col overflow-hidden lg:flex-1">
-          <div className="px-3 py-2 border-b border-slate-100">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{t("Activity Log")}</span>
-          </div>
-          <div ref={logsRef} role="log" aria-live="polite" aria-label={t("Activity Log")} className="overflow-y-auto p-3 space-y-0.5 max-h-56 lg:max-h-none lg:flex-1">
-            {logs.length === 0 ? (
-              <p className="text-[10px] text-slate-500 text-center pt-4">{t("Log appears here during discovery")}</p>
-            ) : logs.map((l, i) => (
-              <div key={i} className="text-[10px] font-mono text-slate-500 leading-relaxed whitespace-pre-wrap break-all">{l}</div>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowActivity(v => !v)}
+            aria-expanded={showActivity}
+            className="w-full flex items-center justify-between px-3 py-2 border-b border-slate-100 text-left hover:bg-slate-50 transition-colors"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{t("View activity")}</span>
+            <ArrowDown className={`w-3 h-3 text-slate-500 transition-transform ${showActivity ? "rotate-180" : ""}`} />
+          </button>
+          {showActivity && (
+            <div ref={logsRef} role="log" aria-live="polite" aria-label={t("Activity Log")} className="overflow-y-auto p-3 space-y-0.5 max-h-56 lg:max-h-none lg:flex-1">
+              {logs.length === 0 ? (
+                <p className="text-[10px] text-slate-500 text-center pt-4">{t("Log appears here during discovery")}</p>
+              ) : logs.map((l, i) => (
+                <div key={i} className="text-[10px] font-mono text-slate-500 leading-relaxed whitespace-pre-wrap break-all">{l}</div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2134,25 +2315,6 @@ export default function EventPage() {
                 {event.target_countries && <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded"><Globe className="w-3 h-3" /> {event.target_countries}</span>}
                 {event.wave_count > 0 && <span className="text-xs bg-blue-50 text-blue-600 font-medium px-2 py-0.5 rounded">{t("{n} waves complete", { n: event.wave_count })}</span>}
               </div>
-            </div>
-            {/* KPIs */}
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6 sm:text-right">
-              {[
-                { label: t("Total Found"), value: suppliers.length },
-                { label: t("Avg Score"),   value: avgScore || "—" },
-                { label: t("Short Listed"),value: shortlisted },
-                ...(usage && usage.cost_usd > 0
-                  ? [{
-                      label: t("AI Cost · {tok}k tok", { tok: (usage.total_tokens / 1000).toFixed(0) }),
-                      value: `$${usage.cost_usd.toFixed(2)}`,
-                    }]
-                  : []),
-              ].map(k => (
-                <div key={k.label} title={usage ? t("{tokens} tokens · {searches} web searches", { tokens: usage.total_tokens.toLocaleString(), searches: usage.web_searches }) : undefined}>
-                  <div className="text-2xl font-bold text-slate-900">{k.value}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wide">{k.label}</div>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -2289,7 +2451,18 @@ export default function EventPage() {
                     </svg>
                   </button>
                   {exportMenuOpen && (
-                    <div role="menu" className="absolute right-0 mt-1 w-36 rounded-lg border border-slate-200 bg-white shadow-lg z-20 py-1">
+                    <div role="menu" className="absolute right-0 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-20 py-1">
+                      {suppliers.some(s => s.is_quick_result) && (
+                        <label className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-600 border-b border-slate-100 cursor-pointer hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={includeQuickInExport}
+                            onChange={(e) => setIncludeQuickInExport(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-slate-300"
+                          />
+                          {t("Include unverified quick-scan results")}
+                        </label>
+                      )}
                       {([
                         { key: "csv" as const, label: t("Export CSV"), run: exportCsv },
                         { key: "xlsx" as const, label: t("Export Excel"), run: exportXlsx },
@@ -2372,6 +2545,9 @@ export default function EventPage() {
                           rank={filtered.indexOf(s) + 1}
                           onClick={() => setSelected(s)}
                           onMove={moveStage}
+                          onDeepen={handleDeepen}
+                          deepenDisabled={busy || serverWorking}
+                          deepening={running && deepeningId === s.id}
                         />
                       ))}
                     </Fragment>
@@ -2384,6 +2560,9 @@ export default function EventPage() {
                       rank={i + 1}
                       onClick={() => setSelected(s)}
                       onMove={moveStage}
+                      onDeepen={handleDeepen}
+                      deepenDisabled={busy || serverWorking}
+                      deepening={running && deepeningId === s.id}
                     />
                   ))
                 )}

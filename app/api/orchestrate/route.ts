@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
-import { runOrchestrator, runScoutAgent, AGENT_MODELS } from "@/lib/agents";
-import { makeProcessSupplier, type ScoutSupplier } from "@/lib/process-supplier";
+import { getDb, type Supplier } from "@/lib/db";
+import { runOrchestrator, runScoutAgent, runTargetedScoutAgent, AGENT_MODELS } from "@/lib/agents";
+import { makeProcessSupplier, makeProcessSupplierDeepen, type ScoutSupplier } from "@/lib/process-supplier";
 import { createTaskPool } from "@/lib/task-pool";
 import { recordUsage, usageSummary, effectiveTier, checkWaveLimit, checkSpendCeiling } from "@/lib/usage";
 import { UNLIMITED } from "@/lib/plans";
-import { getOrgContext } from "@/lib/tenant";
+import { getOrgContext, getOwnedEvent } from "@/lib/tenant";
 import { requireActiveSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { rateLimit } from "@/lib/ratelimit";
+import { normName, domainOf } from "@/lib/dedup";
 
 export const maxDuration = 300;
 
@@ -38,16 +39,20 @@ export async function POST(req: NextRequest) {
   // actually matters for plan enforcement must be computed here, server-side,
   // from the persisted row. Trusting a client-supplied wave number would let
   // a caller always send `wave: 1` to dodge a wave-count-based plan cap.
-  const { event_id } = await req.json();
+  // `targeted` (Quick Investigation "Deepen"): an optional list of existing,
+  // unverified quick-scan supplier ids to re-process through the REAL
+  // pipeline instead of discovering new ones. When present, this wave skips
+  // the Opus orchestrator planning call and re-verifies those specific rows
+  // in place — see the isTargeted branch below. It still consumes a real
+  // wave (checkWaveLimit/checkSpendCeiling/wave_count all apply unchanged)
+  // because it runs the real scout→qualify→enrich→contact pipeline with
+  // real dollar cost, same as any other wave.
+  const { event_id, targeted } = await req.json() as { event_id: number; targeted?: { supplierId: number }[] };
+  const isTargeted = Array.isArray(targeted) && targeted.length > 0;
   const db = getDb();
 
-  const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
-    id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
-    requirements: string; annual_spend: string; wave_count: number; status: string | null; updated_at: string | null;
-    target_countries: string | null; ship_to: string | null; advanced_filters: string | null;
-  } | undefined;
-
-  if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const event = await getOwnedEvent(db, ctx, event_id);
+  if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Concurrency guard: the UI already disables the launch control while a run
   // is active, but nothing server-side stopped a second request (double-click,
@@ -168,15 +173,28 @@ export async function POST(req: NextRequest) {
           metadata: { wave: waveNumber },
         });
 
-        send({ type: "wave_start", wave: waveNumber, message: `🧠 Orchestrator planning Wave ${waveNumber} strategy...` });
+        send({
+          type: "wave_start", wave: waveNumber,
+          message: isTargeted
+            ? `🔎 Deepening ${targeted!.length} quick-scan candidate${targeted!.length === 1 ? "" : ""}...`
+            : `🧠 Orchestrator planning Wave ${waveNumber} strategy...`,
+        });
 
-        // Run orchestrator to plan agents
-        const plan = await runOrchestrator(
-          categoryLabel, event.description,
-          effectiveRequirements, event.annual_spend, waveNumber,
-          event.target_countries || "",
-          track("orchestrator", AGENT_MODELS.orchestrator)
-        );
+        // Run orchestrator to plan agents — UNLESS this is a "Deepen" wave
+        // (isTargeted), in which case we already know exactly what to do
+        // (verify these specific candidates) and skip the Opus planning call
+        // entirely, synthesizing a single targeted-scout agent-plan entry.
+        const plan = isTargeted
+          ? {
+              strategy: `Verify ${targeted!.length} quick-scan candidate${targeted!.length === 1 ? "" : "s"} via web search before treating them as qualified suppliers.`,
+              agents: [{ id: "targeted-scout", type: "targeted-scout", label: "Targeted Verification Scout", focus: "Verify quick-scan candidates" }],
+            }
+          : await runOrchestrator(
+              categoryLabel, event.description,
+              effectiveRequirements, event.annual_spend, waveNumber,
+              event.target_countries || "",
+              track("orchestrator", AGENT_MODELS.orchestrator)
+            );
 
         send({ type: "strategy", wave: waveNumber, strategy: plan.strategy, agents: plan.agents });
 
@@ -192,24 +210,10 @@ export async function POST(req: NextRequest) {
         // Get existing suppliers (name + website) to avoid duplicates across waves.
         const existing = await db.prepare("SELECT name, website FROM suppliers WHERE event_id=?").all(event.id) as { name: string; website: string | null }[];
 
-        // Dedup on BOTH a normalized company name and a website domain, so
-        // "Acme Manufacturing Inc." and "Acme Mfg" (or two listings that share a
-        // domain) collapse to one. Exact-string matching leaked obvious dupes.
-        const normName = (n: string) =>
-          (n || "")
-            .toLowerCase()
-            .replace(/\b(inc|llc|ltd|limited|gmbh|corp|corporation|co|company|srl|spa|sa|ag|kg|bv|plc|pvt|pte|group|holding|holdings|industries|manufacturing|mfg)\b/g, "")
-            .replace(/[^a-z0-9]/g, "");
-        const domainOf = (url: string | null | undefined) => {
-          if (!url) return "";
-          return url
-            .toLowerCase()
-            .replace(/^https?:\/\//, "")
-            .replace(/^www\./, "")
-            .split("/")[0]
-            .trim();
-        };
-
+        // normName/domainOf (dedup on BOTH a normalized company name and a
+        // website domain, so "Acme Manufacturing Inc." and "Acme Mfg" — or two
+        // listings that share a domain — collapse to one) now live in
+        // lib/dedup.ts, shared with app/api/investigate-quick/route.ts.
         const seenNames = new Set<string>();
         const seenDomains = new Set<string>();
         for (const s of existing) {
@@ -271,6 +275,60 @@ export async function POST(req: NextRequest) {
         const backgroundSchedule = createTaskPool(Math.max(1, Number(process.env.BACKGROUND_TASK_CONCURRENCY) || 8));
 
         // Run one scout end-to-end: scout → dedup claim → qualify/enrich pool.
+        // "Deepen" path: re-verify specific existing (unverified) quick-scan
+        // rows via runTargetedScoutAgent, then UPDATE them in place through
+        // makeProcessSupplierDeepen — never INSERT a new row, never touch the
+        // dedup/cap machinery above (that's for discovering NEW suppliers).
+        const runTargetedDeepen = async (agent: (typeof plan.agents)[number]) => {
+          await db.prepare(`UPDATE agent_runs SET status='running', message=?, started_at=datetime('now')
+                      WHERE event_id=? AND agent_id=? AND wave=?`)
+            .run(`Verifying ${targeted!.length} candidate${targeted!.length === 1 ? "" : "s"}...`, event.id, agent.id, waveNumber);
+
+          send({ type: "agent_start", agent_id: agent.id, agent_label: agent.label, wave: waveNumber });
+
+          const processDeepen = makeProcessSupplierDeepen({
+            db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
+            annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
+            schedule: backgroundSchedule,
+          }, agent);
+
+          let verified = 0;
+          for (const t of targeted!) {
+            const existing = await db.prepare("SELECT * FROM suppliers WHERE id=? AND event_id=?")
+              .get(t.supplierId, event.id) as Supplier | undefined;
+            if (!existing) continue; // not found, or not this event's row — skip defensively
+
+            let result;
+            try {
+              result = await runTargetedScoutAgent(
+                { name: existing.name, country: existing.country, website: existing.website || "" },
+                categoryLabel, event.description, effectiveRequirements, event.annual_spend,
+                track("scout", AGENT_MODELS.targetedScout)
+              );
+            } catch (err) {
+              send({ type: "agent_error", agent_id: agent.id, message: String(err) });
+              continue;
+            }
+
+            if (!result || !result.name) {
+              send({
+                type: "supplier_updated", id: existing.id,
+                message: `Could not verify "${existing.name}" — it may not be a real, discoverable company.`,
+              });
+              continue;
+            }
+
+            await processDeepen(existing.id, result);
+            verified++;
+          }
+
+          await db.prepare(`UPDATE agent_runs SET status='complete', message=?, completed_at=datetime('now')
+                      WHERE event_id=? AND agent_id=? AND wave=?`)
+            .run(`Verified ${verified} candidate${verified === 1 ? "" : "s"}`, event.id, agent.id, waveNumber);
+          send({ type: "agent_complete", agent_id: agent.id, agent_label: agent.label, suppliers_found: verified });
+          newSuppliers += verified;
+        };
+
         const runScout = async (agent: (typeof plan.agents)[number]) => {
           await db.prepare(`UPDATE agent_runs SET status='running', message=?, started_at=datetime('now')
                       WHERE event_id=? AND agent_id=? AND wave=?`)
@@ -374,7 +432,7 @@ export async function POST(req: NextRequest) {
         const sWorker = async () => {
           while (sCursor < plan.agents.length) {
             const idx = sCursor++;
-            await runScout(plan.agents[idx]);
+            await (isTargeted ? runTargetedDeepen(plan.agents[idx]) : runScout(plan.agents[idx]));
           }
         };
         await Promise.all(Array.from({ length: Math.min(scoutConcurrency, plan.agents.length) }, sWorker));

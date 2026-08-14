@@ -93,6 +93,32 @@ export function requireRole(ctx: OrgContext, min: OrgRole): NextResponse | null 
   );
 }
 
+// Extracted from app/api/orchestrate/route.ts's inline ownership check
+// (Quick Investigation, Step 6) so app/api/investigate-quick/route.ts can
+// reuse the exact same lookup-and-authorize logic instead of duplicating it.
+export type OwnedEventRow = {
+  id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
+  requirements: string; annual_spend: string; wave_count: number; status: string | null; updated_at: string | null;
+  target_countries: string | null; ship_to: string | null; advanced_filters: string | null;
+};
+
+/**
+ * Look up a sourcing event by id and return it ONLY if it belongs to the
+ * caller's org — returns null on both "not found" and "not yours" so callers
+ * can 404 either case identically (never leak existence of another org's event).
+ */
+export async function getOwnedEvent(
+  db: ReturnType<typeof getDb>,
+  ctx: OrgContext,
+  eventId: number | string
+): Promise<OwnedEventRow | null> {
+  const event = (await db
+    .prepare("SELECT * FROM sourcing_events WHERE id = ?")
+    .get(Number(eventId))) as OwnedEventRow | undefined;
+  if (!event || Number(event.org_id) !== ctx.orgId) return null;
+  return event;
+}
+
 /**
  * Assert that a sourcing event belongs to the caller's org.
  * Returns true if owned; false otherwise (caller should 404/403).

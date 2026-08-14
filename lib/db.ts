@@ -297,6 +297,14 @@ async function initSchema(): Promise<void> {
     -- locking the supplier out of outreach forever — see lib/outreach-claim.ts.
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS outreach_claimed_at TIMESTAMPTZ;
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS followup_claimed_at TIMESTAMPTZ;
+    -- Quick Investigation (fast, names-only scan): a row inserted by
+    -- /api/investigate-quick is unverified — no web_search, no qualification,
+    -- no enrichment/contact discovery. Flagged so the UI can label it clearly
+    -- and so places that assume verified data (outreach, longListCount) can
+    -- exclude it. Flips to false once "Deepen into full investigation" has
+    -- re-processed the row through the real scout→qualify→enrich→contact
+    -- pipeline (see lib/process-supplier.ts's update-existing-row mode).
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS is_quick_result BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
@@ -504,6 +512,10 @@ export type Supplier = {
   contact_linkedin: string | null;
   scout_agent: string | null;
   wave: number;
+  // Quick Investigation (fast, names-only scan): see the matching ALTER TABLE
+  // comment above. True until "Deepen into full investigation" re-processes
+  // the row through the real pipeline.
+  is_quick_result: boolean;
   ai_score: number | null;
   score_rationale: string | null;
   score_breakdown: string | null;

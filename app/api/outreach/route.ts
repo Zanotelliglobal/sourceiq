@@ -96,12 +96,17 @@ export async function POST(req: NextRequest) {
   // that opted out (or requested erasure, #99) in a PAST sourcing event must
   // stay suppressed even though this event's supplier row is brand new.
   const suppressionClause = `AND (contact_email IS NULL OR LOWER(contact_email) NOT IN (SELECT email FROM suppression_list WHERE org_id=?))`;
+  // Quick Investigation: is_quick_result rows are unverified, names-only
+  // guesses (no web_search, no qualification) — they must never enter
+  // outreach. Excluded from BOTH the explicit-selection query and the
+  // default long_list query (not just the latter) so a caller can't bypass
+  // the exclusion by passing an unverified row's id explicitly.
   const targets = (Array.isArray(supplier_ids) && supplier_ids.length > 0
     ? await db.prepare(
-        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND id IN (${supplier_ids.map(() => "?").join(",")})`
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND is_quick_result = false ${suppressionClause} AND id IN (${supplier_ids.map(() => "?").join(",")})`
       ).all(event.id, ctx.orgId, ...supplier_ids)
     : await db.prepare(
-        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE ${suppressionClause} AND funnel_stage='long_list' ORDER BY ai_score DESC`
+        `SELECT * FROM suppliers WHERE event_id=? AND opted_out IS NOT TRUE AND is_quick_result = false ${suppressionClause} AND funnel_stage='long_list' ORDER BY ai_score DESC`
       ).all(event.id, ctx.orgId)) as {
     id: number; name: string; country: string; ai_score: number | null; contact_email: string | null; website: string | null; contact_url: string | null;
   }[];
