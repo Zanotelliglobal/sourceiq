@@ -91,7 +91,7 @@ export default function SettingsPage() {
         </Link>
 
         {/* Support */}
-        <a href="mailto:support@sourceiq.app" className="card px-5 py-4 flex items-center gap-3 hover:bg-slate-50/60 transition-colors">
+        <a href="mailto:support@sourceiq.org" className="card px-5 py-4 flex items-center gap-3 hover:bg-slate-50/60 transition-colors">
           <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center flex-shrink-0">
             <LifeBuoy className="w-4.5 h-4.5 text-slate-500" />
           </div>
