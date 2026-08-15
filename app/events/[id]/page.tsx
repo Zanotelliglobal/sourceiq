@@ -881,7 +881,9 @@ function SupplierRow({ supplier, rank, onClick, onMove, onDeepen, deepenDisabled
               onClick={() => onDeepen(supplier.id)}
               disabled={deepenDisabled}
               className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed border border-blue-200 px-2 py-1 rounded-lg transition-colors"
-              title={t("Re-run this supplier through the full verification pipeline")}
+              title={deepenDisabled
+                ? t("Wait for the current discovery run to finish before deepening a result")
+                : t("Re-run this supplier through the full verification pipeline")}
             >
               {deepening ? (
                 <div className="w-2.5 h-2.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -1473,10 +1475,22 @@ export default function EventPage() {
   // Whether the org's plan permits exporting (CSV). Free tiers see an upgrade
   // prompt instead of the export button.
   const [canExport, setCanExport] = useState(true);
+  // Whether the org's plan permits live outreach sends. Free/Basic tiers see
+  // an "Upgrade for outreach" Link instead of the Auto-Outreach button — same
+  // treatment as canExport above, so a buyer never clicks a button just to
+  // get a 402 toast (audit F: "Auto-Outreach button appears even for tiers
+  // without outreach").
+  const [canOutreach, setCanOutreach] = useState(true);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
   const autostartedRef = useRef(false);
+  // If ?autostart=1/quick is present but nothing actually kicked off within a
+  // few seconds (event fetch stalled, the guard's conditions never lined up,
+  // or the launch call failed before setting any visible state), the user is
+  // otherwise left staring at an idle page with no indication anything went
+  // wrong. Surface an inline hint pointing at the manual buttons instead.
+  const [autostartHint, setAutostartHint] = useState(false);
   // Quick Investigation: fast, names-only scan. A single simple loading state
   // (no step-by-step process feed — deliberate UX decision) that shares the
   // `busy`/concurrency lock with the full-wave button below, so the two can
@@ -1502,7 +1516,12 @@ export default function EventPage() {
   useEffect(() => {
     fetch("/api/usage")
       .then(r => r.json())
-      .then(d => { if (d?.limits) setCanExport(Boolean(d.limits.export)); })
+      .then(d => {
+        if (d?.limits) {
+          setCanExport(Boolean(d.limits.export));
+          setCanOutreach(Boolean(d.limits.outreach));
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -1749,19 +1768,58 @@ export default function EventPage() {
     }
   }
 
-  // Auto-launch the first discovery wave when arriving straight from event
-  // creation (?autostart=1), so users don't have to click "Launch Discovery"
-  // themselves. Guarded to fire once, and only for a fresh event with no waves.
+  // Auto-launch the first action when arriving straight from event creation,
+  // so users don't have to click a button themselves. ?autostart=1 launches
+  // the full discovery wave; ?autostart=quick launches the fast, names-only
+  // Quick Scan instead (the "New Event" page offers both as separate CTAs).
+  // Guarded to fire once, and only for a fresh event with no waves/suppliers.
   useEffect(() => {
     if (autostartedRef.current) return;
     if (typeof window === "undefined") return;
-    if (new URLSearchParams(window.location.search).get("autostart") !== "1") return;
+    const autostart = new URLSearchParams(window.location.search).get("autostart");
+    if (autostart !== "1" && autostart !== "quick") return;
     if (loading || !event) return;
-    if (running || (event.wave_count ?? 0) > 0 || suppliers.length > 0) return;
+    if (running || quickScanning || (event.wave_count ?? 0) > 0 || suppliers.length > 0) return;
     autostartedRef.current = true;
-    void runWave();
+    if (autostart === "quick") {
+      void runQuickScan();
+    } else {
+      void runWave();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, event, running, suppliers.length]);
+  }, [loading, event, running, quickScanning, suppliers.length]);
+
+  // Tracks whether *anything* has actually started/progressed since mount —
+  // read from a ref (not state) inside the timeout below so the check always
+  // sees the latest value regardless of when the timer fires.
+  const autostartProgressedRef = useRef(false);
+  useEffect(() => {
+    if (running || quickScanning || (event?.wave_count ?? 0) > 0 || suppliers.length > 0) {
+      autostartProgressedRef.current = true;
+    }
+  }, [running, quickScanning, event, suppliers.length]);
+
+  // If ?autostart is present but nothing has progressed a few seconds after
+  // mount — the event fetch stalled, the launch guard's conditions never all
+  // lined up at once, or the launch call itself failed before setting any
+  // visible state — surface a hint pointing at the manual buttons instead of
+  // leaving the user staring at an idle page with no explanation.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const autostart = new URLSearchParams(window.location.search).get("autostart");
+    if (autostart !== "1" && autostart !== "quick") return;
+    const timer = window.setTimeout(() => {
+      if (!autostartProgressedRef.current) setAutostartHint(true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Dismiss the hint automatically once the user (or a delayed autostart)
+  // actually gets something running, so it doesn't linger over a working page.
+  useEffect(() => {
+    if ((running || quickScanning) && autostartHint) setAutostartHint(false);
+  }, [running, quickScanning, autostartHint]);
 
   async function moveStage(supplierId: number, stage: string, opts?: { silent?: boolean }) {
     const prevStage = suppliers.find(s => s.id === supplierId)?.funnel_stage;
@@ -2150,6 +2208,13 @@ export default function EventPage() {
           <button
             onClick={() => void runWave()}
             disabled={busy || serverWorking}
+            title={
+              running || serverWorking ? t("A discovery run is already in progress for this event")
+              : quickScanning ? t("Wait for the current Quick Scan to finish first")
+              : campaigning ? t("Wait for the current outreach campaign to finish first")
+              : suppliers.length > 0 ? t("Launch another discovery wave to find more suppliers")
+              : undefined
+            }
             className="btn-cta w-full justify-center mt-2 py-2"
           >
             {running || serverWorking ? (
@@ -2168,7 +2233,11 @@ export default function EventPage() {
           <button
             onClick={() => void runQuickScan()}
             disabled={busy || serverWorking}
-            title={t("Fast, unverified name suggestions — no web research. Use \"Deepen\" on a result to verify it for real.")}
+            title={
+              running || serverWorking ? t("A discovery run is already in progress for this event")
+              : campaigning ? t("Wait for the current outreach campaign to finish first")
+              : t("Fast, unverified name suggestions — no web research. Use \"Deepen\" on a result to verify it for real.")
+            }
             className="btn-secondary w-full justify-center mt-2 py-2"
           >
             {quickScanning ? (
@@ -2178,19 +2247,56 @@ export default function EventPage() {
             )}
           </button>
 
-          {/* Agentic outreach campaign */}
+          {/* ?autostart=1/quick didn't visibly kick anything off within 5s of
+              mount (stalled event fetch, guard conditions never all lined up,
+              or the launch call failed silently) — point at the manual
+              buttons above instead of leaving the page looking idle/broken. */}
+          {autostartHint && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+              <span className="flex-1">{t("Discovery didn't auto-start — click Launch Discovery or Quick Scan above.")}</span>
+              <button
+                onClick={() => setAutostartHint(false)}
+                aria-label={t("Dismiss")}
+                className="flex-shrink-0 text-amber-500 hover:text-amber-700"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Agentic outreach campaign — tier-gated the same way the Export
+              button is: an org whose plan doesn't include outreach sees an
+              "Upgrade for outreach" Link instead of a button that would just
+              402 on click (audit finding: this previously showed the real
+              button to every tier). */}
           {longListCount > 0 && (
-            <button
-              onClick={() => setConfirmCampaign(true)}
-              disabled={busy}
-              className="btn-secondary w-full justify-center mt-2 py-2"
-            >
-              {campaigning ? (
-                <><div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-600 rounded-full animate-spin" /> {t("Contacting...")}</>
-              ) : (
-                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> {t("Auto-Outreach ({n})", { n: longListCount })}</>
-              )}
-            </button>
+            canOutreach ? (
+              <button
+                onClick={() => setConfirmCampaign(true)}
+                disabled={busy}
+                title={
+                  running ? t("Wait for the current discovery run to finish first")
+                  : quickScanning ? t("Wait for the current Quick Scan to finish first")
+                  : undefined
+                }
+                className="btn-secondary w-full justify-center mt-2 py-2"
+              >
+                {campaigning ? (
+                  <><div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-600 rounded-full animate-spin" /> {t("Contacting...")}</>
+                ) : (
+                  <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> {t("Auto-Outreach ({n})", { n: longListCount })}</>
+                )}
+              </button>
+            ) : (
+              <Link
+                href="/billing"
+                title={t("Live supplier outreach is available on Growth and higher plans.")}
+                className="btn-secondary w-full justify-center mt-2 py-2 text-blue-700 border-blue-200 bg-blue-50 hover:bg-blue-100"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                {t("Upgrade for outreach")}
+              </Link>
+            )
           )}
           {busy && (
             <button
@@ -2453,15 +2559,26 @@ export default function EventPage() {
                   {exportMenuOpen && (
                     <div role="menu" className="absolute right-0 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-20 py-1">
                       {suppliers.some(s => s.is_quick_result) && (
-                        <label className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-600 border-b border-slate-100 cursor-pointer hover:bg-slate-50">
-                          <input
-                            type="checkbox"
-                            checked={includeQuickInExport}
-                            onChange={(e) => setIncludeQuickInExport(e.target.checked)}
-                            className="w-3.5 h-3.5 rounded border-slate-300"
-                          />
-                          {t("Include unverified quick-scan results")}
-                        </label>
+                        <div className="border-b border-slate-100">
+                          <label className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-600 cursor-pointer hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={includeQuickInExport}
+                              onChange={(e) => setIncludeQuickInExport(e.target.checked)}
+                              className="w-3.5 h-3.5 rounded border-slate-300"
+                            />
+                            {t("Include unverified quick-scan results")}
+                          </label>
+                          {/* Without this, unchecking silently drops rows from the
+                              export with no indication anything was excluded. */}
+                          {!includeQuickInExport && suppliers.some(s => s.is_quick_result && filtered.includes(s)) && (
+                            <p className="px-3 pb-1.5 text-[10px] text-amber-700">
+                              {t("{n} quick-scan result(s) hidden from export — check the box above to include them.", {
+                                n: filtered.filter(s => s.is_quick_result).length,
+                              })}
+                            </p>
+                          )}
+                        </div>
                       )}
                       {([
                         { key: "csv" as const, label: t("Export CSV"), run: exportCsv },

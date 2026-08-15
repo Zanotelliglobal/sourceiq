@@ -117,12 +117,16 @@ export default function Dashboard() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [supplierResults, setSupplierResults] = useState<SearchSupplierHit[]>([]);
   const [searchingSuppliers, setSearchingSuppliers] = useState(false);
+  // Keyboard nav (#92 follow-up): which result the Up/Down arrows have
+  // highlighted, so the combobox is usable without a mouse — previously
+  // the listbox only supported click-selection.
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [trial, setTrial] = useState<{ status: string; trial_ends_at: string | null; active: boolean } | null>(null);
   const [usage, setUsage] = useState<{
     tier: string; tier_name: string; unlimited: number;
     events_this_month: number; events_remaining: number | null;
     tokens_used: number; cost_usd: number;
-    limits: { eventsPerMonth: number };
+    limits: { eventsPerMonth: number; suppliersPerEvent: number; maxEventSpendUsd: number };
   } | null>(null);
 
   useEffect(() => {
@@ -224,6 +228,27 @@ export default function Dashboard() {
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [query, searchFocused]);
+
+  // A fresh result set invalidates whatever was highlighted before.
+  useEffect(() => { setActiveIndex(-1); }, [supplierResults]);
+
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!searchFocused || query.trim().length < 2 || supplierResults.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex(i => (i + 1) % supplierResults.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex(i => (i <= 0 ? supplierResults.length - 1 : i - 1));
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0 && activeIndex < supplierResults.length) {
+        e.preventDefault();
+        router.push(`/events/${supplierResults[activeIndex].event_id}`);
+      }
+    } else if (e.key === "Escape") {
+      setSearchFocused(false);
+    }
+  }
 
   const activeEvents = events.filter(e => !e.archived);
   const archivedCount = events.length - activeEvents.length;
@@ -512,7 +537,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           {trialBadge && (
             <Link
-              href="/billing"
+              href={trialBadge.ended || trialBadge.days <= 3 ? "/billing?reason=trial-ending" : "/billing"}
               className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
                 trialBadge.ended
                   ? "text-red-700 bg-red-50 border-red-100 hover:bg-red-100"
@@ -564,7 +589,7 @@ export default function Dashboard() {
             <span className="badge badge-blue">{t(usage.tier_name)}</span>
             <span className="text-xs text-slate-500">{t("Usage this month")}</span>
           </div>
-          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div>
               <div className="text-sm font-bold text-slate-900">
                 {usage.events_this_month}
@@ -579,6 +604,22 @@ export default function Dashboard() {
             <div>
               <div className="text-sm font-bold text-slate-900">${usage.cost_usd.toFixed(2)}</div>
               <div className="text-xs text-slate-500">{t("Estimated cost")}</div>
+            </div>
+            {/* F10: these two are per-event ceilings (not a monthly running total
+                like the cells above), so there's no "used" counter to show here —
+                just the cap itself, which was previously invisible anywhere until
+                a buyer actually hit it and got a 402 mid-event. */}
+            <div>
+              <div className="text-sm font-bold text-slate-900">
+                {usage.limits.suppliersPerEvent === usage.unlimited ? t("Unlimited") : usage.limits.suppliersPerEvent}
+              </div>
+              <div className="text-xs text-slate-500">{t("Suppliers per event")}</div>
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900">
+                {usage.limits.maxEventSpendUsd === usage.unlimited ? t("Unlimited") : `$${usage.limits.maxEventSpendUsd}`}
+              </div>
+              <div className="text-xs text-slate-500">{t("AI spend cap per event")}</div>
             </div>
           </div>
           {usage.events_remaining !== null && usage.events_remaining <= 1 && (
@@ -636,15 +677,20 @@ export default function Dashboard() {
                   onFocus={() => setSearchFocused(true)}
                   // Delay so a click on a dropdown result registers before it unmounts.
                   onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                  onKeyDown={onSearchKeyDown}
                   placeholder={t("Search events & suppliers…")}
                   // #92: this is a search-typeahead combobox — expose it as one so
                   // AT users get "combobox, expanded/collapsed" + the results
                   // listbox announced, instead of a plain unlabeled text input.
+                  // Arrow-key navigation (Up/Down/Enter/Escape, see
+                  // onSearchKeyDown) + aria-activedescendant close the gap
+                  // where the listbox previously only supported mouse clicks.
                   role="combobox"
                   aria-autocomplete="list"
                   aria-haspopup="listbox"
                   aria-expanded={searchFocused && query.trim().length >= 2}
                   aria-controls="dashboard-search-results"
+                  aria-activedescendant={activeIndex >= 0 && supplierResults[activeIndex] ? `dashboard-search-option-${supplierResults[activeIndex].id}` : undefined}
                   className="w-full sm:w-64 pl-8 pr-7 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                 />
                 {query && (
@@ -676,13 +722,17 @@ export default function Dashboard() {
                         <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100">
                           {t("Suppliers across your projects")}
                         </div>
-                        {supplierResults.map(s => (
+                        {supplierResults.map((s, i) => (
                           <button
                             key={s.id}
+                            id={`dashboard-search-option-${s.id}`}
                             role="option"
-                            aria-selected="false"
+                            aria-selected={i === activeIndex}
+                            onMouseEnter={() => setActiveIndex(i)}
                             onClick={() => router.push(`/events/${s.event_id}`)}
-                            className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+                            className={`w-full text-left px-3 py-2 transition-colors border-b border-slate-50 last:border-0 ${
+                              i === activeIndex ? "bg-blue-50" : "hover:bg-slate-50"
+                            }`}
                           >
                             <div className="text-sm font-semibold text-slate-800 truncate">{s.name}</div>
                             <div className="text-xs text-slate-500 truncate">

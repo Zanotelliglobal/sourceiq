@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Minus } from "lucide-react";
+import { ArrowLeft, Check, Minus, X } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import {
@@ -53,6 +53,18 @@ export default function BillingPage() {
   const [cancelImpactOpen, setCancelImpactOpen] = useState(false);
   const [impact, setImpact] = useState<CancelImpact | null>(null);
   const [impactLoading, setImpactLoading] = useState(false);
+  // Dashboard's trial badge links here with `?reason=trial-ending` once the
+  // trial has <=3 days left (or has ended) so the pitch below is tailored to
+  // why the user landed on this page instead of a generic "manage billing"
+  // page. Read via window.location (not next/navigation's useSearchParams) so
+  // this client component doesn't need a <Suspense> boundary just for a
+  // decorative banner.
+  const [trialEndingIntent, setTrialEndingIntent] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setTrialEndingIntent(new URLSearchParams(window.location.search).get("reason") === "trial-ending");
+  }, []);
 
   useEffect(() => {
     fetch("/api/billing/status")
@@ -139,6 +151,15 @@ export default function BillingPage() {
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("Billing & Subscription")}</h1>
         <p className="text-sm text-slate-500 mt-1">{t("Manage your SourceIQ plan and payment details.")}</p>
       </div>
+
+      {trialEndingIntent && (
+        <div className="mb-6 flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <span className="flex-1">{t("Your free trial is ending soon — pick a plan below to keep sourcing without interruption.")}</span>
+          <button onClick={() => setTrialEndingIntent(false)} aria-label={t("Dismiss")} className="flex-shrink-0 text-amber-500 hover:text-amber-700">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="card p-10"><div className="shimmer h-6 w-48 rounded" /></div>

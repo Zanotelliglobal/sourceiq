@@ -24,6 +24,12 @@ const CATEGORIES = [
   "Other",
 ];
 
+// Below this confidence, the classifier's guess is more likely wrong than
+// right — silently auto-selecting it just makes a bad pick harder to notice
+// than an empty field would. Below the threshold, surface the same "pick one
+// below" prompt used for outright classify failures instead of auto-selecting.
+const LOW_CONFIDENCE_THRESHOLD = 55;
+
 const SPEND_RANGES = [
   "< $500K / year",
   "$500K – $1M / year",
@@ -132,17 +138,32 @@ export default function NewEventPage() {
   const [autoDetected, setAutoDetected] = useState(false); // category came from AI, not a manual click
   const [confidence, setConfidence] = useState<number | null>(null);
   const [classifyFailed, setClassifyFailed] = useState(false); // auto-detect errored → prompt manual pick
+  const [lowConfidence, setLowConfidence] = useState(false); // classifier returned a guess, but below LOW_CONFIDENCE_THRESHOLD
   const [showUpgrade, setShowUpgrade] = useState(false); // trial ended / no active plan (402)
-  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  // Which 402 reason triggered the gate — "subscription_required" (no active
+  // plan/trial ended) vs "event_limit_reached" (on a real plan, but hit the
+  // monthly event cap) need different copy, and neither implies "Pro" is the
+  // right tier to recommend, so the gate no longer guesses a tier at all —
+  // it just tailors the message and sends the user to /billing to pick.
+  const [upgradeCode, setUpgradeCode] = useState<string | null>(null);
+  const [upgradeMeta, setUpgradeMeta] = useState<{ limit?: number; used?: number }>({});
+  // Which action is in flight: a full discovery wave or a fast, names-only
+  // Quick Scan. Both forms below offer both as separate CTAs — previously
+  // event creation always auto-launched full discovery (?autostart=1),
+  // which meant Quick Scan was unreachable for a brand-new event (its
+  // button on the event page is disabled the instant discovery starts).
+  // Tracked per-form so each shows its own loading state independently.
+  const [quickLaunchMode, setQuickLaunchMode] = useState<"1" | "quick">("1");
+  const [advancedLaunchMode, setAdvancedLaunchMode] = useState<"1" | "quick">("1");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryTouchedRef = useRef(false); // user manually picked → stop auto-overriding
 
   // Escape/Tab-trap/focus-restore for this modal now lives in UpgradeGateModal
   // itself via useModalA11y (#90) — only mounted while showUpgrade is true, so
-  // there's no always-on document listener when the gate isn't showing.
-  const closeUpgradeGate = useCallback(() => {
-    if (!upgradeBusy) setShowUpgrade(false);
-  }, [upgradeBusy]);
+  // there's no always-on document listener when the gate isn't showing. No
+  // "busy" state to gate on anymore — the modal only ever navigates to
+  // /billing now, so closing is always safe.
+  const closeUpgradeGate = useCallback(() => setShowUpgrade(false), []);
 
   const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }));
   const toggleCountry = (c: string) =>
@@ -157,6 +178,7 @@ export default function NewEventPage() {
     if (description.trim().length < 12) return;
     setClassifying(true);
     setClassifyFailed(false);
+    setLowConfidence(false);
     try {
       const res = await fetch("/api/classify", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -166,9 +188,16 @@ export default function NewEventPage() {
       const r = await res.json() as { category: string; subcategory: string; confidence: number };
       if (categoryTouchedRef.current) return;         // user clicked while we waited
       if (!r.category) { setClassifyFailed(true); return; }
+      const conf = typeof r.confidence === "number" ? r.confidence : null;
+      setConfidence(conf);
+      if (conf != null && conf < LOW_CONFIDENCE_THRESHOLD) {
+        // Below the threshold — surface the guess's confidence but don't
+        // silently pick a category the model itself isn't sure about.
+        setLowConfidence(true);
+        return;
+      }
       setForm(f => ({ ...f, category: r.category, subcategory: r.subcategory || "" }));
       setAutoDetected(true);
-      setConfidence(typeof r.confidence === "number" ? r.confidence : null);
     } catch {
       setClassifyFailed(true);      // surface failure so the user knows to pick manually
     }
@@ -194,6 +223,7 @@ export default function NewEventPage() {
     categoryTouchedRef.current = true;
     setAutoDetected(false);
     setConfidence(null);
+    setLowConfidence(false);
     set("category", c);
   };
 
@@ -209,8 +239,9 @@ export default function NewEventPage() {
     return m ? m[1].trim() : "";
   }
 
-  async function handleQuickSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Shared by both the primary "Launch AI Discovery" submit and the secondary
+  // "Quick Scan instead" action — only the resulting `autostart` value differs.
+  async function submitQuickSource(mode: "1" | "quick") {
     const sentence = quickInput.trim();
     if (sentence.length < 12) {
       setQuickError(t("Add a little more detail so we can find the right suppliers."));
@@ -218,6 +249,7 @@ export default function NewEventPage() {
     }
     setQuickError(null);
     setLoading(true);
+    setQuickLaunchMode(mode);
     try {
       // Infer the commodity category from the sentence (best-effort — never blocks).
       let category = "Other";
@@ -253,19 +285,38 @@ export default function NewEventPage() {
           outreach_anonymous: "true",
         }),
       });
-      if (res.status === 402) { setShowUpgrade(true); setLoading(false); return; }
+      if (res.status === 402) {
+        const body = await res.json().catch(() => ({})) as { code?: string; limit?: number; used?: number };
+        setUpgradeCode(body.code || null);
+        setUpgradeMeta({ limit: body.limit, used: body.used });
+        setShowUpgrade(true);
+        setLoading(false);
+        return;
+      }
       if (!res.ok) throw new Error(t("Failed to create sourcing event"));
       const event = await res.json();
-      router.push(`/events/${event.id}?autostart=1`);
+      // autostart=1 → full discovery wave; autostart=quick → fast, names-only
+      // Quick Scan. Either way the event page kicks the action off itself, so
+      // the user doesn't have to click a button again after creating.
+      router.push(`/events/${event.id}?autostart=${mode}`);
     } catch (err) {
       setQuickError(String(err));
       setLoading(false);
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Wrapper for the form's onSubmit — always launches full discovery.
+  function handleQuickSubmit(e: React.FormEvent) {
     e.preventDefault();
+    void submitQuickSource("1");
+  }
+
+  // Shared by both the primary "Launch AI Discovery" submit and the secondary
+  // "Quick Scan instead" action on the advanced brief form — only the
+  // resulting `autostart` value differs.
+  async function submitAdvanced(mode: "1" | "quick") {
     setLoading(true);
+    setAdvancedLaunchMode(mode);
     try {
       const description = form.incumbent
         ? `${form.description}\n\nIncumbent: ${form.incumbent}`
@@ -274,36 +325,37 @@ export default function NewEventPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, description, subcategory: form.subcategory, target_countries: countries, ship_to: shipTo || null, advanced_filters: buildAdvancedFilters() }),
       });
-      // Billing gate: trial ended or no active plan → guide the user to upgrade
-      // instead of surfacing an opaque failure.
+      // Billing gate: trial ended, no active plan, or monthly event cap hit →
+      // guide the user to upgrade instead of surfacing an opaque failure.
       if (res.status === 402) {
+        const errBody = await res.json().catch(() => ({})) as { code?: string; limit?: number; used?: number };
+        setUpgradeCode(errBody.code || null);
+        setUpgradeMeta({ limit: errBody.limit, used: errBody.used });
         setShowUpgrade(true);
         setLoading(false);
         return;
       }
       if (!res.ok) throw new Error(t("Failed to create sourcing event"));
       const event = await res.json();
-      // autostart=1 → the event page kicks off the first discovery wave itself,
-      // so the user doesn't have to click "Launch Discovery" after creating.
-      router.push(`/events/${event.id}?autostart=1`);
+      // autostart=1 → full discovery wave; autostart=quick → fast, names-only
+      // Quick Scan. Either way the event page kicks the action off itself, so
+      // the user doesn't have to click a button again after creating.
+      router.push(`/events/${event.id}?autostart=${mode}`);
     } catch (err) {
       alert(String(err));
       setLoading(false);
     }
   }
 
-  async function startCheckout() {
-    setUpgradeBusy(true);
-    try {
-      const r = await fetch("/api/stripe/checkout", { method: "POST" });
-      const d = await r.json();
-      if (!r.ok || !d.url) throw new Error(d.error || t("Request failed"));
-      window.location.href = d.url;
-    } catch {
-      // Fall back to the full billing page if checkout can't start inline.
-      router.push("/billing");
-    }
+  // Wrapper for the advanced form's onSubmit — always launches full discovery.
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void submitAdvanced("1");
   }
+
+  // No inline checkout here anymore — the gate no longer guesses a tier (see
+  // upgradeCode above), it just sends the user to /billing to pick the right
+  // plan themselves.
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -358,7 +410,7 @@ export default function NewEventPage() {
               disabled={loading || quickInput.trim().length < 12}
               className="btn-primary w-full justify-center py-4 text-base"
             >
-              {loading ? (
+              {loading && quickLaunchMode === "1" ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   {t("Starting discovery…")}
@@ -372,6 +424,31 @@ export default function NewEventPage() {
                 </>
               )}
             </button>
+            <p className="text-xs text-slate-400 text-center -mt-0.5">
+              {t("Full web research on real suppliers, ~60-90s")}
+            </p>
+            <button
+              type="button"
+              disabled={loading || quickInput.trim().length < 12}
+              onClick={() => void submitQuickSource("quick")}
+              title={t("Fast, unverified name suggestions — no web research. Use \"Deepen\" on a result to verify it for real.")}
+              className="btn-secondary w-full justify-center py-2.5 text-sm"
+            >
+              {loading && quickLaunchMode === "quick" ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                  {t("Starting quick scan…")}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {t("Quick Scan instead — fast, unverified names")}
+                </>
+              )}
+            </button>
+            <p className="text-xs text-slate-400 text-center -mt-0.5">
+              {t("Fast name suggestions, ~10s — deepen individual results to verify")}
+            </p>
             <button
               type="button"
               onClick={() => setMode("advanced")}
@@ -450,6 +527,11 @@ export default function NewEventPage() {
               {!classifying && classifyFailed && !form.category && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
                   {t("Auto-detect unavailable — pick one below")}
+                </span>
+              )}
+              {!classifying && lowConfidence && !form.category && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
+                  {t("Not confident enough to guess — pick one below")}{confidence != null ? ` · ${confidence}%` : ""}
                 </span>
               )}
             </div>
@@ -834,7 +916,7 @@ export default function NewEventPage() {
               disabled={loading || !complete}
               className="btn-primary w-full justify-center py-4 text-base"
             >
-              {loading ? (
+              {loading && advancedLaunchMode === "1" ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   {t("Initialising sourcing event...")}
@@ -848,6 +930,31 @@ export default function NewEventPage() {
                 </>
               )}
             </button>
+            <p className="text-xs text-slate-400 text-center -mt-1.5">
+              {t("Full web research on real suppliers, ~60-90s")}
+            </p>
+            <button
+              type="button"
+              disabled={loading || !complete}
+              onClick={() => void submitAdvanced("quick")}
+              title={t("Fast, unverified name suggestions — no web research. Use \"Deepen\" on a result to verify it for real.")}
+              className="btn-secondary w-full justify-center py-2.5 text-sm"
+            >
+              {loading && advancedLaunchMode === "quick" ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                  {t("Starting quick scan…")}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {t("Quick Scan instead — fast, unverified names")}
+                </>
+              )}
+            </button>
+            <p className="text-xs text-slate-400 text-center -mt-1.5">
+              {t("Fast name suggestions, ~10s — deepen individual results to verify")}
+            </p>
             {!complete && (
               <p className="text-center text-xs text-slate-500">{t("Complete all required fields to proceed")}</p>
             )}
@@ -860,7 +967,7 @@ export default function NewEventPage() {
 
       {/* Upgrade gate — shown when event creation is blocked by billing (402) */}
       {showUpgrade && (
-        <UpgradeGateModal busy={upgradeBusy} onClose={closeUpgradeGate} onCheckout={startCheckout} />
+        <UpgradeGateModal code={upgradeCode} meta={upgradeMeta} onClose={closeUpgradeGate} />
       )}
     </div>
   );
@@ -869,39 +976,48 @@ export default function NewEventPage() {
 // Extracted (#90) so useModalA11y's Esc/Tab-trap/focus-restore only run while
 // this dialog is actually mounted, matching the pattern used for every other
 // modal in the app instead of a hand-rolled, always-on Escape listener.
-function UpgradeGateModal({ busy, onClose, onCheckout }: {
-  busy: boolean; onClose: () => void; onCheckout: () => void;
+//
+// Deliberately does NOT start a Stripe checkout itself (previously hardcoded
+// tier="pro" regardless of which plan the org actually needed — a Basic-tier
+// org hitting its monthly event cap would be walked into a Pro subscription).
+// The 402 `code` only tells us *why* creation was blocked, not which tier
+// fixes it, so instead of guessing, this always routes to /billing where the
+// real tier picker lives.
+function UpgradeGateModal({ code, meta, onClose }: {
+  code: string | null; meta: { limit?: number; used?: number }; onClose: () => void;
 }) {
   const t = useT();
   const dialogRef = useModalA11y(onClose);
+  const isEventLimit = code === "event_limit_reached";
+  const heading = isEventLimit ? t("Monthly event limit reached.") : t("Your free trial has ended.");
+  const body = isEventLimit
+    ? (typeof meta.used === "number" && typeof meta.limit === "number"
+      ? t("You've used {used} of {limit} sourcing events included on your current plan this month. Upgrade to create more.", { used: meta.used, limit: meta.limit })
+      : t("You've reached the sourcing-event limit included on your current plan this month. Upgrade to create more."))
+    : t("Subscribe to a plan to create unlimited sourcing events, run multi-wave discovery, and deploy live outreach.");
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={() => !busy && onClose()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4" onClick={onClose}>
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label={t("Your free trial has ended.")}
+        aria-label={heading}
         onClick={e => e.stopPropagation()}
         className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 animate-slide-in outline-none"
       >
         <div className="p-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-slate-900">{t("Your free trial has ended.")}</h3>
-            <button onClick={onClose} disabled={busy} aria-label={t("Cancel")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+            <h3 className="font-bold text-slate-900">{heading}</h3>
+            <button onClick={onClose} aria-label={t("Cancel")} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
           </div>
           <p className="text-sm text-slate-500 leading-relaxed mb-5">
-            {t("Subscribe to Pro to create unlimited sourcing events, run multi-wave discovery, and deploy live outreach.")}
+            {body}
           </p>
           <div className="flex items-center justify-end gap-2">
-            <Link href="/billing" className="btn-secondary py-2">{t("Manage subscription")}</Link>
-            <button onClick={onCheckout} disabled={busy} className="btn-primary py-2">
-              {busy ? (
-                <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {t("Redirecting…")}</>
-              ) : (
-                <><Sparkles className="w-3.5 h-3.5" /> {t("Subscribe to Pro")}</>
-              )}
-            </button>
+            <Link href="/billing" className="btn-primary py-2">
+              <Sparkles className="w-3.5 h-3.5" /> {t("View plans")}
+            </Link>
           </div>
         </div>
       </div>
