@@ -20,6 +20,7 @@ type ChecklistState = {
   totalCount: number;
   bonusEventsEarned: number;
   allComplete: boolean;
+  latestEventId: number | null;
 };
 
 const ICONS: Record<string, typeof Search> = {
@@ -29,10 +30,13 @@ const ICONS: Record<string, typeof Search> = {
   share_referral: Gift,
 };
 
-const CTA: Record<string, { label: string; href: string }> = {
+// shortlist_supplier/launch_outreach hrefs are resolved at render time (see
+// ctaHref below) — they need to deep-link into the buyer's actual event
+// rather than dumping them on /dashboard, which was the previous behavior.
+const CTA: Record<string, { label: string; href: string | null }> = {
   create_event: { label: "Create your first event", href: "/events/new" },
-  shortlist_supplier: { label: "Shortlist a supplier", href: "/dashboard" },
-  launch_outreach: { label: "Launch outreach", href: "/dashboard" },
+  shortlist_supplier: { label: "Shortlist a supplier", href: null },
+  launch_outreach: { label: "Launch outreach", href: null },
   share_referral: { label: "Share your referral link", href: "/settings" },
 };
 
@@ -78,7 +82,13 @@ export default function OnboardingChecklist() {
   }
 
   const nextTask = state.tasks.find((tk) => !tk.completedAt);
-  const cta = nextTask ? CTA[nextTask.key] : null;
+  const ctaDef = nextTask ? CTA[nextTask.key] : null;
+  // shortlist_supplier/launch_outreach route into the buyer's actual event;
+  // fall back to /dashboard only in the unexpected case where no event exists
+  // yet (should be impossible in practice — create_event always completes first).
+  const cta = ctaDef
+    ? { label: ctaDef.label, href: ctaDef.href ?? (state.latestEventId ? `/events/${state.latestEventId}` : "/dashboard") }
+    : null;
 
   return (
     <div className="card p-6 mb-8 relative overflow-hidden">

@@ -69,6 +69,10 @@ export type ChecklistState = {
   totalCount: number;
   bonusEventsEarned: number;
   allComplete: boolean;
+  /** Most recently created event's id, or null if the org has none yet — lets
+   * the checklist's "Shortlist a supplier"/"Launch outreach" CTAs deep-link
+   * into that actual event instead of dumping the buyer on /dashboard. */
+  latestEventId: number | null;
 };
 
 /** Parse the persisted checklist_progress JSON blob, tolerating bad/missing data. */
@@ -90,7 +94,10 @@ export function parseChecklistProgress(raw: string | null | undefined): Record<s
 }
 
 /** Build the full checklist view from a progress map. */
-export function buildChecklistState(progress: Record<string, string>): ChecklistState {
+export function buildChecklistState(
+  progress: Record<string, string>,
+  latestEventId: number | null = null
+): ChecklistState {
   const tasks = CHECKLIST_TASKS.map((def) => ({
     ...def,
     completedAt: progress[def.key] ?? null,
@@ -102,7 +109,16 @@ export function buildChecklistState(progress: Record<string, string>): Checklist
     totalCount: tasks.length,
     bonusEventsEarned: completedCount * CHECKLIST_TASK_BONUS_EVENTS,
     allComplete: completedCount === tasks.length,
+    latestEventId,
   };
+}
+
+/** The org's most recently created event id, or null if it has none yet. */
+async function getLatestEventId(db: Db, orgId: number): Promise<number | null> {
+  const row = (await db
+    .prepare("SELECT id FROM sourcing_events WHERE org_id = ? ORDER BY created_at DESC LIMIT 1")
+    .get(orgId)) as { id: number } | undefined;
+  return row ? Number(row.id) : null;
 }
 
 /**
@@ -192,7 +208,8 @@ export async function getChecklistState(db: Db, org: Organization): Promise<Chec
   if (newlyCompleted.length > 0) {
     await persistProgress(db, org.id, merged, newlyCompleted.length);
   }
-  return buildChecklistState(merged);
+  const latestEventId = await getLatestEventId(db, org.id);
+  return buildChecklistState(merged, latestEventId);
 }
 
 /**
@@ -208,12 +225,13 @@ export async function completeChecklistTask(
   key: ChecklistTaskKey
 ): Promise<ChecklistState> {
   const progress = parseChecklistProgress(org.checklist_progress);
+  const latestEventId = await getLatestEventId(db, org.id);
   if (!isExplicitlyCompletable(key)) {
-    return buildChecklistState(progress);
+    return buildChecklistState(progress, latestEventId);
   }
   const { merged, newlyCompleted } = mergeAutoDetected(progress, [key]);
   if (newlyCompleted.length > 0) {
     await persistProgress(db, org.id, merged, newlyCompleted.length);
   }
-  return buildChecklistState(merged);
+  return buildChecklistState(merged, latestEventId);
 }
