@@ -4,8 +4,8 @@ import { runOutreachAgent, runSupplierResponseAgent, resolveSupplierContact, AGE
 import { sendEmail, isMailLive, mailStatus, replyToAddress, withComplianceFooter, unsubscribeHeaders, rfiUrl } from "@/lib/mail";
 import { randomBytes } from "crypto";
 import { recordUsage, usageSummary, effectiveTier, checkOutreachAllowed, checkSpendCeiling } from "@/lib/usage";
-import { getOrgContext } from "@/lib/tenant";
-import { requireActiveSubscription } from "@/lib/billing";
+import { getOrgContext, getOwnedEvent, STALE_RUN_MS } from "@/lib/tenant";
+import { requireSpendableSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { rateLimit } from "@/lib/ratelimit";
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const gate = requireActiveSubscription(ctx.org);
+  const gate = requireSpendableSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
   const tier = effectiveTier(ctx.org);
@@ -50,12 +50,8 @@ export async function POST(req: NextRequest) {
   const { event_id, supplier_ids } = await req.json();
   const db = getDb();
 
-  const event = await db.prepare("SELECT * FROM sourcing_events WHERE id = ?").get(event_id) as {
-    id: number; org_id: number; category: string; requirements: string; annual_spend: string;
-    status: string | null; updated_at: string | null;
-    outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
-  } | undefined;
-  if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const event = await getOwnedEvent(db, ctx, event_id);
+  if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Concurrency guard: stop a double-click/replayed request/second tab from
   // starting an overlapping campaign against the same event, which would
@@ -66,7 +62,7 @@ export async function POST(req: NextRequest) {
   // downgraded in-memory for the read response.
   if (event.status === "scouting" || event.status === "outreach") {
     const updatedMs = event.updated_at ? new Date(event.updated_at).getTime() : 0;
-    const stale = !updatedMs || Date.now() - updatedMs > 5 * 60_000;
+    const stale = !updatedMs || Date.now() - updatedMs > STALE_RUN_MS;
     if (!stale) {
       return NextResponse.json(
         { error: "A run is already in progress for this event.", code: "run_in_progress" },

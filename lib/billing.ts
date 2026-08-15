@@ -45,8 +45,20 @@ export function resolvePriceId(tier: TierKey, cadence: Cadence): string | null {
   return null;
 }
 
-// Subscription statuses that grant access.
+// Subscription statuses that grant access to the app in general (viewing,
+// editing, creating events). Deliberately includes `past_due` — a grace
+// period while Stripe retries a failed card, so the org isn't locked out of
+// its own data.
 const ACTIVE_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+// Subscription statuses that grant access to actions that trigger NEW paid
+// LLM spend (discovery waves, outreach sends, follow-ups, Quick Scan).
+// Deliberately excludes `past_due` — unlike general access, we should not let
+// an org whose card has already failed keep running up real Anthropic-API
+// cost indefinitely while Stripe retries. `past_due` orgs can still view/edit
+// everything (see ACTIVE_STATUSES above); they just can't start new paid work
+// until the card is fixed and the subscription returns to `active`.
+const SPEND_GATED_STATUSES = new Set(["active", "trialing"]);
 
 export type GateResult = { ok: true } | { ok: false; reason: string };
 
@@ -64,6 +76,36 @@ export function requireActiveSubscription(org: Organization): GateResult {
 
   if (org.trial_ends_at && new Date(org.trial_ends_at).getTime() > Date.now()) {
     return { ok: true };
+  }
+
+  return {
+    ok: false,
+    reason: "Your trial has ended. Subscribe to continue running sourcing events.",
+  };
+}
+
+/**
+ * Stricter gate for anything that triggers NEW LLM spend (discovery waves,
+ * Quick Scan, outreach sends, follow-ups). Unlike `requireActiveSubscription`,
+ * a `past_due` subscription does NOT pass this gate — a customer whose card
+ * has failed should not be able to keep spending indefinitely while Stripe
+ * retries billing. They can still read/browse existing data via the general
+ * gate above; this only blocks *new* cost-incurring actions.
+ */
+export function requireSpendableSubscription(org: Organization): GateResult {
+  if (!isBillingConfigured()) return { ok: true }; // dev / not-yet-monetized
+
+  if (SPEND_GATED_STATUSES.has(org.subscription_status)) return { ok: true };
+
+  if (org.trial_ends_at && new Date(org.trial_ends_at).getTime() > Date.now()) {
+    return { ok: true };
+  }
+
+  if (org.subscription_status === "past_due") {
+    return {
+      ok: false,
+      reason: "Your last payment failed. Update your billing details to resume running sourcing events.",
+    };
   }
 
   return {

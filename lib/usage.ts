@@ -229,13 +229,42 @@ export function checkWaveLimit(tier: Tier, waveNumber: number): LimitCheck {
   return { ok: true };
 }
 
-/** Whether the event has room for more suppliers under the tier's per-event cap. */
+/**
+ * Whether the event has room for more suppliers under the tier's per-event
+ * cap. Counts only real, verified suppliers (`is_quick_result = false`) —
+ * unverified Quick Scan candidates are gated separately by
+ * `checkQuickScanLimit` below, and must not eat into the cap the buyer is
+ * actually paying for on real discovery.
+ */
 export async function checkSupplierLimit(db: Db, tier: Tier, eventId: number): Promise<LimitCheck> {
   const limit = tier.limits.suppliersPerEvent;
   if (limit === UNLIMITED) return { ok: true };
-  const row = await db.prepare("SELECT COUNT(*)::int AS c FROM suppliers WHERE event_id = ?").get(eventId) as { c: number } | undefined;
+  const row = await db.prepare(
+    "SELECT COUNT(*)::int AS c FROM suppliers WHERE event_id = ? AND is_quick_result = false"
+  ).get(eventId) as { c: number } | undefined;
   const used = Number(row?.c ?? 0);
   if (used >= limit) return { ok: false, reason: "supplier_limit_reached", limit, used };
+  return { ok: true };
+}
+
+/**
+ * Independent budget for UNVERIFIED Quick Scan candidates, separate from the
+ * real supplier cap above. Without this, excluding quick-result rows from
+ * `checkSupplierLimit` (so they don't steal real-discovery headroom) would
+ * otherwise leave Quick Scan itself completely uncapped — a Free-tier org
+ * could keep quick-scanning indefinitely (bounded only by the per-event $
+ * spend ceiling, which a cheap no-tools call barely dents). Capped at half
+ * the tier's real supplier cap; unlimited tiers stay unlimited.
+ */
+export async function checkQuickScanLimit(db: Db, tier: Tier, eventId: number): Promise<LimitCheck> {
+  const supplierLimit = tier.limits.suppliersPerEvent;
+  if (supplierLimit === UNLIMITED) return { ok: true };
+  const limit = Math.max(1, Math.ceil(supplierLimit / 2));
+  const row = await db.prepare(
+    "SELECT COUNT(*)::int AS c FROM suppliers WHERE event_id = ? AND is_quick_result = true"
+  ).get(eventId) as { c: number } | undefined;
+  const used = Number(row?.c ?? 0);
+  if (used >= limit) return { ok: false, reason: "quick_scan_limit_reached", limit, used };
   return { ok: true };
 }
 

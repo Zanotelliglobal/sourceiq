@@ -5,8 +5,8 @@ import { makeProcessSupplier, makeProcessSupplierDeepen, type ScoutSupplier } fr
 import { createTaskPool } from "@/lib/task-pool";
 import { recordUsage, usageSummary, effectiveTier, checkWaveLimit, checkSpendCeiling } from "@/lib/usage";
 import { UNLIMITED } from "@/lib/plans";
-import { getOrgContext, getOwnedEvent } from "@/lib/tenant";
-import { requireActiveSubscription } from "@/lib/billing";
+import { getOrgContext, getOwnedEvent, STALE_RUN_MS } from "@/lib/tenant";
+import { requireSpendableSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { rateLimit } from "@/lib/ratelimit";
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const ctx = await getOrgContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const gate = requireActiveSubscription(ctx.org);
+  const gate = requireSpendableSubscription(ctx.org);
   if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
 
   // A discovery wave is an expensive multi-agent LLM run (see SSE loop below),
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   // 'idle' on that path, only downgraded in-memory for the read response.
   if (event.status === "scouting" || event.status === "outreach") {
     const updatedMs = event.updated_at ? new Date(event.updated_at).getTime() : 0;
-    const stale = !updatedMs || Date.now() - updatedMs > 5 * 60_000;
+    const stale = !updatedMs || Date.now() - updatedMs > STALE_RUN_MS;
     if (!stale) {
       return NextResponse.json(
         { error: "A run is already in progress for this event.", code: "run_in_progress" },
@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
         send({ type: "agents_registered", agents: plan.agents });
 
         // Get existing suppliers (name + website) to avoid duplicates across waves.
-        const existing = await db.prepare("SELECT name, website FROM suppliers WHERE event_id=?").all(event.id) as { name: string; website: string | null }[];
+        const existing = await db.prepare("SELECT name, website, is_quick_result FROM suppliers WHERE event_id=?").all(event.id) as { name: string; website: string | null; is_quick_result: boolean | null }[];
 
         // normName/domainOf (dedup on BOTH a normalized company name and a
         // website domain, so "Acme Manufacturing Inc." and "Acme Mfg" — or two
@@ -239,8 +239,13 @@ export async function POST(req: NextRequest) {
         // remaining headroom in a closure variable and decrement it
         // synchronously (no `await` between read and write) right alongside
         // claimIfNew's dedup claim, so parallel scouts can't race past the cap.
+        // Unverified quick-scan rows (is_quick_result=true) don't count against
+        // the tier's paid supplier cap — that cap is for real, verified
+        // discovery output. See checkSupplierLimit in lib/usage.ts for the
+        // matching exclusion applied when investigate-quick checks headroom.
+        const realExistingCount = existing.filter(s => !s.is_quick_result).length;
         const supplierLimit = tier.limits.suppliersPerEvent;
-        let supplierCapRemaining = supplierLimit === UNLIMITED ? Infinity : Math.max(0, supplierLimit - existing.length);
+        let supplierCapRemaining = supplierLimit === UNLIMITED ? Infinity : Math.max(0, supplierLimit - realExistingCount);
         let capNoticeSent = false;
 
         // #94: the per-event cap above is what the tier pays for, but on

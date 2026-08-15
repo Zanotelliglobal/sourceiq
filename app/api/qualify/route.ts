@@ -5,7 +5,7 @@ import { sendEmail, isMailLive, replyToAddress, withComplianceFooter, unsubscrib
 import { randomBytes } from "crypto";
 import { recordUsage, effectiveTier, checkOutreachAllowed, checkSpendCeiling } from "@/lib/usage";
 import { getOrgContext, orgOwnsEvent, orgOwnsSupplier } from "@/lib/tenant";
-import { requireActiveSubscription } from "@/lib/billing";
+import { requireSpendableSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { claimOutreachSend, releaseOutreachClaim, claimFollowupSend, releaseFollowupClaim } from "@/lib/outreach-claim";
 import { isSuppressed } from "@/lib/suppression";
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   // above), letting a free/basic-tier org send live outreach with zero plan
   // enforcement.
   if (action === "send_outreach" || action === "send_followup") {
-    const gate = requireActiveSubscription(ctx.org);
+    const gate = requireSpendableSubscription(ctx.org);
     if (!gate.ok) return NextResponse.json({ error: gate.reason, code: "subscription_required" }, { status: 402 });
     const tier = effectiveTier(ctx.org);
     const outreachCheck = checkOutreachAllowed(tier);

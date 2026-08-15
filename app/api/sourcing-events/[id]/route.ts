@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { usageSummary } from "@/lib/usage";
-import { getOrgContext, requireRole } from "@/lib/tenant";
+import { getOrgContext, requireRole, STALE_RUN_MS } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { reapStuckAgentRuns } from "@/lib/agent-runs-reaper";
 
@@ -29,7 +29,7 @@ export async function GET(
   // mirrors the list endpoint's interruption-aware logic.
   if (event.status === "scouting" || event.status === "outreach") {
     const updatedMs = event.updated_at ? new Date(event.updated_at as string).getTime() : 0;
-    if (updatedMs && Date.now() - updatedMs > 5 * 60_000) {
+    if (updatedMs && Date.now() - updatedMs > STALE_RUN_MS) {
       event.status = suppliers.length > 0 ? "reviewing" : "idle";
     }
   }
@@ -70,8 +70,9 @@ export async function PATCH(
   // Preference fields (pinned/archived) are cosmetic bookkeeping and stay
   // open to any member.
   const CONTENT_FIELDS = new Set([
-    "title", "category", "description", "requirements", "annual_spend",
-    "target_countries", "advanced_filters",
+    "title", "category", "subcategory", "description", "requirements", "annual_spend",
+    "target_countries", "advanced_filters", "ship_to",
+    "outreach_anonymous", "buyer_name", "buyer_role", "buyer_company",
   ]);
   const PREFERENCE_FIELDS = new Set(["pinned", "archived"]);
   // Array.from (not a spread) here: spreading a Set directly requires
@@ -84,11 +85,22 @@ export async function PATCH(
     const denied = requireRole(ctx, "admin");
     if (denied) return denied;
   }
+  // Buyer-identity fields must never leak once a brief is set (back) to
+  // anonymous outreach — force-null them here rather than trusting the
+  // client to also clear them in the same PATCH body.
+  const anonymizing = keys.includes("outreach_anonymous") && Boolean(body.outreach_anonymous);
+  if (anonymizing) {
+    for (const f of ["buyer_name", "buyer_role", "buyer_company"]) {
+      if (!keys.includes(f)) keys.push(f);
+    }
+  }
   const fields = keys.map(k => `${k} = ?`).join(", ");
   // advanced_filters is a TEXT column storing JSON — serialize object values
   // (or null-out an explicit clear) rather than writing "[object Object]".
   const values = [
     ...keys.map(k => {
+      if (k === "outreach_anonymous") return Boolean(body[k]);
+      if (anonymizing && (k === "buyer_name" || k === "buyer_role" || k === "buyer_company")) return null;
       const v = body[k];
       if (k === "advanced_filters") return v && typeof v === "object" ? JSON.stringify(v) : null;
       return v;

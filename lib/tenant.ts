@@ -12,6 +12,15 @@ import { attributeReferral } from "@/lib/referrals";
 //   • Otherwise → a per-user "personal" org keyed by the Clerk user id.
 // The org row is provisioned lazily on first request (with a 14-day trial).
 
+// Shared "abandoned run" staleness window: a scouting/qualifying/outreach run
+// whose event row hasn't been written to in this long is treated as dead
+// (crashed serverless function, disconnected client) rather than genuinely
+// in-progress. Used identically by app/api/sourcing-events/[id]/route.ts (GET
+// status downgrade), app/api/orchestrate/route.ts and app/api/outreach/route.ts
+// (concurrency guards) — previously duplicated as separate `5 * 60_000`
+// magic numbers that could silently drift out of sync.
+export const STALE_RUN_MS = 5 * 60_000;
+
 export type OrgContext = {
   orgId: number;          // internal organizations.id
   clerkOrgKey: string;    // clerk org id, or user_<id> for personal orgs
@@ -100,6 +109,7 @@ export type OwnedEventRow = {
   id: number; org_id: number; title: string; category: string; subcategory: string | null; description: string;
   requirements: string; annual_spend: string; wave_count: number; status: string | null; updated_at: string | null;
   target_countries: string | null; ship_to: string | null; advanced_filters: string | null;
+  outreach_anonymous: boolean; buyer_name: string | null; buyer_role: string | null; buyer_company: string | null;
 };
 
 /**

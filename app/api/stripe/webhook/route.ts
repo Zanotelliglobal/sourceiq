@@ -22,9 +22,15 @@ async function syncSubscription(sub: Stripe.Subscription) {
 
   const status = sub.status; // active | trialing | past_due | canceled | ...
   // Record the purchased tier from checkout metadata (falls back to "pro" for
-  // legacy single-price subscriptions). "canceled" drops back to trial/free.
+  // legacy single-price subscriptions). A canceled/deleted subscription drops
+  // the org to "free" — NOT "trial": effectiveTier() (lib/usage.ts) treats
+  // plan === "trial" as Basic-equivalent limits, so a canceled paying
+  // customer would otherwise keep Basic-tier entitlements indefinitely
+  // (access itself is still blocked by subscription_status via
+  // requireActiveSubscription/requireSpendableSubscription, but the stored
+  // plan label should reflect reality, not silently re-grant a trial).
   const tierKey = getTier(sub.metadata?.tier || "")?.key || "pro";
-  const plan = status === "canceled" ? "trial" : tierKey;
+  const plan = status === "canceled" ? "free" : tierKey;
 
   const set = `subscription_status = ?, plan = ?, stripe_subscription_id = ?, stripe_customer_id = COALESCE(stripe_customer_id, ?), updated_at = now()`;
 
