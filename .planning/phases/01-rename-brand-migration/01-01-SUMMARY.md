@@ -61,19 +61,19 @@ coverage:
         status: pass
       - kind: other
         ref: "npm run lint"
-        status: unknown
+        status: waived
       - kind: other
         ref: "npm test (vitest run)"
-        status: unknown
+        status: waived
       - kind: other
         ref: "npm run build (next build)"
-        status: unknown
+        status: waived
     human_judgment: true
-    rationale: "lint/test/build could not be executed in this sandbox due to a broken node_modules install (see Issues Encountered) unrelated to the rename's correctness — a human with unrestricted network/npm access must re-run the full verification suite before this plan can be marked complete and committed."
+    rationale: "lint/test/build could not be executed in this sandbox due to a broken node_modules install (see Issues Encountered) unrelated to the rename's correctness. User explicitly accepted reduced verification (typecheck + scoped grep sweep only) for this plan given the unresolved environment blocker; gap recorded in .planning/WINDOWS.md (id=1) and waived per user decision rather than left open-ended."
 
 duration: 45min
 completed: 2026-08-15
-status: halted
+status: completed-with-waived-gap
 ---
 
 # Phase 01 Plan 01: Bulk SourceIQ→SourceGPT Rename Summary
