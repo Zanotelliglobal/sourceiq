@@ -2,23 +2,24 @@
 
 ## Project
 
-**SourceIQ (renaming to SourceGPT)**
+**SourceGPT**
 
-SourceIQ is a Next.js-based, multi-tenant AI supplier-discovery platform: buyers
+SourceGPT is a Next.js-based, multi-tenant AI supplier-discovery platform: buyers
 describe a sourcing need, a multi-agent pipeline (scout → qualify → enrich → contact
 scrape) discovers, verifies, and shortlists real-world suppliers via live web search,
 and buyers can then run outreach campaigns to the shortlist directly from the app.
 A faster, unverified "Quick Investigation" mode also exists alongside the full,
-verified pipeline. The product is mid-rebrand to **SourceGPT**.
+verified pipeline. The product was renamed from SourceIQ to **SourceGPT**.
 
 **Core Value:** Buyers get a vetted, real supplier shortlist for a sourcing need faster than manual
 research would produce — and can act on it (outreach) without leaving the app.
 
 ### Constraints
 
-- **Rename sequencing**: land the SourceIQ→SourceGPT rename (backlog #1) first,
-  before other backlog items, so new copy/code lands under the final name instead of
-  being renamed twice — explicit sequencing decision from the source document.
+- **Rename sequencing**: the product was renamed from SourceIQ to SourceGPT
+  (backlog #1) before other backlog items landed, so new copy/code lands under the
+  final name instead of being renamed twice — explicit sequencing decision from the
+  source document.
 
 - **Tech stack**: Next.js/TypeScript/Neon Postgres/Clerk/Stripe/Anthropic SDK — new
   features should follow existing patterns (agent tiers in `lib/agents.ts`, gated API
@@ -306,7 +307,7 @@ research would produce — and can act on it (outreach) without leaving the app.
 - Triggers: Stripe sends subscription events
 - Responsibilities: Creates/updates org subscription, enforces billing state
 - Location: `app/api/inbound/route.ts` (POST)
-- Triggers: Supplier replies to SourceIQ outreach email
+- Triggers: Supplier replies to SourceGPT outreach email
 - Responsibilities: Logs reply, parses intent, updates supplier funnel stage
 
 ## Architectural Constraints

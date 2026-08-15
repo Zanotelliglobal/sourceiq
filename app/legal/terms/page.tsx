@@ -3,8 +3,8 @@ import LegalLayout, { LegalSection, LegalList } from "@/components/legal/LegalLa
 import { COMPANY } from "@/lib/legal";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — SourceIQ",
-  description: "The terms governing use of the SourceIQ platform.",
+  title: "Terms of Service — SourceGPT",
+  description: "The terms governing use of the SourceGPT platform.",
 };
 
 export default function TermsOfService() {

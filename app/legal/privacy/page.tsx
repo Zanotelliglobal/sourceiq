@@ -3,8 +3,8 @@ import LegalLayout, { LegalSection, LegalList } from "@/components/legal/LegalLa
 import { COMPANY } from "@/lib/legal";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — SourceIQ",
-  description: "How SourceIQ collects, uses, and protects personal data.",
+  title: "Privacy Policy — SourceGPT",
+  description: "How SourceGPT collects, uses, and protects personal data.",
 };
 
 export default function PrivacyPolicy() {
