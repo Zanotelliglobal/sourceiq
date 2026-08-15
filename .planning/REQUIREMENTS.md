@@ -155,24 +155,47 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BRAND-01..05 | TBD | Pending |
-| PRICE-01..05 | TBD | Pending |
-| MKT-01..05 | TBD | Pending |
-| REPO-01..06 | TBD | Pending |
-| RATE-01..03 | TBD | Pending |
-| RFP-01..05 | TBD | Pending |
-| SSO-01..02 | TBD | Pending |
-| CHAT-01..02 | TBD | Pending |
+| BRAND-01 | Phase 1 | Pending |
+| BRAND-02 | Phase 1 | Pending |
+| BRAND-03 | Phase 1 | Pending |
+| BRAND-04 | Phase 1 | Pending |
+| BRAND-05 | Phase 1 | Pending |
+| PRICE-01 | Phase 2 | Pending |
+| PRICE-02 | Phase 2 | Pending |
+| PRICE-03 | Phase 2 | Pending |
+| PRICE-04 | Phase 2 | Pending |
+| PRICE-05 | Phase 2 | Pending |
+| MKT-01 | Phase 2 | Pending |
+| MKT-02 | Phase 2 | Pending |
+| MKT-03 | Phase 2 | Pending |
+| MKT-04 | Phase 2 | Pending |
+| MKT-05 | Phase 2 | Pending |
+| REPO-01 | Phase 3 | Pending |
+| REPO-02 | Phase 3 | Pending |
+| REPO-03 | Phase 3 | Pending |
+| REPO-04 | Phase 3 | Pending |
+| REPO-05 | Phase 3 | Pending |
+| REPO-06 | Phase 3 | Pending |
+| RATE-01 | Phase 4 | Pending |
+| RATE-02 | Phase 4 | Pending |
+| RATE-03 | Phase 4 | Pending |
+| RFP-01 | Phase 5 | Pending |
+| RFP-02 | Phase 5 | Pending |
+| RFP-03 | Phase 5 | Pending |
+| RFP-04 | Phase 5 | Pending |
+| RFP-05 | Phase 5 | Pending |
+| SSO-01 | Phase 5 | Pending |
+| SSO-02 | Phase 5 | Pending |
+| CHAT-01 | Phase 5 | Pending |
+| CHAT-02 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 33 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 33 ⚠️ (expected — filled by `/gsd-roadmapper` next)
+- Mapped to phases: 33 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-08-15*
-*Last updated: 2026-08-15 after initial definition*
+*Last updated: 2026-08-15 after roadmap creation*
