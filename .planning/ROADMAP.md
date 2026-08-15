@@ -38,7 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. A user browsing any public page, in-app page, email, or legal page — in any supported locale (de/es/fr/it) — sees "SourceGPT" branding, never "SourceIQ"
   2. `package.json`'s name and internal code identifiers reflect the new name where reasonable to change
   3. The `INJECTION_DEFENSE` anti-impersonation clause and outreach non-disclosure rules in `lib/agents.ts` have been manually reviewed and renamed by a human, with the guard's behavior confirmed unchanged (not just "tests green")
-  4. A repo-wide, case-insensitive grep for "SourceIQ" returns zero unintended hits, with the two `-autoresearch` history directories as the only documented exception
+  4. A repo-wide, case-insensitive grep for "SourceIQ" returns zero unintended hits, with a documented exception list covering: the two `-autoresearch` history directories, `.planning/` (this milestone's own planning docs, which necessarily narrate the rename), the dead/legacy `sourceiq.db*` local-dev artifacts, and `.claude/worktrees/` tooling scratch directories (expanded during Phase 1 planning, see `01-CONTEXT.md` D-09 and `REQUIREMENTS.md` BRAND-05)
 **Plans**: 4 plans
 Plans:
 - [ ] 01-01-PLAN.md — Bulk scripted rename (SourceIQ → SourceGPT) across app/, lib/ (excl. agents.ts), components/, tests/ (excl. prompt-injection-defense.test.ts), i18n locales, docs/, package.json, brand assets

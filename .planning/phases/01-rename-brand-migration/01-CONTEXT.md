@@ -88,6 +88,22 @@ PROJECT.md Out of Scope).
   is exactly what backlog item #1 itself specifies, and matches how the prior
   Quick-Investigation feature work in this repo was verified). [auto]
 
+### BRAND-05 exception scope (locked during planning, post-research)
+- **D-09:** BRAND-05's zero-unintended-hits grep sweep exception list is expanded
+  beyond the roadmap's original two `-autoresearch` directories to also exclude:
+  `.planning/` (this milestone's own planning docs necessarily narrate the rename in
+  prose, e.g. this very file), `sourceiq.db`/`.db-shm`/`.db-wal` (confirmed dead,
+  unreferenced local-dev SQLite artifacts per `01-RESEARCH.md`'s Open Questions), and
+  `.claude/worktrees/` (unrelated tooling scratch directories, not shipped product).
+  This decision was surfaced by `01-RESEARCH.md` as a recommendation and flagged by
+  `gsd-plan-checker` as needing an explicit lock rather than silent plan-level
+  assumption — auto-resolved here (recommended option, no live user to ask) and
+  back-ported into `REQUIREMENTS.md`/`ROADMAP.md`'s BRAND-05 text so the acceptance
+  criterion and the plans stay in sync. — **Reversibility:** reversible — the
+  exception list is a grep-filter argument, not a structural commitment; expanding or
+  shrinking it later requires no migration. [auto, post-planning addendum,
+  2026-08-15]
+
 ### Claude's Discretion
 - Exact internal variable/identifier renames beyond `package.json`'s name field (e.g.
   whether any internal function/type names literally contain "SourceIQ" and whether

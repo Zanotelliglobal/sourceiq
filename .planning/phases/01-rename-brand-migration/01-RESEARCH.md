@@ -266,22 +266,19 @@ N/A — this is a mechanical content-substitution task with no meaningfully "out
 
 **All four assumptions above stem from gaps this research found in CONTEXT.md's exclusion list (which only documents the two `-autoresearch` dirs) — none contradict a locked decision; they extend the same reasoning CONTEXT.md already applied to the `-autoresearch` dirs to three more cases this session surfaced.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `.planning/` be excluded from the scripted pass, and should BRAND-05's acceptance grep exclude it explicitly?**
+1. **RESOLVED — Should `.planning/` be excluded from the scripted pass, and should BRAND-05's acceptance grep exclude it explicitly?**
    - What we know: `.planning/` contains 6+ files matching the grep, all of them GSD workflow/history documents narrating the rename itself.
-   - What's unclear: whether the user/planner wants these updated for consistency anyway (treating `.planning/` as "any other doc") or preserved as historical record (this research's recommendation).
-   - Recommendation: Exclude, document as a third exception alongside the two `-autoresearch` dirs — consistent with how CONTEXT.md already treats other historical-record directories.
+   - Resolution: Excluded. Locked as `01-CONTEXT.md` D-09 and back-ported into `REQUIREMENTS.md`/`ROADMAP.md`'s BRAND-05 acceptance text as a documented exception, alongside the two `-autoresearch` dirs — consistent with how CONTEXT.md already treats other historical-record directories.
 
-2. **Should `sourceiq.db` be deleted from git tracking as part of this phase, or merely documented as an exception and left alone?**
+2. **RESOLVED — Should `sourceiq.db` be deleted from git tracking as part of this phase, or merely documented as an exception and left alone?**
    - What we know: it's dead, unused, legacy, already labeled as such in `.planning/codebase/STRUCTURE.md`.
-   - What's unclear: whether removing a 3.9MB tracked binary is considered in-scope "cleanup" for a rename phase, or scope creep belonging to a separate housekeeping task.
-   - Recommendation: Document as an exception this phase (lowest-risk path); flag deletion as an optional follow-up, not a blocker for BRAND-05.
+   - Resolution: Documented as an exception this phase (lowest-risk path), locked in `01-CONTEXT.md` D-09. Deletion is an optional follow-up outside this phase's scope, not a BRAND-05 blocker.
 
-3. **`.env.local`/`.env.example` were not directly inspected this session (sandbox permission denial) — is a human-run `grep -i sourceiq` against them still needed before BRAND-05 is signed off?**
+3. **RESOLVED — `.env.local`/`.env.example` were not directly inspected this session (sandbox permission denial) — is a human-run `grep -i sourceiq` against them still needed before BRAND-05 is signed off?**
    - What we know: no `SOURCEIQ`-prefixed env var *names* exist anywhere in source code (verified).
-   - What's unclear: whether either file's *values* (not names) contain a literal `sourceiq` string that a human should also update (e.g., a locally-set `NEXT_PUBLIC_APP_URL=https://app.sourceiq.org` override) — this doesn't affect BRAND-05's code-level acceptance criterion, but is worth a 10-second manual check.
-   - Recommendation: Add as a `checkpoint:human-verify` note in the plan, not a blocking task.
+   - Resolution: Added as a `checkpoint:human-verify` advisory note in `01-04-PLAN.md` (Task 3) rather than a blocking automated check — doesn't affect BRAND-05's code-level acceptance criterion, but flags the 10-second manual value-check for whoever executes the final wave.
 
 ## Environment Availability
 

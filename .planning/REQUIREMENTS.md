@@ -22,8 +22,16 @@ Requirements for this milestone (the 10-item change-request backlog in
       confirm the brand string used there is incidental fixture data, not load-bearing
       for the guard logic, before/after the rename
 - [ ] **BRAND-05**: A repo-wide grep for the old name (case-insensitive) after the
-      rename returns zero unintended hits (the two `-autoresearch` history directories
-      are an explicit, documented exception)
+      rename returns zero unintended hits, with the following as the complete,
+      documented exception list: the two `-autoresearch` history directories; the
+      `.planning/` directory (this milestone's own planning docs narrate the rename
+      and necessarily reference the old name); the `sourceiq.db`/`.db-shm`/`.db-wal`
+      local-dev SQLite artifacts (confirmed dead/legacy, unreferenced by any current
+      source); and `.claude/worktrees/` (unrelated tooling scratch directories, not
+      shipped product). This exception list was expanded from the original two-item
+      list during Phase 1 planning (see `01-CONTEXT.md` D-09) once research confirmed
+      each additional item is genuinely out of the rename's blast radius, not an
+      oversight.
 
 ### Pricing
 
