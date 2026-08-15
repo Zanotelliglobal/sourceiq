@@ -14,7 +14,7 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 ];
 
 export const DEFAULT_LANG: Lang = "en";
-export const STORAGE_KEY = "sourceiq.lang";
+export const STORAGE_KEY = "sourcegpt.lang";
 
 export function isLang(v: unknown): v is Lang {
   return typeof v === "string" && LANGS.some(l => l.code === v);

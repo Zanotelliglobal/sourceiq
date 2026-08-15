@@ -32,7 +32,7 @@ export type ContactChannels = {
 
 const EMPTY: ContactChannels = { contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" };
 
-// Common contact-page slugs across the languages SourceIQ sources in.
+// Common contact-page slugs across the languages SourceGPT sources in.
 const CONTACT_PATHS = [
   "/contact", "/contact-us", "/contactus", "/contacts",
   "/kontakt", "/contatti", "/contacto", "/contact.html", "/contact.php",
@@ -174,7 +174,7 @@ async function fetchHtml(url: string, timeoutMs = 7000): Promise<string | null> 
   try {
     const res = await safeFetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; SourceIQ-ContactBot/1.0; +https://sourceiq.app)",
+        "User-Agent": "Mozilla/5.0 (compatible; SourceGPT-ContactBot/1.0; +https://sourcegpt.app)",
         Accept: "text/html,application/xhtml+xml",
       },
     }, timeoutMs);
@@ -260,7 +260,7 @@ function merge(base: ContactChannels, add: Partial<ContactChannels>): ContactCha
 export async function checkWebsiteLive(website: string, timeoutMs = 5000): Promise<boolean> {
   const origin = normalizeSite(website);
   if (!origin) return false;
-  const headers = { "User-Agent": "Mozilla/5.0 (compatible; SourceIQ-ContactBot/1.0; +https://sourceiq.app)" };
+  const headers = { "User-Agent": "Mozilla/5.0 (compatible; SourceGPT-ContactBot/1.0; +https://sourcegpt.app)" };
   try {
     const head = await safeFetch(origin, { method: "HEAD", headers }, timeoutMs);
     if (!head) return false;

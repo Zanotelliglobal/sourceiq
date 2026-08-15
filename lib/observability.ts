@@ -145,7 +145,7 @@ async function forwardToSentry(payload: Record<string, unknown>): Promise<void> 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_key=${publicKey}, sentry_client=sourceiq/1.0`,
+        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_key=${publicKey}, sentry_client=sourcegpt/1.0`,
       },
       body: JSON.stringify(payload),
     });

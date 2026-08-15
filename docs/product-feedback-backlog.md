@@ -106,7 +106,7 @@ account that is confirmed Free-tier (not trialing-on-a-paid-plan) and still exce
 
 Original feedback ("the stats block on the event detail page isn't adding value") was
 escalated to an explicit instruction: "ELIMINATE the stats on the sourcing events,"
-accompanied by a screenshot of the **Dashboard** page (`app.sourceiq.org/dashboard`),
+accompanied by a screenshot of the **Dashboard** page (`app.sourcegpt.org/dashboard`),
 not the per-event detail page screenshot that accompanied the earlier, softer feedback.
 
 **Scope ambiguity — needs confirmation before cutting anything:**

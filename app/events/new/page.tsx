@@ -79,7 +79,7 @@ export default function NewEventPage() {
     title: "", category: "", subcategory: "", description: "",
     requirements: "", annual_spend: "",
     incumbent: "",
-    // Outreach identity: when anonymous, SourceIQ reaches out on the buyer's behalf
+    // Outreach identity: when anonymous, SourceGPT reaches out on the buyer's behalf
     // without naming them. When disclosed, the buyer's name/role/company appear in
     // the outreach email and drafts can be copied or opened in the default mail app.
     outreach_anonymous: "true",
@@ -849,11 +849,11 @@ export default function NewEventPage() {
           <div>
             <div id="outreach-identity-label" className="label">{t("Supplier Outreach Identity")}</div>
             <p className="text-xs text-slate-500 mb-2.5">
-              {t("Choose how you appear to suppliers when SourceIQ reaches out on this event.")}
+              {t("Choose how you appear to suppliers when SourceGPT reaches out on this event.")}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="group" aria-labelledby="outreach-identity-label">
               {[
-                { v: "true",  Icon: EyeOff, title: t("Anonymous"), sub: t("SourceIQ contacts suppliers on your behalf — your organisation is never named.") },
+                { v: "true",  Icon: EyeOff, title: t("Anonymous"), sub: t("SourceGPT contacts suppliers on your behalf — your organisation is never named.") },
                 { v: "false", Icon: Hand, title: t("Disclosed"), sub: t("Your name, role & company appear in the outreach. Copy or send via your own mail client.") },
               ].map(opt => {
                 const active = form.outreach_anonymous === opt.v;

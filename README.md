@@ -1,4 +1,4 @@
-# SourceIQ
+# SourceGPT
 
 AI-powered supplier discovery and procurement funnel. Multi-agent scouting,
 qualification, enrichment, and outreach — built on Next.js 14 (App Router),

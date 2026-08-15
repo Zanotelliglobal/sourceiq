@@ -23,13 +23,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 const siteUrl = `https://${COMPANY.site}`;
-const title = "SourceIQ — AI Supplier Intelligence";
+const title = "SourceGPT — AI Supplier Intelligence";
 const description =
-  "SourceIQ deploys AI agents to discover, score, and shortlist qualified suppliers across global networks — turning weeks of procurement desk research into minutes.";
+  "SourceGPT deploys AI agents to discover, score, and shortlist qualified suppliers across global networks — turning weeks of procurement desk research into minutes.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: { default: title, template: "%s — SourceIQ" },
+  title: { default: title, template: "%s — SourceGPT" },
   description,
   keywords: [
     "AI supplier sourcing",
@@ -39,13 +39,13 @@ export const metadata: Metadata = {
     "supplier scoring and shortlisting",
     "vendor sourcing automation",
   ],
-  authors: [{ name: "SourceIQ" }],
+  authors: [{ name: "SourceGPT" }],
   alternates: { canonical: siteUrl },
   robots: { index: true, follow: true },
   openGraph: {
     type: "website",
     url: siteUrl,
-    siteName: "SourceIQ",
+    siteName: "SourceGPT",
     title,
     description,
     locale: "en_US",

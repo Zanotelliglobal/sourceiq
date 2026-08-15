@@ -6,7 +6,7 @@ import { atLeast, mapClerkRole, type OrgRole } from "@/lib/roles";
 import { attributeReferral } from "@/lib/referrals";
 
 // ─── TENANCY / ORG RESOLUTION ─────────────────────────────────────────────────
-// Every authenticated request maps to exactly one SourceIQ organization row,
+// Every authenticated request maps to exactly one SourceGPT organization row,
 // which carries the billing state. We derive the org from the Clerk session:
 //   • If the user is acting inside a Clerk Organization → use that org.
 //   • Otherwise → a per-user "personal" org keyed by the Clerk user id.

@@ -35,7 +35,7 @@ export default function CookieConsent() {
     <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-6 sm:max-w-sm z-50">
       <div className="rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-900/5 p-4">
         <p className="text-sm text-slate-600 leading-relaxed">
-          {t("We use essential cookies to run SourceIQ and optional analytics to improve it.")}{" "}
+          {t("We use essential cookies to run SourceGPT and optional analytics to improve it.")}{" "}
           <Link href="/legal/privacy" className="font-medium text-blue-600 hover:text-blue-700">
             {t("Privacy Policy")}
           </Link>

@@ -38,7 +38,7 @@ export default function OpengraphImage() {
               />
             </svg>
           </div>
-          <div style={{ fontSize: 32, fontWeight: 700 }}>SourceIQ</div>
+          <div style={{ fontSize: 32, fontWeight: 700 }}>SourceGPT</div>
         </div>
         <div style={{ fontSize: 60, fontWeight: 800, marginTop: 48, lineHeight: 1.1, maxWidth: 900 }}>
           Find qualified suppliers in minutes, not months

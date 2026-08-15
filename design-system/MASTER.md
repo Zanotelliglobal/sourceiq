@@ -1,10 +1,10 @@
-# SourceIQ — Design System (Source of Truth)
+# SourceGPT — Design System (Source of Truth)
 
 > When building a page, first check `design-system/pages/[page-name].md`.
 > If it exists, its rules override this file. Otherwise follow the rules below.
 > Generated with the `ui-ux-pro-max` skill, then reconciled for procurement/enterprise.
 
-**Project:** SourceIQ — AI-powered B2B supplier discovery / procurement funnel
+**Project:** SourceGPT — AI-powered B2B supplier discovery / procurement funnel
 **Category:** Analytics Dashboard + B2B SaaS marketing site
 **Design Dials:** Variance 4/10 (Balanced) · Motion 4/10 (Standard) · Density 8/10 (Dense)
 

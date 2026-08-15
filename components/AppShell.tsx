@@ -58,7 +58,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="p-3 border-t border-slate-100">
           <a
-            href="mailto:support@sourceiq.org"
+            href="mailto:support@sourcegpt.org"
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
           >
             <LifeBuoy className="w-[18px] h-[18px]" />

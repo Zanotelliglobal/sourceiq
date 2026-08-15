@@ -1,0 +1,9 @@
+<svg width="300" height="300" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <title>SourceGPT</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&amp;display=swap');
+    .mono { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; font-weight: 800; }
+  </style>
+  <rect width="300" height="300" rx="56" fill="#2563eb"/>
+  <text x="150" y="196" text-anchor="middle" font-size="128" letter-spacing="-2" fill="#ffffff" class="mono">GPT</text>
+</svg>

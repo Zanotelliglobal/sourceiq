@@ -2,7 +2,7 @@
 // Pure, dependency-free role logic shared by tenancy resolution and route
 // guards. Kept free of Clerk/Next imports so it stays unit-testable.
 //
-// SourceIQ recognizes three internal roles, ranked:
+// SourceGPT recognizes three internal roles, ranked:
 //   owner  (3) — the sole principal of a personal workspace, or a Clerk org owner
 //   admin  (2) — a Clerk org admin: manages billing, settings, members
 //   member (1) — a Clerk org member: runs discovery/outreach, no billing/admin

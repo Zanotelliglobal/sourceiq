@@ -1,0 +1,10 @@
+<svg width="640" height="160" viewBox="0 0 640 160" xmlns="http://www.w3.org/2000/svg">
+  <title>SourceGPT</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&amp;display=swap');
+    .wordmark { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; font-weight: 800; }
+  </style>
+  <text x="4" y="112" font-size="76" letter-spacing="-2" class="wordmark">
+    <tspan fill="#0f172a">Source</tspan><tspan fill="#2563eb">GPT</tspan>
+  </text>
+</svg>

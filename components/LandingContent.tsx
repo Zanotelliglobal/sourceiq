@@ -36,7 +36,7 @@ export default function LandingContent() {
             <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">{t("minutes")}</span>{t(", not months")}
           </h1>
           <p className="animate-rise delay-2 text-lg text-slate-500 max-w-2xl mx-auto mt-6 leading-relaxed">
-            {t("SourceIQ deploys a team of AI agents across global supplier networks to discover, score, and shortlist vendors against your exact requirements — so your procurement team can focus on decisions, not desk research.")}
+            {t("SourceGPT deploys a team of AI agents across global supplier networks to discover, score, and shortlist vendors against your exact requirements — so your procurement team can focus on decisions, not desk research.")}
           </p>
           <div className="animate-rise delay-3 flex flex-col sm:flex-row items-center justify-center gap-3 mt-9">
             <Link href="/sign-up" className="btn-cta text-base px-6 py-3 shadow-lg shadow-amber-600/25">
@@ -57,7 +57,7 @@ export default function LandingContent() {
                 <span className="w-2.5 h-2.5 rounded-full bg-red-300" />
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-300" />
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-300" />
-                <span className="ml-3 text-xs text-slate-500 font-mono">sourceiq.app/events/precision-machining</span>
+                <span className="ml-3 text-xs text-slate-500 font-mono">sourcegpt.app/events/precision-machining</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
                 {[
@@ -120,7 +120,7 @@ export default function LandingContent() {
       {/* ── How it works ─────────────────────────────────────── */}
       <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-24">
         <div className="text-center max-w-2xl mx-auto mb-16">
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t("How SourceIQ works")}</h2>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t("How SourceGPT works")}</h2>
           <p className="text-slate-500 mt-3">{t("A multi-agent pipeline that runs your sourcing event end to end.")}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -199,7 +199,7 @@ export default function LandingContent() {
               {t("Deploy your first AI sourcing event today")}
             </h2>
             <p className="text-slate-300 mt-4 max-w-xl mx-auto">
-              {t("Join procurement teams using SourceIQ to build qualified supplier shortlists in minutes.")}
+              {t("Join procurement teams using SourceGPT to build qualified supplier shortlists in minutes.")}
             </p>
             <Link href="/sign-up" className="btn-cta text-base px-6 py-3 mt-8">
               {t("Start free trial")} <ArrowRight className="w-4 h-4" />
@@ -215,14 +215,14 @@ export default function LandingContent() {
             <div className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center">
               <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
-            SourceIQ
+            SourceGPT
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
               <Link href="/legal/privacy" className="hover:text-slate-900 transition-colors">{t("Privacy Policy")}</Link>
               <Link href="/legal/terms" className="hover:text-slate-900 transition-colors">{t("Terms of Service")}</Link>
             </div>
-            <p className="text-xs text-slate-500">© {new Date().getFullYear()} SourceIQ. {t("AI-powered supplier intelligence.")}</p>
+            <p className="text-xs text-slate-500">© {new Date().getFullYear()} SourceGPT. {t("AI-powered supplier intelligence.")}</p>
           </div>
         </div>
       </footer>

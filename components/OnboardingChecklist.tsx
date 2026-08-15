@@ -105,7 +105,7 @@ export default function OnboardingChecklist() {
         <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
           <Rocket className="w-4 h-4 text-blue-600" />
         </div>
-        <h2 className="text-base font-bold text-slate-900">{t("Welcome to SourceIQ")}</h2>
+        <h2 className="text-base font-bold text-slate-900">{t("Welcome to SourceGPT")}</h2>
       </div>
       <p className="text-sm text-slate-500 mb-5">
         {t("Complete these steps to earn bonus events — {done} of {total} done.", {

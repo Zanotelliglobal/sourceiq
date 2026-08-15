@@ -693,7 +693,7 @@ function OutreachModal({ supplier, anonymous = true, onClose, onSent }: {
               </div>
               {anonymous ? (
                 <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-700">
-                  <Lock className="w-4 h-4 flex-shrink-0" /> {t("Sent anonymously via SourceIQ — your organisation identity is not disclosed")}
+                  <Lock className="w-4 h-4 flex-shrink-0" /> {t("Sent anonymously via SourceGPT — your organisation identity is not disclosed")}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
@@ -1178,7 +1178,7 @@ function CampaignConfirmModal({ count, anonymous, preview, onCancel, onConfirm }
             <Lock className={`w-4 h-4 flex-shrink-0 mt-0.5 ${anonymous ? "text-blue-600" : "text-amber-700"}`} />
             <p className="text-xs text-slate-600 leading-relaxed">
               {anonymous
-                ? t("These RFIs are sent anonymously via SourceIQ — your organisation is never named. This emails real suppliers and cannot be undone.")
+                ? t("These RFIs are sent anonymously via SourceGPT — your organisation is never named. This emails real suppliers and cannot be undone.")
                 : t("These RFIs disclose your name, role & company. This emails real suppliers and cannot be undone.")}
             </p>
           </div>
@@ -1529,13 +1529,13 @@ export default function EventPage() {
   // change. Keyed per event so filters from one project don't leak into another.
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(`sourceiq:filters:${id}`);
+      const stored = window.localStorage.getItem(`sourcegpt:filters:${id}`);
       if (stored) setStructuredFilters(JSON.parse(stored));
     } catch { /* corrupt/old value — ignore, start from an empty filter set */ }
   }, [id]);
   useEffect(() => {
     try {
-      window.localStorage.setItem(`sourceiq:filters:${id}`, JSON.stringify(structuredFilters));
+      window.localStorage.setItem(`sourcegpt:filters:${id}`, JSON.stringify(structuredFilters));
     } catch { /* storage unavailable (e.g. private mode) — filters just won't persist */ }
   }, [id, structuredFilters]);
 
@@ -2143,7 +2143,7 @@ export default function EventPage() {
 
     doc.setFontSize(16);
     doc.setTextColor(15, 23, 42);
-    doc.text("SourceIQ", 40, 40);
+    doc.text("SourceGPT", 40, 40);
     doc.setFontSize(12);
     doc.setTextColor(71, 85, 105);
     doc.text(event?.title || t("Supplier list"), 40, 58);

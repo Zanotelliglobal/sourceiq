@@ -9,7 +9,7 @@ import { sortEventRows, type EventListItem } from "@/lib/event-list";
 type EventSummary = EventListItem & { id: number; title: string };
 
 // Compact "switch project" control for the event workspace header (#46 —
-// Epic 5.1's "named, saved chats in left rail" analog, adapted to SourceIQ's
+// Epic 5.1's "named, saved chats in left rail" analog, adapted to SourceGPT's
 // architecture: projects/events are the durable unit here, not chat threads —
 // see the strategic framing at the top of the competitive backlog doc). The
 // event workspace runs its own full-height layout and deliberately opts out

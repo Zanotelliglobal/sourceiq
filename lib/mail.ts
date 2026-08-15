@@ -104,7 +104,7 @@ export function withComplianceFooter(body: string, token: string): string {
     "This message was drafted by an AI assistant on behalf of the buyer named above; a human reviews supplier responses."
   );
   lines.push(
-    "You received this message because SourceIQ is conducting a supplier sourcing search on behalf of a buyer. If this is not relevant to your business, you can opt out and we will not contact you again" +
+    "You received this message because SourceGPT is conducting a supplier sourcing search on behalf of a buyer. If this is not relevant to your business, you can opt out and we will not contact you again" +
       (url ? `: ${url}` : ".")
   );
   if (addr) lines.push(addr);

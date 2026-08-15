@@ -7,7 +7,7 @@ import { COMPANY } from "@/lib/legal";
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "SourceIQ",
+  name: "SourceGPT",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   url: `https://${COMPANY.site}`,

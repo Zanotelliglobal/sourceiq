@@ -46,7 +46,7 @@ export const TIERS: Tier[] = [
   {
     key: "free",
     name: "Free",
-    blurb: "Try SourceIQ with a single sourcing event.",
+    blurb: "Try SourceGPT with a single sourcing event.",
     monthlyEur: 0,
     limits: { eventsPerMonth: 1, wavesPerEvent: 1, suppliersPerEvent: 25, seats: 1, outreach: false, export: false, maxEventSpendUsd: 5 },
   },

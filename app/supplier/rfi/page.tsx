@@ -40,13 +40,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-slate-900 tracking-tight">SourceIQ</span>
+          <span className="font-bold text-slate-900 tracking-tight">SourceGPT</span>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
           {children}
         </div>
         <p className="text-[11px] text-slate-500 text-center mt-6">
-          Sent by SourceIQ on behalf of a buyer conducting a supplier sourcing search.
+          Sent by SourceGPT on behalf of a buyer conducting a supplier sourcing search.
         </p>
       </div>
     </div>

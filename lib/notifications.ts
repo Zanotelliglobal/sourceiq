@@ -79,9 +79,9 @@ export async function notify(opts: {
         const link = url && base ? `${base}${url}` : null;
         await sendEmail({
           to: email,
-          subject: `SourceIQ — ${title}`,
+          subject: `SourceGPT — ${title}`,
           body: `${title}${body ? `\n\n${body}` : ""}\n\n${
-            link ? `View it in SourceIQ: ${link}` : "View it in SourceIQ."
+            link ? `View it in SourceGPT: ${link}` : "View it in SourceGPT."
           }`,
         });
       }

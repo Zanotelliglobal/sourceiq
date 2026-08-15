@@ -112,7 +112,7 @@ export default function BillingPage() {
 
   // "Manage subscription" is also the only path to cancellation (Stripe's own
   // portal handles the actual cancel/downgrade). Interstitial first, so buyers
-  // see what's at stake before they leave SourceIQ.
+  // see what's at stake before they leave SourceGPT.
   async function openCancelImpact() {
     setCancelImpactOpen(true);
     setImpactLoading(true);
@@ -149,7 +149,7 @@ export default function BillingPage() {
     <div className="max-w-6xl mx-auto px-6 py-10">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("Billing & Subscription")}</h1>
-        <p className="text-sm text-slate-500 mt-1">{t("Manage your SourceIQ plan and payment details.")}</p>
+        <p className="text-sm text-slate-500 mt-1">{t("Manage your SourceGPT plan and payment details.")}</p>
       </div>
 
       {trialEndingIntent && (

@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* ── SourceIQ Design System — semantic tokens (source of truth: design-system/MASTER.md) ── */
+    /* ── SourceGPT Design System — semantic tokens (source of truth: design-system/MASTER.md) ── */
     /* Brand: Trust Blue */
     --color-primary: #2563eb;         /* blue-600 */
     --color-primary-strong: #1e40af;  /* blue-800 */

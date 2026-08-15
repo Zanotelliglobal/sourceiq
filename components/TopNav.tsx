@@ -21,7 +21,7 @@ export default function TopNav() {
                 <circle cx="6" cy="5" r="1.5" fill="currentColor"/>
               </svg>
             </div>
-            <span className="font-bold text-slate-900 tracking-tight">SourceIQ</span>
+            <span className="font-bold text-slate-900 tracking-tight">SourceGPT</span>
             <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-widest text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded">
               BETA
             </span>

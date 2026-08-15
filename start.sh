@@ -1,5 +1,5 @@
 #!/bin/bash
-# SourceIQ — Launch Script
+# SourceGPT — Launch Script
 # Usage: ANTHROPIC_API_KEY=sk-ant-... ./start.sh
 
 set -e
@@ -30,7 +30,7 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
 fi
 
 echo ""
-echo "🚀 Starting SourceIQ on http://localhost:3000"
+echo "🚀 Starting SourceGPT on http://localhost:3000"
 echo ""
 
 export NODE_EXTRA_CA_CERTS="$CERT_FILE"

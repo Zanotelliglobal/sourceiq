@@ -5,17 +5,17 @@ growth surfaces. This backlog lists features worth adopting, prioritized by **im
 
 ## Strategic framing (read first)
 
-SourceReady and SourceIQ are **different architectures**:
+SourceReady and SourceGPT are **different architectures**:
 
 - **SourceReady** = a search engine over a static, pre-indexed directory (~800k suppliers). A
   `Supplier` exists independently of any buyer; the buyer's `Inquiry` runs a filter query; the
   product is *find → filter → unlock contact* (contacts paywalled at ~20 credits). Their data spine
   is US customs / bill-of-lading trade data (powers "partnered customer", export volume, shipment
   badges).
-- **SourceIQ** = an agentic workflow that *generates* suppliers per project. `suppliers.event_id` is
+- **SourceGPT** = an agentic workflow that *generates* suppliers per project. `suppliers.event_id` is
   `NOT NULL` — suppliers are children of a `sourcing_event`, scouted by agents, scored, and pushed
   through an **outreach funnel** (`funnel_stage`, `outreach_status`, `reply_token`,
-  `supplier_responded_at`, `buyer_approved_at`). SourceIQ actually *contacts* suppliers and manages
+  `supplier_responded_at`, `buyer_approved_at`). SourceGPT actually *contacts* suppliers and manages
   replies — where SourceReady stops.
 
 **We do not copy their directory model.** We borrow their *field taxonomy* and *UX patterns* to make
@@ -130,7 +130,7 @@ contact-unlock paywall** — "contacts included" is our positioning wedge.
 | 6.5 | ~~Contact-unlock paywall~~ | — | — | **intentionally skipped** — anti-pattern for us |
 | 6.6 | Tiered plans (Free/mid/Pro/Custom) | — | — | **already shipped** — `lib/plans.ts` TIERS (their point 38) |
 
-> Their point 45 (workspace concept) is **already satisfied** by SourceIQ's Clerk **organizations** —
+> Their point 45 (workspace concept) is **already satisfied** by SourceGPT's Clerk **organizations** —
 > multi-user tenant with its own event pool. No new work; noted for completeness.
 
 ### Design reference: SourceReady credit-management UI (screenshots, 2026-08-12)
@@ -157,7 +157,7 @@ lost before that decision lands:
   of the same CTA.
 
 If/when #45 resolves in favor of a credit currency, this list is the starting design spec for
-SourceIQ's own credit-management surface (`app/settings/page.tsx` + a persistent nav widget) —
+SourceGPT's own credit-management surface (`app/settings/page.tsx` + a persistent nav widget) —
 noting again that the contact-unlock paywall pattern (6.5) stays explicitly out of scope regardless.
 
 ---
@@ -183,7 +183,7 @@ Fuse shipped onboarding (#18) + referrals (#19) into a rewarded activation loop.
 ## Epic 8 — Speed / perceived latency  ★ (SourceReady's biggest felt advantage)
 
 SourceReady feels instant because it's a **lookup over a pre-indexed directory** — nothing is
-generated at request time. SourceIQ **generates** suppliers live (multi-agent scout → qualify →
+generated at request time. SourceGPT **generates** suppliers live (multi-agent scout → qualify →
 enrich → contact), so it is inherently slower. The orchestration is already pool-parallelized
 (`SCOUT_CONCURRENCY`, `QUAL_CONCURRENCY`), so the remaining latency is model choice, live
 generation, and inline enrichment — all reclaimable.

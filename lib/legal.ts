@@ -5,16 +5,16 @@
 
 export const COMPANY = {
   /** Consumer-facing product/brand name. */
-  product: "SourceIQ",
+  product: "SourceGPT",
   /** Registered legal entity operating the service. */
   legalName: "ZNT S.r.l.s.",
   /** Primary domain of the marketing site. */
-  site: "sourceiq.org",
+  site: "sourcegpt.org",
   /** Where the app itself is served. */
-  appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://app.sourceiq.org",
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://app.sourcegpt.org",
   /** Contact + privacy inbox. */
-  contactEmail: process.env.SUPPORT_EMAIL || "hello@sourceiq.org",
-  privacyEmail: process.env.PRIVACY_EMAIL || "privacy@sourceiq.org",
+  contactEmail: process.env.SUPPORT_EMAIL || "hello@sourcegpt.org",
+  privacyEmail: process.env.PRIVACY_EMAIL || "privacy@sourcegpt.org",
   /** Registered postal address (shared with the email compliance footer). */
   postalAddress: process.env.MAIL_POSTAL_ADDRESS || null,
 } as const;
