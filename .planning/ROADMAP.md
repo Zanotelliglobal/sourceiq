@@ -39,7 +39,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `package.json`'s name and internal code identifiers reflect the new name where reasonable to change
   3. The `INJECTION_DEFENSE` anti-impersonation clause and outreach non-disclosure rules in `lib/agents.ts` have been manually reviewed and renamed by a human, with the guard's behavior confirmed unchanged (not just "tests green")
   4. A repo-wide, case-insensitive grep for "SourceIQ" returns zero unintended hits, with the two `-autoresearch` history directories as the only documented exception
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Bulk scripted rename (SourceIQ → SourceGPT) across app/, lib/ (excl. agents.ts), components/, tests/ (excl. prompt-injection-defense.test.ts), i18n locales, docs/, package.json, brand assets
+- [ ] 01-02-PLAN.md — Manual, human-verified rename of lib/agents.ts's INJECTION_DEFENSE/identityRules security-critical prompt text
+- [ ] 01-03-PLAN.md — Manual rename of legal pages and narrative docs (change-request-backlog.md, .claude/CLAUDE.md)
+- [ ] 01-04-PLAN.md — Full verification suite, dual-scope BRAND-05 grep sweep, and phase sign-off
 **UI hint**: yes
 
 ### Phase 2: Marketing & Pricing Surface
@@ -102,7 +107,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Rename & Brand Migration | 0/TBD | Not started | - |
+| 1. Rename & Brand Migration | 0/4 | Not started | - |
 | 2. Marketing & Pricing Surface | 0/TBD | Not started | - |
 | 3. Persistent Supplier Repository | 0/TBD | Not started | - |
 | 4. Supplier Star Ratings | 0/TBD | Not started | - |
