@@ -42,22 +42,26 @@ Declared values (must be multiples of 4). This project already runs two intentio
 | 3xl | 64px | — |
 | 4xl | 96px | Vertical padding between major landing sections (`py-24`) — already established in every existing `LandingContent.tsx` section; the new feature-grid section and closing CTA banner must match this rhythm, not introduce a tighter one |
 
-Exceptions: none beyond the existing 4xl/96px landing-section token above (already in active use, not a new deviation).
+**Exceptions (justified, not just restated):**
+
+- **`4xl` = 96px**, outside the standard 4/8/16/24/32/48/64 spacing set. **Justification:** this is not a new deviation introduced by this phase — `py-24` (96px) is the vertical rhythm already in production on every single section of `LandingContent.tsx` today (Hero, Proof stats, How it works, Pricing, Final CTA — verified by direct file read during research). This phase adds exactly two new sections to that same page (feature-grid, closing CTA banner). Using the standard 64px token for only those two new sections, while every surrounding section on the same page uses 96px, would create a visually inconsistent vertical seam mid-page — new sections would read as cramped relative to their neighbors. Matching the pre-existing page-wide rhythm is the correct choice here specifically because this phase's new sections are interleaved between unchanged 96px-rhythm sections, not because 96px is being adopted as a new general-purpose token. No other spacing value in this contract deviates from the standard 4/8/16/24/32/48/64 set.
 
 ---
 
 ## Typography
 
-Existing system type scale (`design-system/MASTER.md`): `12 · 14 · 16 · 18 · 24 · 32 · 48` px, weights `400/500/600/700/800` available. This phase's **new** content (feature-grid tiles, footer extension copy, closing CTA banner, CCPA page body) must use exactly the 2 weights below; headings/CTAs elsewhere on the same page already use bold/extrabold and semibold — those are pre-existing, unchanged by this phase, and listed as a documented exception (not a new decision).
+Existing system type scale (`design-system/MASTER.md`) has a wider palette available (`12 · 14 · 16 · 18 · 24 · 32 · 48` px, weights `400/500/600/700/800`) than this contract uses. **This phase's design contract is capped at exactly 4 sizes and, for NEW content specifically, exactly 2 weights** (Regular 400, Semibold 600) — the table below is the full, closed set; nothing outside it is introduced by this phase.
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Body | 16px | Regular (400) | 1.5 |
 | Label | 14px | Semibold (600) — pre-existing exception, used for badges/nav-links/buttons, not newly introduced | 1.4 |
-| Heading | 30px (`text-3xl`) | Bold (700) | 1.2 |
-| Display | 48–64px (`text-4xl`/`text-5xl`/`text-[4rem]`, hero H1 only) | Extrabold (800) — pre-existing exception, unchanged hero treatment | 1.03–1.1 |
+| Heading | 30px (`text-3xl`) | Bold (700) — **pre-existing legacy exception only**: this weight is already in production on the existing H2s on this same page (Proof stats, How it works, Pricing, Final CTA section headings) and is not re-used by, or budgeted against, this phase's NEW content | 1.2 |
+| Display | 48–64px (`text-4xl`/`text-5xl`/`text-[4rem]`, hero H1 only) | Extrabold (800) — **pre-existing legacy exception only**, same rationale as Heading above: unchanged hero treatment, not part of the new-content weight budget | 1.03–1.1 |
 
-New-content-specific rule: feature-grid tile titles use Heading treatment at a smaller size (18px/`text-lg`, bold) to avoid competing with the section's `text-3xl` H2 — tile bodies use Body (16px/regular/1.5).
+**New-content weight budget (hard cap, applies to feature-grid tiles, footer extension copy, closing CTA banner, CCPA page body):** exactly 2 weights — Regular (400) for body/paragraph copy, Semibold (600) for emphasis/titles. Bold (700) and Extrabold (800) are NOT used anywhere in this phase's new content; they only continue to exist on the page as the pre-existing Heading/Display rows above, which this phase does not touch or extend.
+
+**Feature-grid tile titles (revised — no longer a 5th size or a 3rd weight):** tile titles reuse the existing **Body size (16px)** at **Semibold (600)** weight, 1.4 line-height — i.e. `text-base font-semibold` — visually distinct enough from the plain-Regular tile body copy directly beneath it without introducing an 18px size or a Bold/700 weight. Tile bodies use Body as-is (16px/Regular 400/1.5). This keeps the phase's total distinct sizes at 4 (14, 16, 30, 48–64) and its new-content weights at 2 (400, 600).
 
 ---
 
@@ -73,6 +77,10 @@ Existing "Trust Blue + Signal Amber" system (`design-system/MASTER.md`). Amber i
 | Destructive | `#DC2626` (red-600) | Reserved for: inline checkout/redirect failure messages only (`text-red-600 bg-red-50 border border-red-100` — existing pattern from `app/billing/page.tsx`). No destructive-confirmation actions exist anywhere in this phase's scope (no deletes/cancellations on the marketing or pricing surface) |
 
 Accent reserved for: Hero CTA, Growth pricing card's badge + CTA, Final CTA section's button, Closing CTA banner's button — four call sites total, all pre-existing pattern or directly modeled on it. Never applied to secondary tier CTAs, nav, or footer.
+
+**Primary visual anchor (per-screen):** each of this phase's two key screens has exactly one declared focal point, so the eye has a single unambiguous entry point rather than competing with the amber accent or the grid layout for attention:
+- **Hero/landing screen:** the Hero media slot (MKT-05 placeholder, `public/hero-placeholder.svg` in its browser-frame card) is the primary visual anchor — it is the largest, highest-contrast element above the fold, positioned so the eye lands there first, then moves to the H1/subhead/CTA. The amber "Start free trial" button is the secondary (action) anchor, not a competing visual anchor — it uses accent color specifically because attention has already been drawn to the section by the media slot, and the button is the natural next stop.
+- **Pricing section:** the Growth pricing card (`tier.featured`, amber "Most popular" badge, slightly elevated/bordered treatment vs. Basic/Premium/Enterprise) is the primary visual anchor — the one card designed to draw the eye first via its amber accent + elevation, consistent with the Color section's "Amber reserved for exactly one highest-intent action per screen" rule already declared above.
 
 ---
 
@@ -128,6 +136,8 @@ Applicable state considerations resolved: 6 covered, 0 backstop, 0 unresolved (2
 | third-party | none | not applicable |
 
 **Icon note (not a registry, but a related safety consideration):** the footer's 3 social icons (Facebook, Instagram, LinkedIn) must be custom inline SVG components (e.g. `components/icons/SocialIcons.tsx`), not a new npm dependency. RESEARCH.md evaluated `@icons-pack/react-simple-icons` as an alternative and returned a `SUS` legitimacy verdict (unresolvable registry metadata in the sandboxed research environment) — **not recommended**. Source path data for the 3 marks from Simple Icons or each brand's own press kit at implementation time; do not freehand-trace logos.
+
+**Accessibility fallback (required, each of the 3 icons):** since these are icon-only links (no visible text label), each anchor must carry an `aria-label` naming the destination explicitly — `aria-label="Follow SourceGPT on Facebook"` / `"...on Instagram"` / `"...on LinkedIn"` — and the inline `<svg>` itself must be marked `aria-hidden="true"` (or use `focusable="false"` + `role="presentation"`) so screen readers announce only the link's `aria-label`, not a duplicate/empty SVG title. Do not rely on `title` attributes inside the SVG alone — `aria-label` on the anchor is the primary mechanism, consistent with how other icon-only controls in this codebase are expected to be labeled.
 
 ---
 
