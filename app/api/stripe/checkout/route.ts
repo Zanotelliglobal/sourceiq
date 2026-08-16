@@ -36,7 +36,10 @@ export async function POST(req: NextRequest) {
   const cadence = (body.cadence || "monthly") as Cadence;
 
   const tier = getTier(tierKey);
-  if (!tier || tierKey === "free") {
+  // "Contact us" (Enterprise) has no listed price and must never be
+  // self-serve-checkoutable — a crafted { tier: "pro" } request would
+  // otherwise try to purchase Enterprise via Stripe (threat T-02-01).
+  if (!tier || tierKey === "free" || tier.contactSales === true) {
     return NextResponse.json({ error: "Invalid plan selected" }, { status: 400 });
   }
   if (!CADENCES.has(cadence)) {
@@ -68,13 +71,39 @@ export async function POST(req: NextRequest) {
   let customerId = ctx.org.stripe_customer_id || (await newCustomer());
 
   async function createSession(customer: string) {
+    // Free trial is granted ONLY on the Basic tier's Stripe checkout (PRICE-03,
+    // D-05) — the discriminator is tierKey === "basic" specifically, not any
+    // broader "not contactSales"/"not featured" condition, so Growth/Premium
+    // never pick up a trial by accident. This is a second, independently-timed
+    // trial layered on top of the existing app-level trial_ends_at mechanism
+    // (lib/tenant.ts) — that mechanism is intentionally left untouched; see
+    // 02-RESEARCH.md Open Question 1.
+    const isBasicTrial = tierKey === "basic";
     return stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
       line_items: [{ price: priceId!, quantity: 1 }],
       // The webhook is the source of truth; metadata lets it find our org row
       // and record which tier/cadence was purchased.
-      subscription_data: { metadata: { org_id: String(ctx!.orgId), tier: tierKey, cadence } },
+      subscription_data: {
+        metadata: { org_id: String(ctx!.orgId), tier: tierKey, cadence },
+        ...(isBasicTrial
+          ? {
+              trial_period_days: 14,
+              // Cardless trial (matches the existing "14-day free trial, no
+              // credit card required" hero copy in app/page.tsx's jsonLd):
+              // if the trial ends with no payment method on file, cancel
+              // rather than silently attempt to invoice.
+              trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+            }
+          : {}),
+      },
+      // payment_method_collection is a top-level Session field, NOT nested
+      // under subscription_data (verified against Stripe.Checkout.
+      // SessionCreateParams in node_modules/stripe's TS types per Assumption
+      // A3). "if_required" lets Checkout skip card collection when the
+      // session total is $0 due to the trial above.
+      ...(isBasicTrial ? { payment_method_collection: "if_required" as const } : {}),
       metadata: { org_id: String(ctx!.orgId), tier: tierKey, cadence },
       success_url: `${appUrl}/dashboard?checkout=success`,
       cancel_url: `${appUrl}/billing?checkout=cancelled`,
