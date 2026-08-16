@@ -74,7 +74,22 @@ Plans:
   4. Landing page footer shows logo, mission tagline, contact email, social icons, legal links (Privacy, Terms, and a real-content CCPA page), and a copyright line, preceded by a closing CTA banner before the footer
   5. The "what we do" feature-grid copy matches actually-shipped functionality per the resolved backlog mapping (reworded/repositioned/removed as specified), and the hero section has a working demo video/screenshot slot (placeholder acceptable)
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Tracer: pricing catalog rebuild to Basic/Growth/Premium/Enterprise + USD (`monthlyEur`→`monthlyUsd`), `contactSales` discriminator, Stripe Checkout Basic-trial + Enterprise-reject, /billing page rewrite, tests updated [PRICE-01..05]
+
+**Wave 2** *(parallel — different files)*
+
+- [ ] 02-02-PLAN.md — Landing page overhaul: 4-tier pricing cards live from `lib/plans.ts`, new 5-tile feature grid, closing CTA banner, hero media slot + `public/hero-placeholder.svg`, delete inline duplicate footer [PRICE-01, PRICE-03, MKT-01, MKT-04, MKT-05]
+- [ ] 02-03-PLAN.md — Global SiteFooter extension (logo/tagline/contact/social/legal/copyright), new inline-SVG `SocialIcons.tsx` (Pitfall 3 workaround), new `/legal/ccpa` page [MKT-02, MKT-03]
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-04-PLAN.md — Full verification suite + human checkpoint (9 STRIPE_PRICE_* env vars) + human visual review of marketing surface [all PRICE / MKT requirements]
+
 **UI hint**: yes
 
 ### Phase 3: Persistent Supplier Repository
@@ -91,7 +106,20 @@ Plans:
   4. A query bug scoped to one org's data path cannot expose another org's private enrichment, AI score, notes, or rating data (verified by an explicit two-org test)
   5. A new investigation can check the repository for an already-known supplier before spending AI-search budget rediscovering it, and the repository stays scoped per-org (not platform-wide) for this milestone
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Tracer: end-to-end supplier-repository slice (schema DDL + lib/supplier-repository.ts + wire into makeProcessSupplier + two-org isolation test) [REPO-01/02/03/04/06]
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — Expansion: write-path coverage for makeProcessSupplierQuick + makeProcessSupplierDeepen [REPO-02]
+- [ ] 03-03-PLAN.md — Read path: pre-search repository check + matching heuristic in app/api/orchestrate/route.ts [REPO-05/06]
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-04-PLAN.md — Final D-06 verification suite, live schema-applied check, human sign-off [REPO-01..06]
 
 ### Phase 4: Supplier Star Ratings
 
