@@ -14,6 +14,7 @@ import {
   type Cadence,
   type Tier,
 } from "@/lib/plans";
+import { COMPANY } from "@/lib/legal";
 
 type CancelImpact = { active_projects: number; supplier_count: number; outreach_count: number };
 
@@ -228,9 +229,12 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Tier comparison grid — column count tracks TIERS.length, not hardcoded */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {TIERS.map(tier => (
+          {/* Tier comparison grid — column count tracks TIERS.length, not hardcoded.
+              The internal `free` tier (canceled-subscription resting state) is
+              filtered out here; it stays in the TIERS catalog as lib/usage.ts's
+              fallback but isn't a customer-facing plan choice (Open Question 2). */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {TIERS.filter(t => t.key !== "free").map(tier => (
               <TierCard
                 key={tier.key}
                 tier={tier}
@@ -358,7 +362,13 @@ function TierCard({
   ];
 
   return (
-    <div className={`card p-5 flex flex-col ${tier.featured ? "ring-2 ring-blue-500 relative" : ""}`}>
+    <div
+      className={`card p-5 flex flex-col ${tier.featured ? "ring-2 ring-blue-500 relative" : ""}`}
+      // Baseline monthly USD price, independent of the selected cadence —
+      // exposed as a data attribute for e2e/QA tooling to key off the raw
+      // catalog value rather than scraping the formatted display string.
+      data-monthly-usd={tier.monthlyUsd}
+    >
       {tier.featured && (
         <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 badge badge-blue text-[10px]">{t("Recommended")}</span>
       )}
@@ -367,11 +377,13 @@ function TierCard({
         <p className="text-xs text-slate-500 mt-1 min-h-[32px]">{t(tier.blurb)}</p>
       </div>
       <div className="mb-4">
-        {price === 0 ? (
+        {tier.contactSales === true ? (
+          <div className="text-2xl font-extrabold text-slate-900">{t("Contact sales")}</div>
+        ) : price === 0 ? (
           <div className="text-2xl font-extrabold text-slate-900">{t("Free")}</div>
         ) : (
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold text-slate-900">€{price.toLocaleString()}</span>
+            <span className="text-2xl font-extrabold text-slate-900">${price.toLocaleString()}</span>
             <span className="text-sm text-slate-500 font-medium">{cadenceSuffix(cadence)}</span>
           </div>
         )}
@@ -400,6 +412,13 @@ function TierCard({
         ) : (
           <div className="text-center text-xs font-semibold text-slate-500 py-2">{t("Current plan")}</div>
         )
+      ) : tier.contactSales === true ? (
+        <a
+          href={`mailto:${COMPANY.contactEmail}`}
+          className="btn-primary w-full text-center inline-block"
+        >
+          {t("Contact sales")}
+        </a>
       ) : tier.key === "free" ? (
         <div className="text-center text-xs text-slate-500 py-2">{t("No card required")}</div>
       ) : (
