@@ -3,9 +3,11 @@
 import Link from "next/link";
 import {
   Search, Brain, Scale, ShieldCheck, Globe2, Zap, Lock,
-  ArrowRight, Check, Clock, Users, Sparkles,
+  ArrowRight, Check, Clock, Users, Sparkles, RefreshCw, DollarSign,
 } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
+import { TIERS, displayPrice, cadenceSuffix, UNLIMITED, type Cadence } from "@/lib/plans";
+import { COMPANY } from "@/lib/legal";
 
 // Public marketing landing content (client component so it can be translated).
 // The server page (app/page.tsx) handles the signed-in → dashboard redirect.
@@ -59,36 +61,14 @@ export default function LandingContent() {
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-300" />
                 <span className="ml-3 text-xs text-slate-500 font-mono">sourcegpt.app/events/precision-machining</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
-                {[
-                  { k: t("Suppliers found"), v: "52" },
-                  { k: t("Avg. AI score"), v: "78" },
-                  { k: t("Responded"), v: "19" },
-                  { k: t("Shortlisted"), v: "7" },
-                ].map(s => (
-                  <div key={s.k} className="p-4 text-left">
-                    <div className="text-2xl font-bold text-slate-900 tabular-nums">{s.v}</div>
-                    <div className="text-[11px] text-slate-500 font-medium">{s.k}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="p-4 space-y-2">
-                {[
-                  { n: "Rheinmetall Precision GmbH", c: t("Germany"), s: 91, stage: "badge-stage-shortlisted", label: t("Shortlisted") },
-                  { n: "Tokyo Micro Components", c: t("Japan"), s: 84, stage: "badge-stage-responded", label: t("Responded") },
-                  { n: "Baltic CNC Solutions", c: t("Poland"), s: 76, stage: "badge-stage-contacted", label: t("Contacted") },
-                ].map(r => (
-                  <div key={r.n} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors">
-                    <div className="w-10 h-10 rounded-xl border-2 border-blue-200 text-blue-600 flex items-center justify-center font-bold text-sm tabular-nums flex-shrink-0">{r.s}</div>
-                    <div className="flex-1 text-left min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 truncate">{r.n}</div>
-                      <div className="text-xs text-slate-500">{r.c}</div>
-                    </div>
-                    <span className={r.stage}>{r.label}</span>
-                  </div>
-                ))}
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element -- static placeholder asset, swapped for a real screenshot/video later with zero code change (MKT-05, D-08) */}
+              <img
+                src="/hero-placeholder.svg"
+                alt={t("Product preview showing SourceGPT's supplier discovery interface")}
+                className="w-full h-auto block"
+              />
             </div>
+            <p className="text-xs text-slate-500 mt-3">{t("Product preview")}</p>
           </div>
         </div>
       </section>
@@ -147,41 +127,71 @@ export default function LandingContent() {
             <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t("Simple, usage-based pricing")}</h2>
             <p className="text-slate-500 mt-3">{t("Start free. Scale as your sourcing pipeline grows.")}</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {[
-              { name: t("Trial"), price: t("Free"), sub: t("14 days"), cta: t("Start free"), highlight: false,
-                features: [t("3 sourcing events"), t("Up to 60 suppliers / event"), t("AI scoring & enrichment"), t("Anonymous outreach")] },
-              { name: t("Growth"), price: "$499", sub: t("per month"), cta: t("Start free trial"), highlight: true,
-                features: [t("Unlimited sourcing events"), t("Priority scout agents"), t("Follow-up automation"), t("CSV export & reporting"), t("Email support")] },
-              { name: t("Enterprise"), price: t("Custom"), sub: t("annual"), cta: t("Contact sales"), highlight: false,
-                features: [t("SSO & role-based access"), t("Dedicated infrastructure"), t("Custom integrations"), t("SLA & onboarding")] },
-            ].map(p => (
-              <div key={p.name} className={`card p-7 flex flex-col ${p.highlight ? "ring-2 ring-blue-600 shadow-lg relative" : ""}`}>
-                {p.highlight && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-widest text-white bg-blue-600 px-3 py-1 rounded-full">
-                    {t("Most popular")}
-                  </span>
-                )}
-                <div className="text-sm font-bold text-slate-700">{p.name}</div>
-                <div className="mt-3 flex items-baseline gap-1.5">
-                  <span className="text-4xl font-extrabold text-slate-900">{p.price}</span>
-                  <span className="text-sm text-slate-500">{p.sub}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {/* Cards + prices read live from lib/plans.ts TIERS — a monthlyUsd
+                change there flows through automatically, no local price array
+                to keep in sync (D-04). Landing page always shows the monthly
+                cadence — there is no cadence toggle on this public surface
+                (unlike app/billing/page.tsx, which does have one). */}
+            {TIERS.filter(tier => tier.key !== "free").map(tier => {
+              const cadence: Cadence = "monthly";
+              const price = displayPrice(tier, cadence);
+              const ctaClass = tier.featured === true ? "btn-cta" : "btn-secondary";
+              const features: string[] = [
+                tier.limits.eventsPerMonth === UNLIMITED
+                  ? t("Unlimited sourcing events")
+                  : t("{n} sourcing events / month", { n: tier.limits.eventsPerMonth }),
+                tier.limits.suppliersPerEvent === UNLIMITED
+                  ? t("Unlimited suppliers per event")
+                  : t("Up to {n} suppliers / event", { n: tier.limits.suppliersPerEvent }),
+                tier.limits.seats === UNLIMITED
+                  ? t("Unlimited team seats")
+                  : t("{n} team seats", { n: tier.limits.seats }),
+                ...(tier.limits.outreach ? [t("Live supplier outreach")] : []),
+                ...(tier.limits.export ? [t("CSV/Excel/PDF export")] : []),
+              ];
+              return (
+                <div key={tier.key} className={`card p-7 flex flex-col ${tier.featured === true ? "ring-2 ring-blue-600 shadow-lg relative" : ""}`}>
+                  {tier.featured === true && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-widest text-white bg-blue-600 px-3 py-1 rounded-full">
+                      {t("Most popular")}
+                    </span>
+                  )}
+                  <div className="text-sm font-bold text-slate-700">{t(tier.name)}</div>
+                  <p className="text-xs text-slate-500 mt-1 min-h-[32px]">{t(tier.blurb)}</p>
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    {tier.contactSales === true ? (
+                      <span className="text-2xl font-extrabold text-slate-900">{t("Custom pricing")}</span>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-extrabold text-slate-900">${price.toLocaleString()}</span>
+                        <span className="text-sm text-slate-500">{cadenceSuffix(cadence)}</span>
+                      </>
+                    )}
+                  </div>
+                  <ul className="mt-6 space-y-2.5 flex-1">
+                    {features.map(f => (
+                      <li key={f} className="flex items-start gap-2 text-sm text-slate-600">
+                        <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />{f}
+                      </li>
+                    ))}
+                  </ul>
+                  {tier.contactSales === true ? (
+                    <a href={`mailto:${COMPANY.contactEmail}`} className={`mt-7 justify-center ${ctaClass}`}>
+                      {t("Contact sales")}
+                    </a>
+                  ) : tier.key === "basic" ? (
+                    <Link href="/sign-up" className={`mt-7 justify-center ${ctaClass}`}>
+                      {t("Start free trial")}
+                    </Link>
+                  ) : (
+                    <Link href="/sign-up" className={`mt-7 justify-center ${ctaClass}`}>
+                      {t("Choose {plan}", { plan: t(tier.name) })}
+                    </Link>
+                  )}
                 </div>
-                <ul className="mt-6 space-y-2.5 flex-1">
-                  {p.features.map(f => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-slate-600">
-                      <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />{f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/sign-up"
-                  className={`mt-7 justify-center ${p.highlight ? "btn-cta" : "btn-secondary"}`}
-                >
-                  {p.cta}
-                </Link>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
