@@ -15,7 +15,7 @@ type EventRow = {
   id: number; title: string; category: string; status: string;
   annual_spend: string | null;
   wave_count: number; created_at: string; updated_at: string;
-  supplier_count: number; shortlisted_count: number;
+  supplier_count: number; verified_supplier_count: number; shortlisted_count: number;
   pinned: boolean; archived: boolean;
   // Clerk user id of whoever started the event (nullable for legacy rows).
   // Only meaningful to admins/owners — non-admins only ever receive their own
@@ -448,6 +448,29 @@ export default function Dashboard() {
           </div>
           {(event.shortlisted_count || 0) > 0 && (
             <div className="text-xs text-amber-800 font-medium">{t("{count} shortlisted", { count: event.shortlisted_count })}</div>
+          )}
+          {/* F10: per-event supplier-cap progress — the org-level usage card
+              only ever showed the flat suppliersPerEvent ceiling, never how
+              close any individual event actually is to hitting it, so a buyer
+              got no warning before a 402 mid-event. Uses verified_supplier_count
+              (excludes is_quick_result rows), matching checkSupplierLimit's own
+              count — the unverified Quick Scan count doesn't consume this cap
+              (see F2/F3), so showing the raw supplier_count here would overstate
+              how close the event actually is to it. Only rendered when the
+              tier has a real (non-unlimited) cap. */}
+          {usage && usage.limits.suppliersPerEvent !== usage.unlimited && (
+            <div
+              className={`text-[11px] mt-0.5 ${
+                (event.verified_supplier_count || 0) >= usage.limits.suppliersPerEvent
+                  ? "text-red-600 font-semibold"
+                  : (event.verified_supplier_count || 0) >= usage.limits.suppliersPerEvent * 0.8
+                  ? "text-amber-700 font-medium"
+                  : "text-slate-400"
+              }`}
+              title={t("Verified suppliers vs. this plan's per-event cap")}
+            >
+              {event.verified_supplier_count || 0}/{usage.limits.suppliersPerEvent} {t("cap")}
+            </div>
           )}
         </td>
         <td className="px-4 py-4 hidden xl:table-cell">

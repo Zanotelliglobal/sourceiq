@@ -43,6 +43,7 @@ export async function GET() {
     .prepare(
       `SELECT se.*,
         COUNT(s.id)::int as supplier_count,
+        COALESCE(SUM(CASE WHEN s.is_quick_result = false THEN 1 ELSE 0 END),0)::int as verified_supplier_count,
         COALESCE(SUM(CASE WHEN s.funnel_stage = 'shortlisted' THEN 1 ELSE 0 END),0)::int as shortlisted_count,
         CASE
           WHEN se.status IN ('scouting','outreach')
