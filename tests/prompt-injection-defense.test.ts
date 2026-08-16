@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 
 // #61 — prompt-injection isolation.
 //
-// lib/agents.ts has several agents that ingest content SourceIQ does not
+// lib/agents.ts has several agents that ingest content SourceGPT does not
 // control: live web_search results (scout, the grounded qualifier, the
 // enricher, the contact finder) or a real inbound email reply from a supplier
 // (the reply classifier). A malicious/compromised page or the supplier
@@ -50,7 +50,7 @@ describe("prompt-injection defense (#61)", () => {
     expect(functionBody(fnName)).toContain("${INJECTION_DEFENSE}");
   });
 
-  // Agents that only ever see buyer-authored or SourceIQ-generated text (no
+  // Agents that only ever see buyer-authored or SourceGPT-generated text (no
   // third-party web content, no inbound supplier messages) are intentionally
   // out of scope — flagging them here (rather than silently) so scope stays a
   // deliberate choice, not an oversight, if one of them starts ingesting
