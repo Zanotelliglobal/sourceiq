@@ -13,15 +13,15 @@ Requirements for this milestone (the 10-item change-request backlog in
 - [x] **BRAND-01**: Every user-facing surface (UI copy, page titles, OG image, emails,
       legal pages, i18n locales de/es/fr/it) reads "SourceGPT", not "SourceIQ"
 
-- [ ] **BRAND-02**: `package.json` name and any internal code identifiers reflect the
+- [x] **BRAND-02**: `package.json` name and any internal code identifiers reflect the
       new name where reasonable to change
 
-- [ ] **BRAND-03**: The `SourceIQ` string embedded in `lib/agents.ts`'s
+- [x] **BRAND-03**: The `SourceIQ` string embedded in `lib/agents.ts`'s
       INJECTION_DEFENSE anti-impersonation clause and outreach non-disclosure rules is
       manually reviewed and renamed (not blind find/replace), with a human verifying
       the guard's behavior is unchanged
 
-- [ ] **BRAND-04**: `tests/prompt-injection-defense.test.ts` is manually reviewed to
+- [x] **BRAND-04**: `tests/prompt-injection-defense.test.ts` is manually reviewed to
       confirm the brand string used there is incidental fixture data, not load-bearing
       for the guard logic, before/after the rename
 
@@ -194,9 +194,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | BRAND-01 | Phase 1 | Complete |
-| BRAND-02 | Phase 1 | Pending |
-| BRAND-03 | Phase 1 | Pending |
-| BRAND-04 | Phase 1 | Pending |
+| BRAND-02 | Phase 1 | Complete |
+| BRAND-03 | Phase 1 | Complete |
+| BRAND-04 | Phase 1 | Complete |
 | BRAND-05 | Phase 1 | Pending |
 | PRICE-01 | Phase 2 | Pending |
 | PRICE-02 | Phase 2 | Pending |

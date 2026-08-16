@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 current_phase: 1
 current_phase_name: Rename & Brand Migration
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-08-15T19:45:56.901Z"
-last_activity: 2026-08-15
-last_activity_desc: Roadmap created from 33 v1 requirements (BRAND/PRICE/MKT/REPO/RATE/RFP/SSO/CHAT) across 5 phases
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-08-16T18:35:00.000Z"
+last_activity: 2026-08-16
+last_activity_desc: "01-02 (security-critical lib/agents.ts rename) committed (cae46b9) after live smoke-test checkpoint approval"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,11 +28,11 @@ than manual research would produce — and can act on it (outreach) without leav
 ## Current Position
 
 Phase: 1 of 5 (Rename & Brand Migration)
-Plan: 2 of 4 in current phase
-Status: Ready to execute
-Last activity: 2026-08-15 — Roadmap created from 33 v1 requirements (BRAND/PRICE/MKT/REPO/RATE/RFP/SSO/CHAT) across 5 phases
+Plan: 3 of 4 in current phase (01-04 remaining)
+Status: Ready to execute 01-04
+Last activity: 2026-08-16 — 01-02 committed (cae46b9): lib/agents.ts security-critical rename, live smoke test approved by user
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█████░░░░░] 50%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P03 | 22min | 2 tasks | 4 files |
+| Phase 01 P02 | 35min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,7 @@ Recent decisions affecting current work:
 - [Roadmap]: Marketing & Pricing (Phase 2) and Supplier Repository (Phase 3) both depend only on Phase 1 and can proceed independently of each other.
 - [Roadmap]: RFP Intake, SSO & Support Chatbot bundled into one phase (Phase 5) — three independent, parallelizable items with their own open questions (Clerk plan tier, build-vs-buy), none blocking the others.
 - [01-03]: Reworded change-request-backlog.md's -autoresearch directories bullet instead of blindly swapping to sourcegpt-ux-autoresearch, since that directory still exists on disk under its pre-rename name by deliberate 01-01 decision
+- [01-02]: User chose "static + live smoke test" verification depth at the checkpoint; live-verified runOutreachAgent's disclosed/anonymous identityRules guard is unchanged post-rename (user ran the smoke test themselves and approved)
 
 ### Pending Todos
 
@@ -79,11 +81,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 1: `lib/agents.ts`'s INJECTION_DEFENSE / outreach non-disclosure text needs manual (not blind find/replace) review during rename — flagged as highest-severity rename risk in research.
+- Phase 1 environment (RESOLVED as of 01-02): `npm run lint`/`npm test`/`npm run build` now confirmed passing (225/225 tests, clean build) once the node_modules/TLS blocker was fixed by the user running `npm ci` in their own terminal. Full npm verification suite is green.
+- Phase 1: any future live-agent smoke test needing `ANTHROPIC_API_KEY` must be run by the user in their own terminal — the harness's safety layer denies any command that reads/sources that key from `.env.local`, even read-only, regardless of sandbox settings; also note `vitest` (unlike `next dev`) does not auto-load `.env.local`, so the key must be exported into the shell first.
 - Phase 2: Existing-customer plan grandfathering approach (legacy-tier mapping vs. migration) is not yet decided — must be resolved before Phase 2 is planned complete.
 - Phase 3: Per-org (not platform-wide) repository scope is the assumed default per PROJECT.md Out of Scope — confirm before schema design locks in.
 - Phase 5: SSO needs Clerk Pro-plan Enterprise Connections entitlement verified before scoping; support chatbot build-vs-buy (in-house vs. vendor) needs confirmation before implementation.
-- Phase 1 environment: `npm run lint`/`npm test`/`npm run build` remain blocked by broken node_modules + registry TLS cert failure in this sandbox (pre-existing, documented in 01-01-SUMMARY.md). 01-01's bulk rename and 01-03's manual legal-page/narrative-doc rename are both committed (7668e66, d5a5378) using grep-based and manual verification instead; full npm verification still needs to run once the environment is fixed.
 
 ## Deferred Items
 
@@ -95,6 +97,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-15T19:45:56.894Z
-Stopped at: Completed 01-03-PLAN.md
-Resume file: None
+Last session: 2026-08-16T18:35:00.000Z
+Stopped at: Completed 01-02-PLAN.md
+Resume file: .planning/phases/01-rename-brand-migration/01-04-PLAN.md
