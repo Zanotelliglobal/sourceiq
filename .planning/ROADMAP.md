@@ -22,7 +22,7 @@ architectural coupling with each other.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Rename & Brand Migration** - SourceIQ → SourceGPT across every user-facing surface and internal identifier, with a human-verified pass over security-relevant prompt text.
+- [x] **Phase 1: Rename & Brand Migration** - SourceIQ → SourceGPT across every user-facing surface and internal identifier, with a human-verified pass over security-relevant prompt text.
 - [ ] **Phase 2: Marketing & Pricing Surface** - New 3+1 tier USD pricing page, footer/CTA/CCPA legal surface, and repositioned feature-grid copy, with existing customers protected from billing outage.
 - [ ] **Phase 3: Persistent Supplier Repository** - Durable, deduped, org-scoped supplier identity store shared across quick scan, full investigation, and (later) RFP matching, with private org data isolated from shared identity fields.
 - [ ] **Phase 4: Supplier Star Ratings** - Buyers rate suppliers 1-5 stars at the repository-identity level, coexisting with the existing per-event thumbs-up/down signal.
@@ -43,7 +43,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The `INJECTION_DEFENSE` anti-impersonation clause and outreach non-disclosure rules in `lib/agents.ts` have been manually reviewed and renamed by a human, with the guard's behavior confirmed unchanged (not just "tests green")
   4. A repo-wide, case-insensitive grep for "SourceIQ" returns zero unintended hits, with a documented exception list covering: the two `-autoresearch` history directories, `.planning/` (this milestone's own planning docs, which necessarily narrate the rename), the dead/legacy `sourceiq.db*` local-dev artifacts, and `.claude/worktrees/` tooling scratch directories (expanded during Phase 1 planning, see `01-CONTEXT.md` D-09 and `REQUIREMENTS.md` BRAND-05)
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 Plans:
 **Wave 1**
 
@@ -56,7 +56,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-04-PLAN.md — Full verification suite, dual-scope BRAND-05 grep sweep, and phase sign-off
+- [x] 01-04-PLAN.md — Full verification suite, dual-scope BRAND-05 grep sweep, and phase sign-off
 
 **UI hint**: yes
 
@@ -132,7 +132,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Rename & Brand Migration | 2/4 | In Progress|  |
+| 1. Rename & Brand Migration | 4/4 | Complete | 2026-08-15 |
 | 2. Marketing & Pricing Surface | 0/TBD | Not started | - |
 | 3. Persistent Supplier Repository | 0/TBD | Not started | - |
 | 4. Supplier Star Ratings | 0/TBD | Not started | - |

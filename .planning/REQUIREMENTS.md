@@ -25,7 +25,7 @@ Requirements for this milestone (the 10-item change-request backlog in
       confirm the brand string used there is incidental fixture data, not load-bearing
       for the guard logic, before/after the rename
 
-- [ ] **BRAND-05**: A repo-wide grep for the old name (case-insensitive) after the
+- [x] **BRAND-05**: A repo-wide grep for the old name (case-insensitive) after the
       rename returns zero unintended hits, with the following as the complete,
       documented exception list: the two `-autoresearch` history directories; the
       `.planning/` directory (this milestone's own planning docs narrate the rename
@@ -197,7 +197,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | BRAND-02 | Phase 1 | Complete |
 | BRAND-03 | Phase 1 | Complete |
 | BRAND-04 | Phase 1 | Complete |
-| BRAND-05 | Phase 1 | Pending |
+| BRAND-05 | Phase 1 | Complete |
 | PRICE-01 | Phase 2 | Pending |
 | PRICE-02 | Phase 2 | Pending |
 | PRICE-03 | Phase 2 | Pending |
