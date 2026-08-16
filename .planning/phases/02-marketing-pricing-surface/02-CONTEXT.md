@@ -60,7 +60,7 @@ display-name edits, trademark review (per PROJECT.md Out of Scope).
   currently exists anywhere in `components/LandingContent.tsx` (confirmed by grep: zero
   matches for "Autonomous Sourcing," "Compliance," "Workflow Automation," "Collaboration
   Hub," "Marketplace" in the current landing page). Add a new "what we do" feature-grid
-  section (5 tiles) per the backlog's already-resolved mapping
+  section (6 tiles) per the backlog's already-resolved mapping
   (`docs/change-request-backlog.md` §6):
   - **Include as-is:** Autonomous Sourcing Engine, Compliance & Audit.
   - **Reword** (partial/actual functionality, less than reference-site claims):
@@ -189,7 +189,7 @@ No external specs — requirements fully captured in decisions above.
 No specific visual mockups or exact price numbers were provided in this session — the
 user deferred those specifics to Claude's discretion within the constraints already
 locked above (base ~$1,400-1,500/mo, 1.5-2x step-ups, Basic/Growth/Premium names,
-5-tile feature grid per the backlog's resolved mapping).
+6-tile feature grid per the backlog's resolved mapping).
 
 </specifics>
 

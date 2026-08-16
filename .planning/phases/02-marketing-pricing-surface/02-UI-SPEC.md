@@ -120,10 +120,10 @@ Applicable state considerations resolved: 6 covered, 0 backstop, 0 unresolved (2
 | empty | Hero media slot (media) | ✅ covered | Static placeholder screenshot asset (`public/hero-placeholder.svg`) with "Product preview" caption — see Copywriting Contract row above |
 | loading | Pricing card CTA buttons (interactive-control) | ✅ covered | Existing "Redirecting…" busy-state copy (`app/billing/page.tsx`) reused for any Basic/Growth/Premium checkout-initiating button on the new pricing surface |
 | error | Pricing card CTA buttons / checkout flow (interactive-control) | ✅ covered | Inline red-600/red-50 error pattern — see Copywriting Contract "Error state — checkout/redirect failure" row |
-| populated | Pricing cards + feature-grid tiles (list-collection) | ✅ covered | Fixed-count grids only (exactly 4 pricing cards, exactly 5 feature-grid tiles) — this is the only rendered state, not a variable-volume list |
+| populated | Pricing cards + feature-grid tiles (list-collection) | ✅ covered | Fixed-count grids only (exactly 4 pricing cards, exactly 6 feature-grid tiles) — this is the only rendered state, not a variable-volume list |
 | overflow | Footer social icons + legal links row (nav) | ✅ covered | `SiteFooter.tsx` extension uses `flex-wrap` with `gap-4`/`gap-3` (existing `flex-col sm:flex-row` pattern) so the row wraps to 2 lines on narrow viewports rather than clipping or requiring horizontal scroll |
 | long-text | Feature-grid tile bodies + CCPA page body (static-content) | ✅ covered | Feature-grid tile body copy capped at ~110 characters (2 lines at 16px/1.5) matching the existing "How it works" 3-card pattern; CCPA page reuses `LegalLayout`'s wrapping prose treatment (no truncation, no fixed-height container) |
-| zero-one-many | Pricing cards / feature-grid tiles (list-collection) | ⚠ dismissed | Both grids are hardcoded, fixed-count arrays (4 tiers, 5 tiles) — count never varies at runtime, so plural/singular copy and zero-state layout don't apply |
+| zero-one-many | Pricing cards / feature-grid tiles (list-collection) | ⚠ dismissed | Both grids are hardcoded, fixed-count arrays (4 tiers, 6 tiles) — count never varies at runtime, so plural/singular copy and zero-state layout don't apply |
 | partial | — | ⚠ dismissed | No form or partially-populated data record exists anywhere in this phase's scope (no new form UI; pricing/feature content is fully static) |
 
 ---

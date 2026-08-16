@@ -83,7 +83,7 @@ Plans:
 
 **Wave 2** *(parallel — different files)*
 
-- [ ] 02-02-PLAN.md — Landing page overhaul: 4-tier pricing cards live from `lib/plans.ts`, new 5-tile feature grid, closing CTA banner, hero media slot + `public/hero-placeholder.svg`, delete inline duplicate footer [PRICE-01, PRICE-03, MKT-01, MKT-04, MKT-05]
+- [ ] 02-02-PLAN.md — Landing page overhaul: 4-tier pricing cards live from `lib/plans.ts`, new 6-tile feature grid, closing CTA banner, hero media slot + `public/hero-placeholder.svg`, delete inline duplicate footer [PRICE-01, PRICE-03, MKT-01, MKT-04, MKT-05]
 - [ ] 02-03-PLAN.md — Global SiteFooter extension (logo/tagline/contact/social/legal/copyright), new inline-SVG `SocialIcons.tsx` (Pitfall 3 workaround), new `/legal/ccpa` page [MKT-02, MKT-03]
 
 **Wave 3** *(blocked on Wave 2)*
