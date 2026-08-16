@@ -260,24 +260,9 @@ export default function LandingContent() {
         </div>
       </section>
 
-      {/* ── Footer ───────────────────────────────────────────── */}
-      <footer className="border-t border-slate-100">
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-            <div className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-            </div>
-            SourceGPT
-          </div>
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
-              <Link href="/legal/privacy" className="hover:text-slate-900 transition-colors">{t("Privacy Policy")}</Link>
-              <Link href="/legal/terms" className="hover:text-slate-900 transition-colors">{t("Terms of Service")}</Link>
-            </div>
-            <p className="text-xs text-slate-500">© {new Date().getFullYear()} SourceGPT. {t("AI-powered supplier intelligence.")}</p>
-          </div>
-        </div>
-      </footer>
+      {/* Footer is rendered globally by components/SiteFooter.tsx via
+          app/layout.tsx — no duplicate footer here (fixes the pre-existing
+          stacked-two-footers bug; see 02-RESEARCH.md Pattern 3). */}
     </div>
   );
 }
