@@ -120,6 +120,32 @@ export default function LandingContent() {
         </div>
       </section>
 
+      {/* ── What we do ───────────────────────────────────────── */}
+      <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-24">
+        <div className="text-center max-w-2xl mx-auto mb-16">
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t("What SourceGPT does")}</h2>
+          <p className="text-slate-500 mt-3">{t("Everything you need to run a compliant, accountable sourcing pipeline.")}</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[
+            { Icon: Zap, title: t("Autonomous Sourcing Engine"), body: t("Describe a sourcing need once — AI agents scout, score, and shortlist real suppliers from live web search, end to end.") },
+            { Icon: ShieldCheck, title: t("Compliance & Audit"), body: t("Every discovery and outreach action is scoped to your organization and logged, with GDPR-aligned data handling built in.") },
+            { Icon: RefreshCw, title: t("Workflow Automation"), body: t("Background agents automatically enrich and verify suppliers as your pipeline moves — no manual re-checking required.") },
+            { Icon: Users, title: t("Collaboration Hub"), body: t("Invite your team into a shared organization workspace — everyone sees the same supplier pipeline.") },
+            { Icon: DollarSign, title: t("Budget & Spend Intelligence"), body: t("Set a spend ceiling per sourcing event and track AI usage cost as it happens — no runaway bills.") },
+            { Icon: Globe2, title: t("Supplier Marketplace"), body: t("AI discovers and verifies suppliers live from the web.") },
+          ].map(tile => (
+            <div key={tile.title} className="card p-7">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center mb-4">
+                <tile.Icon className="w-5 h-5 text-blue-600" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-900">{tile.title}</h3>
+              <p className="text-base text-slate-500 mt-2 leading-relaxed">{tile.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── Pricing ──────────────────────────────────────────── */}
       <section className="border-t border-slate-100 bg-slate-50/60">
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-24">
@@ -215,6 +241,22 @@ export default function LandingContent() {
               {t("Start free trial")} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* ── Closing CTA banner ──────────────────────────────────
+          Distinct from the Final CTA above (light card, not the dark
+          rounded-3xl treatment) — this one addresses fit/plan uncertainty
+          specifically, per D-10. */}
+      <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-24">
+        <div className="card p-10 sm:p-14 text-center max-w-3xl mx-auto">
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t("Don't see a perfect fit?")}</h2>
+          <p className="text-slate-500 mt-4 max-w-xl mx-auto">
+            {t("Tell us about your sourcing volume and team size — we'll help you pick the right plan, or scope a custom one.")}
+          </p>
+          <a href={`mailto:${COMPANY.contactEmail}`} className="btn-cta text-base px-6 py-3 mt-8 inline-flex">
+            {t("Talk to sales")}
+          </a>
         </div>
       </section>
 
