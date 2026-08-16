@@ -35,8 +35,16 @@ export type Tier = {
   key: TierKey;
   name: string;
   blurb: string;
-  /** Baseline monthly price in EUR (used to derive weekly/yearly display prices). */
-  monthlyEur: number;
+  /** Baseline monthly price in USD (used to derive weekly/yearly display prices). */
+  monthlyUsd: number;
+  /**
+   * True only for the "Contact us" Enterprise tier. `monthlyUsd` is a distinct
+   * discriminator from a numeric zero price because `displayPrice()` and both
+   * UI render sites already special-case `price === 0` to mean "Free" — reusing
+   * that branch for Enterprise would render it as "Free" instead of "Contact
+   * us" in production (see the Enterprise TIERS entry below).
+   */
+  contactSales?: boolean;
   limits: TierLimits;
   /** Highlighted as the recommended tier in the UI. */
   featured?: boolean;
@@ -47,40 +55,47 @@ export const TIERS: Tier[] = [
     key: "free",
     name: "Free",
     blurb: "Try SourceGPT with a single sourcing event.",
-    monthlyEur: 0,
+    monthlyUsd: 0,
     limits: { eventsPerMonth: 1, wavesPerEvent: 1, suppliersPerEvent: 25, seats: 1, outreach: false, export: false, maxEventSpendUsd: 5 },
   },
   {
     key: "basic",
     name: "Basic",
-    blurb: "For occasional sourcing with exports and a small team.",
-    monthlyEur: 49,
-    limits: { eventsPerMonth: 5, wavesPerEvent: 3, suppliersPerEvent: 150, seats: 3, outreach: false, export: true, maxEventSpendUsd: 20 },
+    blurb: "For sourcing teams ready to run live supplier outreach.",
+    monthlyUsd: 1450,
+    // Outreach is granted starting at Basic rather than gated behind Growth:
+    // at a $1,450/month price point, gating a core capability behind a second
+    // $2,500/month tier is inconsistent with typical enterprise-SaaS
+    // packaging at this price band, where the base tier is already
+    // fully-featured and differentiation is volume/seat-based, not
+    // capability-based (RESEARCH.md Assumption A2).
+    limits: { eventsPerMonth: 15, wavesPerEvent: 5, suppliersPerEvent: 300, seats: 5, outreach: true, export: true, maxEventSpendUsd: 100 },
   },
   {
     key: "growth",
     name: "Growth",
-    blurb: "Live supplier outreach for growing sourcing teams.",
-    monthlyEur: 89,
-    limits: { eventsPerMonth: 12, wavesPerEvent: 6, suppliersPerEvent: 400, seats: 5, outreach: true, export: true, maxEventSpendUsd: 60 },
+    blurb: "Higher-volume sourcing and outreach for growing teams.",
+    monthlyUsd: 2500, // 2500 / 1450 ≈ 1.72x step-up from Basic (PRICE-02)
+    featured: true,
+    limits: { eventsPerMonth: 30, wavesPerEvent: 10, suppliersPerEvent: 600, seats: 15, outreach: true, export: true, maxEventSpendUsd: 250 },
   },
   {
     key: "premium",
     name: "Premium",
     blurb: "Unlimited discovery depth plus live supplier outreach.",
-    monthlyEur: 149,
-    featured: true,
-    limits: { eventsPerMonth: 20, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: 10, outreach: true, export: true, maxEventSpendUsd: 150 },
+    monthlyUsd: 4500, // 4500 / 2500 = 1.8x step-up from Growth (PRICE-02)
+    limits: { eventsPerMonth: UNLIMITED, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true, maxEventSpendUsd: 750 },
   },
   {
     key: "pro",
-    name: "Pro",
-    blurb: "Unlimited everything for high-volume procurement teams.",
-    monthlyEur: 399,
+    name: "Enterprise",
+    blurb: "Custom volume, seats, and terms for high-volume procurement teams.",
+    contactSales: true,
+    monthlyUsd: 0, // unused when contactSales is true — see Tier.contactSales doc above
     // Even "unlimited everything" keeps a (generous) hard cost ceiling per
     // event — this is a runaway-cost safety net, not a monetization gate, so
     // no tier is truly cost-unbounded on a single event.
-    limits: { eventsPerMonth: UNLIMITED, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true, maxEventSpendUsd: 400 },
+    limits: { eventsPerMonth: UNLIMITED, wavesPerEvent: UNLIMITED, suppliersPerEvent: UNLIMITED, seats: UNLIMITED, outreach: true, export: true, maxEventSpendUsd: 1000 },
   },
 ];
 
@@ -110,20 +125,22 @@ export function priceIdFor(tier: TierKey, cadence: Cadence): string | null {
 }
 
 /**
- * Display price (EUR) for a tier at a cadence. Weekly and yearly are the amount
- * billed *per charge*; monthly is the baseline. Free is always 0.
+ * Display price (USD) for a tier at a cadence. Weekly and yearly are the amount
+ * billed *per charge*; monthly is the baseline. Free is always 0, and so is
+ * any "Contact us" (contactSales) tier — neither has a numeric price to show.
  */
 export function displayPrice(tier: Tier, cadence: Cadence): number {
-  if (tier.monthlyEur === 0) return 0;
+  if (tier.contactSales === true) return 0;
+  if (tier.monthlyUsd === 0) return 0;
   switch (cadence) {
     case "weekly":
       // monthly ÷ ~4.33 weeks, plus the convenience premium.
-      return Math.round((tier.monthlyEur / 4.33) * (1 + WEEKLY_PREMIUM));
+      return Math.round((tier.monthlyUsd / 4.33) * (1 + WEEKLY_PREMIUM));
     case "yearly":
-      return Math.round(tier.monthlyEur * 12 * (1 - YEARLY_DISCOUNT));
+      return Math.round(tier.monthlyUsd * 12 * (1 - YEARLY_DISCOUNT));
     case "monthly":
     default:
-      return tier.monthlyEur;
+      return tier.monthlyUsd;
   }
 }
 

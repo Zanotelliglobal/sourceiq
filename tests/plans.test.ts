@@ -7,8 +7,12 @@ import {
   displayPrice,
   cadenceSuffix,
   UNLIMITED,
+  YEARLY_DISCOUNT,
+  WEEKLY_PREMIUM,
   type Tier,
 } from "@/lib/plans";
+import { effectiveTier } from "@/lib/usage";
+import type { Organization } from "@/lib/db";
 
 describe("getTier", () => {
   it("resolves each known tier key", () => {
@@ -59,22 +63,22 @@ describe("tier limits", () => {
     expect(ceilings).toEqual([...ceilings].sort((a, b) => a - b));
   });
 
-  it("outreach is a growth+ capability", () => {
-    expect(getTier("basic")!.limits.outreach).toBe(false);
+  it("outreach is available starting at Basic (D-02/A2: base paid tier is fully-featured)", () => {
+    expect(getTier("basic")!.limits.outreach).toBe(true);
     expect(getTier("growth")!.limits.outreach).toBe(true);
     expect(getTier("premium")!.limits.outreach).toBe(true);
     expect(getTier("pro")!.limits.outreach).toBe(true);
   });
 
-  it("growth sits between basic and premium, unlocking outreach", () => {
+  it("growth sits between basic and premium, with a higher-volume limits ladder", () => {
     const growth = getTier("growth")!;
-    expect(growth.limits.eventsPerMonth).toBe(12);
-    expect(growth.limits.wavesPerEvent).toBe(6);
-    expect(growth.limits.suppliersPerEvent).toBe(400);
-    expect(growth.limits.seats).toBe(5);
+    expect(growth.limits.eventsPerMonth).toBe(30);
+    expect(growth.limits.wavesPerEvent).toBe(10);
+    expect(growth.limits.suppliersPerEvent).toBe(600);
+    expect(growth.limits.seats).toBe(15);
     expect(growth.limits.outreach).toBe(true);
     expect(growth.limits.export).toBe(true);
-    expect(growth.featured).toBeFalsy();
+    expect(growth.featured).toBe(true);
   });
 });
 
@@ -84,6 +88,9 @@ describe("priceEnvVar", () => {
     expect(priceEnvVar("pro", "yearly")).toBe("STRIPE_PRICE_PRO_YEARLY");
     expect(priceEnvVar("premium", "weekly")).toBe("STRIPE_PRICE_PREMIUM_WEEKLY");
     expect(priceEnvVar("growth", "monthly")).toBe("STRIPE_PRICE_GROWTH_MONTHLY");
+    // PRICE-04 env-var matrix contract — exact case-sensitive names.
+    expect(priceEnvVar("basic", "weekly")).toBe("STRIPE_PRICE_BASIC_WEEKLY");
+    expect(priceEnvVar("premium", "yearly")).toBe("STRIPE_PRICE_PREMIUM_YEARLY");
   });
 });
 
@@ -109,17 +116,25 @@ describe("displayPrice", () => {
     expect(displayPrice(free, "yearly")).toBe(0);
   });
 
+  it("contactSales tiers are always zero regardless of cadence (Pitfall 2)", () => {
+    const pro = getTier("pro")!;
+    expect(pro.contactSales).toBe(true);
+    expect(displayPrice(pro, "weekly")).toBe(0);
+    expect(displayPrice(pro, "monthly")).toBe(0);
+    expect(displayPrice(pro, "yearly")).toBe(0);
+  });
+
   it("monthly returns the baseline", () => {
-    expect(displayPrice(basic, "monthly")).toBe(basic.monthlyEur);
+    expect(displayPrice(basic, "monthly")).toBe(basic.monthlyUsd);
   });
 
   it("yearly applies the 20% discount over 12 months", () => {
-    // 49 * 12 * 0.8 = 470.4 → 470
-    expect(displayPrice(basic, "yearly")).toBe(Math.round(basic.monthlyEur * 12 * 0.8));
+    expect(displayPrice(basic, "yearly")).toBe(Math.round(basic.monthlyUsd * 12 * (1 - YEARLY_DISCOUNT)));
   });
 
   it("weekly carries a premium and is cheaper per-charge than monthly", () => {
     const weekly = displayPrice(basic, "weekly");
+    expect(weekly).toBe(Math.round((basic.monthlyUsd / 4.33) * (1 + WEEKLY_PREMIUM)));
     expect(weekly).toBeGreaterThan(0);
     expect(weekly).toBeLessThan(displayPrice(basic, "monthly"));
   });
@@ -138,8 +153,59 @@ describe("TIERS catalog integrity", () => {
     expect(TIERS.filter((t: Tier) => t.featured)).toHaveLength(1);
   });
 
-  it("is ordered by ascending price", () => {
-    const prices = TIERS.map(t => t.monthlyEur);
+  it("exposes exactly one contactSales tier: Enterprise (key 'pro', D-02)", () => {
+    const contactSalesTiers = TIERS.filter((t: Tier) => t.contactSales === true);
+    expect(contactSalesTiers).toHaveLength(1);
+    expect(contactSalesTiers[0]?.key).toBe("pro");
+    expect(contactSalesTiers[0]?.name).toBe("Enterprise");
+  });
+
+  it("preserves the 'free' key as an internal fallback (Pitfall 1)", () => {
+    expect(TIERS.some(t => t.key === "free")).toBe(true);
+  });
+
+  it("basic's monthlyUsd lands within the locked [1400,1500] base window (PRICE-02)", () => {
+    expect(getTier("basic")!.monthlyUsd).toBeGreaterThanOrEqual(1400);
+    expect(getTier("basic")!.monthlyUsd).toBeLessThanOrEqual(1500);
+  });
+
+  it("step-ups between basic/growth/premium fall within [1.5, 2.0] (PRICE-02)", () => {
+    const basic = getTier("basic")!.monthlyUsd;
+    const growth = getTier("growth")!.monthlyUsd;
+    const premium = getTier("premium")!.monthlyUsd;
+    expect(growth / basic).toBeGreaterThanOrEqual(1.5);
+    expect(growth / basic).toBeLessThanOrEqual(2.0);
+    expect(premium / growth).toBeGreaterThanOrEqual(1.5);
+    expect(premium / growth).toBeLessThanOrEqual(2.0);
+  });
+
+  it("the 3 self-serve paid tiers are ordered by strictly ascending price (free/contactSales excluded)", () => {
+    // `free` (0) and the contactSales Enterprise entry (monthlyUsd unused,
+    // held at 0) are deliberately excluded from this ordering check — see
+    // Tier.contactSales doc in lib/plans.ts for why contactSales tiers don't
+    // carry a comparable numeric price.
+    const paidKeys = ["basic", "growth", "premium"] as const;
+    const prices = paidKeys.map(k => getTier(k)!.monthlyUsd);
     expect(prices).toEqual([...prices].sort((a, b) => a - b));
+  });
+});
+
+describe("effectiveTier defensive regression (PRICE-05)", () => {
+  // Lightweight defensive check per D-01 (no real paying customers yet, so
+  // this is not a migration project): effectiveTier() must never throw for
+  // any plan value it might realistically encounter, including orphaned/
+  // unknown plan strings, so a canceled or legacy-tagged org never crashes
+  // the billing gate (RESEARCH.md Wave-0 gap; lib/usage.ts:144-152's
+  // getTier('free')! non-null assertion is the thing this guards against).
+  const planValues = ["free", "basic", "growth", "premium", "pro", "trial", "legacy-unknown-key"];
+
+  it("never throws and always returns a valid Tier for any plan value, canceled subscription", () => {
+    for (const plan of planValues) {
+      const org = { plan, subscription_status: "canceled" } as unknown as Organization;
+      expect(() => effectiveTier(org)).not.toThrow();
+      const tier = effectiveTier(org);
+      expect(tier).toBeTruthy();
+      expect(typeof tier.key).toBe("string");
+    }
   });
 });
