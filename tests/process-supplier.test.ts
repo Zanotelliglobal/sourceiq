@@ -22,11 +22,38 @@ function fakeDb() {
     return m ? m[1].split(",").map(c => c.trim()) : [];
   };
 
+  // Repository tables (Phase 3 REPO-01/02/03/04) get their own row stores,
+  // keyed by table name off the INSERT statement, so upsertSupplierIdentity/
+  // upsertOrgSupplierData calls from makeProcessSupplier() are recognized
+  // instead of silently falling through to the no-op default (Pitfall 3) —
+  // this file doesn't assert on repository writes yet, but a silent no-op
+  // here would mask a real crash in that code path.
+  const repoTables: Record<string, Record<string, unknown>[]> = {
+    supplier_identities: [],
+    org_supplier_data: [],
+  };
+  let nextRepoId = 1;
+
   const db = {
     rows,
     prepare(sql: string) {
       return {
         async run(...params: unknown[]) {
+          const tableMatch = sql.match(/insert into (\w+)/i);
+          const table = tableMatch?.[1];
+          if (table && table in repoTables) {
+            const cols = insertColumns(sql);
+            const row: Record<string, unknown> = { id: nextRepoId++ };
+            cols.forEach((c, i) => { row[c] = params[i]; });
+            repoTables[table].push(row);
+            return { changes: 1, lastInsertRowid: row.id as number };
+          }
+          if (/^\s*update\s+org_supplier_data\s+set\s+enrichment/i.test(sql)) {
+            const [enrichment, identityId] = params;
+            const row = repoTables.org_supplier_data.find(r => r.identity_id === identityId);
+            if (row) row.enrichment = enrichment;
+            return { changes: row ? 1 : 0, lastInsertRowid: undefined };
+          }
           if (/^\s*insert/i.test(sql)) {
             const cols = insertColumns(sql);
             const row: Record<string, unknown> = { id: nextId++ };
@@ -122,6 +149,7 @@ function baseDeps(overrides: Partial<ProcessSupplierDeps> = {}): { deps: Process
   const deps: ProcessSupplierDeps = {
     db: fakeDb(),
     eventId: 1,
+    orgId: 1,
     waveNumber: 1,
     categoryLabel: "Industrial Components",
     effectiveRequirements: "Needs ISO 9001.",

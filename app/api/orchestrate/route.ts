@@ -292,7 +292,7 @@ export async function POST(req: NextRequest) {
           send({ type: "agent_start", agent_id: agent.id, agent_label: agent.label, wave: waveNumber });
 
           const processDeepen = makeProcessSupplierDeepen({
-            db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
+            db, eventId: event.id, orgId: ctx.orgId, waveNumber, categoryLabel, effectiveRequirements,
             annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
             schedule: backgroundSchedule,
           }, agent);
@@ -400,7 +400,7 @@ export async function POST(req: NextRequest) {
           // scraping is handled inside processSupplier, off the critical path —
           // see lib/process-supplier.ts.
           const processSupplier = makeProcessSupplier({
-            db, eventId: event.id, waveNumber, categoryLabel, effectiveRequirements,
+            db, eventId: event.id, orgId: ctx.orgId, waveNumber, categoryLabel, effectiveRequirements,
             annualSpend: event.annual_spend, groundingOn, send, track, backgroundTasks,
             schedule: backgroundSchedule,
           }, agent);

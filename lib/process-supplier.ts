@@ -23,6 +23,11 @@ import {
   AGENT_MODELS,
 } from "@/lib/agents";
 import { scrapeSupplierContact, checkWebsiteLive } from "@/lib/contact";
+import {
+  upsertSupplierIdentity,
+  upsertOrgSupplierData,
+  updateOrgSupplierDataEnrichment,
+} from "@/lib/supplier-repository";
 import type { Schedule } from "@/lib/task-pool";
 import {
   normalizeBusinessType,
@@ -43,6 +48,11 @@ export type AgentPlanEntry = { id: string; type: string; label: string; focus?: 
 export type ProcessSupplierDeps = {
   db: Db;
   eventId: number;
+  // Persistent Supplier Repository (Phase 3, REPO-01/02/03/04): the org this
+  // discovery belongs to. Repository upserts inside makeProcessSupplier() are
+  // scoped to this org — mandatory, non-optional, mirroring lib/tenant.ts's
+  // existing tenancy conventions.
+  orgId: number;
   waveNumber: number;
   categoryLabel: string;
   effectiveRequirements: string;
@@ -159,6 +169,27 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
     const saved = await deps.db.prepare("SELECT * FROM suppliers WHERE id=?").get(supplierId) as Supplier;
     deps.send({ type: "supplier_found", supplier: saved, agent_id: agent.id, agent_label: agent.label });
 
+    // Repository upsert (Phase 3 REPO-01/02/03/04). Best-effort, non-blocking:
+    // failure here must NEVER throw into the per-event suppliers.INSERT
+    // critical path above. Neon HTTP driver forbids multi-statement
+    // transactions, so identity + org-private are two independent round trips
+    // — self-healing on retry (next discovery of same supplier will re-upsert).
+    let identityId: number | null = null;
+    try {
+      identityId = await upsertSupplierIdentity(deps.db, {
+        orgId: deps.orgId,
+        name: s.name,
+        website: s.website,
+        country: s.country,
+        categoryLabel: deps.categoryLabel,
+      });
+      await upsertOrgSupplierData(deps.db, {
+        identityId,
+        orgId: deps.orgId,
+        aiScore: score.overall_score,
+      });
+    } catch { /* best-effort — repository write failure never blocks per-event flow */ }
+
     // Enrichment runs OFF the critical path — the card is already streamed.
     // Fire-and-forget, but tracked in backgroundTasks so the route can await
     // completion before closing the SSE stream. On failure, fall back to a
@@ -174,6 +205,12 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
       const enrichmentJson = JSON.stringify(enrichment);
       await deps.db.prepare(`UPDATE suppliers SET enrichment=? WHERE id=?`).run(enrichmentJson, supplierId);
       deps.send({ type: "supplier_updated", id: supplierId, enrichment: enrichmentJson });
+
+      if (identityId !== null) {
+        try {
+          await updateOrgSupplierDataEnrichment(deps.db, { identityId, enrichmentJson });
+        } catch { /* best-effort */ }
+      }
     });
     deps.backgroundTasks.push(enrichTask);
 

@@ -306,6 +306,42 @@ async function initSchema(): Promise<void> {
     -- pipeline (see lib/process-supplier.ts's update-existing-row mode).
     ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS is_quick_result BOOLEAN NOT NULL DEFAULT false;
 
+    -- Persistent Supplier Repository (Phase 3). Two tables split for structural
+    -- per-org isolation: supplier_identities holds shared/public identity fields
+    -- (name/domain/country/website), org_supplier_data holds private data
+    -- (enrichment/ai_score/notes/rating). A leaky query scoped to
+    -- supplier_identities alone cannot expose private fields — they are not
+    -- columns on that table (D-01 structural isolation, REPO-04).
+    CREATE TABLE IF NOT EXISTS supplier_identities (
+      id            BIGSERIAL PRIMARY KEY,
+      org_id        BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      name          TEXT NOT NULL,
+      norm_name     TEXT NOT NULL,
+      domain        TEXT,
+      website       TEXT,
+      country       TEXT,
+      last_category TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    -- Private (org-scoped) supplier data. Foreign-keyed to identity_id AND
+    -- org_id independently — the direct org_id column is redundant with the
+    -- FK chain (org_supplier_data -> supplier_identities.org_id) BUT is what
+    -- makes the REPO-04 structural-isolation query trivial: one WHERE org_id
+    -- predicate on this table alone, no join required.
+    CREATE TABLE IF NOT EXISTS org_supplier_data (
+      id            BIGSERIAL PRIMARY KEY,
+      identity_id   BIGINT NOT NULL REFERENCES supplier_identities(id) ON DELETE CASCADE,
+      org_id        BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      enrichment    TEXT,
+      ai_score      INTEGER,
+      notes         TEXT,
+      rating        SMALLINT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
       event_id      BIGINT NOT NULL REFERENCES sourcing_events(id) ON DELETE CASCADE,
@@ -434,6 +470,12 @@ async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_agentruns_event ON agent_runs(event_id);
     CREATE INDEX IF NOT EXISTS idx_notifications_org ON notifications(org_id, read, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_org_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_supplier_identities_org_norm
+      ON supplier_identities(org_id, norm_name) WHERE norm_name <> '';
+    CREATE INDEX IF NOT EXISTS idx_supplier_identities_org ON supplier_identities(org_id);
+    CREATE INDEX IF NOT EXISTS idx_supplier_identities_domain ON supplier_identities(org_id, domain);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_org_supplier_data_identity ON org_supplier_data(identity_id);
+    CREATE INDEX IF NOT EXISTS idx_org_supplier_data_org ON org_supplier_data(org_id);
   `;
   // HTTP driver runs one statement per request — execute each in order.
   for (const stmt of splitStatements(ddl)) {
