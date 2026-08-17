@@ -12,17 +12,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.116.0",
+    "@anthropic-ai/sdk": "^0.117.1",
     "@clerk/nextjs": "^5.7.6",
     "@neondatabase/serverless": "^1.1.0",
     "@types/ws": "^8.18.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
-    "lucide-react": "^1.30.0",
+    "lucide-react": "^1.31.0",
     "next": "14.2.35",
     "react": "^19",
     "react-dom": "^19",
-    "stripe": "^22.4.0",
+    "stripe": "^22.5.0",
     "ws": "^8.21.3",
     "xlsx": "^0.18.5"
   },
