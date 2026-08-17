@@ -95,7 +95,7 @@ Requirements for this milestone (the 10-item change-request backlog in
       modeled separately from org-private fields (enrichment, AI score, notes, rating)
       so a single query bug cannot leak one org's private data to another org
 
-- [ ] **REPO-05**: A new investigation can check the repository for an already-known
+- [x] **REPO-05**: A new investigation can check the repository for an already-known
       supplier before spending AI-search budget rediscovering it
 
 - [x] **REPO-06**: Repository is scoped per-org (not platform-wide) for this milestone —
@@ -212,7 +212,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | REPO-02 | Phase 3 | Complete |
 | REPO-03 | Phase 3 | Complete |
 | REPO-04 | Phase 3 | Complete |
-| REPO-05 | Phase 3 | Pending |
+| REPO-05 | Phase 3 | Complete |
 | REPO-06 | Phase 3 | Complete |
 | RATE-01 | Phase 4 | Pending |
 | RATE-02 | Phase 4 | Pending |

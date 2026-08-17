@@ -106,7 +106,7 @@ Plans:
   4. A query bug scoped to one org's data path cannot expose another org's private enrichment, AI score, notes, or rating data (verified by an explicit two-org test)
   5. A new investigation can check the repository for an already-known supplier before spending AI-search budget rediscovering it, and the repository stays scoped per-org (not platform-wide) for this milestone
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 Plans:
 **Wave 1**
 
@@ -115,7 +115,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1)*
 
 - [x] 03-02-PLAN.md — Expansion: write-path coverage for makeProcessSupplierQuick + makeProcessSupplierDeepen [REPO-02]
-- [ ] 03-03-PLAN.md — Read path: pre-search repository check + matching heuristic in app/api/orchestrate/route.ts [REPO-05/06]
+- [x] 03-03-PLAN.md — Read path: pre-search repository check + matching heuristic in app/api/orchestrate/route.ts [REPO-05/06]
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -162,6 +162,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Rename & Brand Migration | 4/4 | Complete | 2026-08-15 |
 | 2. Marketing & Pricing Surface | 4/4 | In Progress|  |
-| 3. Persistent Supplier Repository | 1/4 | In Progress|  |
+| 3. Persistent Supplier Repository | 3/4 | In Progress|  |
 | 4. Supplier Star Ratings | 0/TBD | Not started | - |
 | 5. RFP Intake, SSO & Support Chatbot | 0/TBD | Not started | - |
