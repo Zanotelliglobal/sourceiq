@@ -74,21 +74,21 @@ Plans:
   4. Landing page footer shows logo, mission tagline, contact email, social icons, legal links (Privacy, Terms, and a real-content CCPA page), and a copyright line, preceded by a closing CTA banner before the footer
   5. The "what we do" feature-grid copy matches actually-shipped functionality per the resolved backlog mapping (reworded/repositioned/removed as specified), and the hero section has a working demo video/screenshot slot (placeholder acceptable)
 
-**Plans**: 4 plans
+**Plans**: 4/4 plans executed
 Plans:
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Tracer: pricing catalog rebuild to Basic/Growth/Premium/Enterprise + USD (`monthlyEur`→`monthlyUsd`), `contactSales` discriminator, Stripe Checkout Basic-trial + Enterprise-reject, /billing page rewrite, tests updated [PRICE-01..05]
+- [x] 02-01-PLAN.md — Tracer: pricing catalog rebuild to Basic/Growth/Premium/Enterprise + USD (`monthlyEur`→`monthlyUsd`), `contactSales` discriminator, Stripe Checkout Basic-trial + Enterprise-reject, /billing page rewrite, tests updated [PRICE-01..05]
 
 **Wave 2** *(parallel — different files)*
 
-- [ ] 02-02-PLAN.md — Landing page overhaul: 4-tier pricing cards live from `lib/plans.ts`, new 6-tile feature grid, closing CTA banner, hero media slot + `public/hero-placeholder.svg`, delete inline duplicate footer [PRICE-01, PRICE-03, MKT-01, MKT-04, MKT-05]
-- [ ] 02-03-PLAN.md — Global SiteFooter extension (logo/tagline/contact/social/legal/copyright), new inline-SVG `SocialIcons.tsx` (Pitfall 3 workaround), new `/legal/ccpa` page [MKT-02, MKT-03]
+- [x] 02-02-PLAN.md — Landing page overhaul: 4-tier pricing cards live from `lib/plans.ts`, new 6-tile feature grid, closing CTA banner, hero media slot + `public/hero-placeholder.svg`, delete inline duplicate footer [PRICE-01, PRICE-03, MKT-01, MKT-04, MKT-05]
+- [x] 02-03-PLAN.md — Global SiteFooter extension (logo/tagline/contact/social/legal/copyright), new inline-SVG `SocialIcons.tsx` (Pitfall 3 workaround), new `/legal/ccpa` page [MKT-02, MKT-03]
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 02-04-PLAN.md — Full verification suite + human checkpoint (9 STRIPE_PRICE_* env vars) + human visual review of marketing surface [all PRICE / MKT requirements]
+- [x] 02-04-PLAN.md — Full verification suite + human checkpoint (9 STRIPE_PRICE_* env vars) + human visual review of marketing surface [all PRICE / MKT requirements]
 
 **UI hint**: yes
 
@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Rename & Brand Migration | 4/4 | Complete | 2026-08-15 |
-| 2. Marketing & Pricing Surface | 0/TBD | Not started | - |
+| 2. Marketing & Pricing Surface | 4/4 | In Progress|  |
 | 3. Persistent Supplier Repository | 0/TBD | Not started | - |
 | 4. Supplier Star Ratings | 0/TBD | Not started | - |
 | 5. RFP Intake, SSO & Support Chatbot | 0/TBD | Not started | - |
