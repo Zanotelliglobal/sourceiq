@@ -285,6 +285,10 @@ export type QuickScoutCandidate = { name: string; country: string; website: stri
 export type ProcessSupplierQuickDeps = {
   db: Db;
   eventId: number;
+  // Persistent Supplier Repository (Phase 3, REPO-02): the org this quick
+  // scan belongs to. Mirrors `ProcessSupplierDeps.orgId` above — mandatory,
+  // non-optional, filters repository writes to this org only.
+  orgId: number;
   send: (data: Record<string, unknown>) => void;
 };
 
@@ -309,6 +313,26 @@ export function makeProcessSupplierQuick(deps: ProcessSupplierQuickDeps) {
     const supplierId = result.lastInsertRowid;
     const saved = await deps.db.prepare("SELECT * FROM suppliers WHERE id=?").get(supplierId) as Supplier;
     deps.send({ type: "supplier_found", supplier: saved });
+
+    // Repository upsert (Phase 3 REPO-02). Quick-scan has no qualifier score
+    // and no categoryLabel yet, so ai_score and last_category are null. Same
+    // best-effort semantics as makeProcessSupplier — failure never blocks the
+    // per-event INSERT above.
+    try {
+      const identityId = await upsertSupplierIdentity(deps.db, {
+        orgId: deps.orgId,
+        name: candidate.name,
+        website: candidate.website,
+        country: candidate.country,
+        categoryLabel: null,
+      });
+      await upsertOrgSupplierData(deps.db, {
+        identityId,
+        orgId: deps.orgId,
+        aiScore: null,
+      });
+    } catch { /* best-effort */ }
+
     return saved;
   };
 }

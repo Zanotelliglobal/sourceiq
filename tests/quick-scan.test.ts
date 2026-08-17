@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { normName, domainOf } from "@/lib/dedup";
 import { makeProcessSupplierQuick, type QuickScoutCandidate, type ProcessSupplierQuickDeps } from "@/lib/process-supplier";
+import { findKnownSuppliers } from "@/lib/supplier-repository";
 import type { getDb } from "@/lib/db";
 
 type Db = ReturnType<typeof getDb>;
@@ -11,9 +12,21 @@ type Db = ReturnType<typeof getDb>;
 // No mocking framework in this repo (see tests/usage.test.ts) — a minimal
 // typed fakeDb stub, same shape as tests/process-supplier.test.ts's, just
 // enough to support the quick-scan INSERT + the SELECT that reads it back.
+//
+// Repository tables (Phase 3 REPO-02) get their own row stores, with real
+// `ON CONFLICT` upsert semantics (dedup on (org_id, norm_name) for
+// supplier_identities, on identity_id for org_supplier_data) — mirroring
+// lib/supplier-repository.ts's actual SQL exactly, per Pitfall 3: a naive
+// blind-INSERT fake here would let a dedup regression in
+// makeProcessSupplierQuick pass silently.
 function fakeDb() {
   const rows: Record<string, unknown>[] = [];
   let nextId = 1;
+
+  const identities: Record<string, unknown>[] = [];
+  const orgData: Record<string, unknown>[] = [];
+  let nextIdentityId = 1;
+  let nextOrgDataId = 1;
 
   const insertColumns = (sql: string): string[] => {
     const m = sql.match(/\(([^)]+)\)\s*VALUES/i);
@@ -22,9 +35,46 @@ function fakeDb() {
 
   const db = {
     rows,
+    identities,
+    orgData,
     prepare(sql: string) {
       return {
         async run(...params: unknown[]) {
+          if (/insert\s+into\s+supplier_identities/i.test(sql)) {
+            const [orgId, name, normNameVal, domain, website, country, lastCategory] = params;
+            const existing =
+              normNameVal === ""
+                ? undefined
+                : identities.find(r => r.org_id === orgId && r.norm_name === normNameVal);
+            if (existing) {
+              existing.name = name;
+              existing.domain = domain ?? existing.domain;
+              existing.website = website ?? existing.website;
+              existing.country = country ?? existing.country;
+              existing.last_category = lastCategory ?? existing.last_category;
+              return { changes: 1, lastInsertRowid: existing.id as number };
+            }
+            const row: Record<string, unknown> = {
+              id: nextIdentityId++, org_id: orgId, name, norm_name: normNameVal,
+              domain, website, country, last_category: lastCategory,
+            };
+            identities.push(row);
+            return { changes: 1, lastInsertRowid: row.id as number };
+          }
+          if (/insert\s+into\s+org_supplier_data/i.test(sql)) {
+            const [identityId, orgId, aiScore] = params;
+            const existing = orgData.find(r => r.identity_id === identityId);
+            if (existing) {
+              existing.ai_score = aiScore;
+              return { changes: 1, lastInsertRowid: existing.id as number };
+            }
+            const row: Record<string, unknown> = {
+              id: nextOrgDataId++, identity_id: identityId, org_id: orgId,
+              enrichment: null, ai_score: aiScore, notes: null, rating: null,
+            };
+            orgData.push(row);
+            return { changes: 1, lastInsertRowid: row.id as number };
+          }
           if (/^\s*insert/i.test(sql)) {
             const cols = insertColumns(sql);
             const row: Record<string, unknown> = { id: nextId++ };
@@ -41,7 +91,23 @@ function fakeDb() {
           }
           return undefined;
         },
-        async all() { return rows; },
+        async all(...params: unknown[]) {
+          if (/from\s+supplier_identities\s+si/i.test(sql)) {
+            const orgId = params[0];
+            return identities
+              .filter(si => si.org_id === orgId)
+              .map(si => {
+                const osd = orgData.find(r => r.identity_id === si.id);
+                return {
+                  identity_id: si.id, org_id: si.org_id, name: si.name, norm_name: si.norm_name,
+                  domain: si.domain, website: si.website, country: si.country,
+                  last_category: si.last_category, enrichment: osd?.enrichment ?? null,
+                  ai_score: osd?.ai_score ?? null, notes: osd?.notes ?? null, rating: osd?.rating ?? null,
+                };
+              });
+          }
+          return rows;
+        },
       };
     },
   };
@@ -57,6 +123,7 @@ function baseQuickDeps(overrides: Partial<ProcessSupplierQuickDeps> = {}): { dep
   const deps: ProcessSupplierQuickDeps = {
     db: fakeDb(),
     eventId: 1,
+    orgId: 1,
     send: (e) => { events.push(e); },
     ...overrides,
   };
@@ -145,6 +212,56 @@ describe("makeProcessSupplierQuick insert defaults", () => {
 
     expect(saved.country).toBe("");
     expect(saved.website).toBeNull();
+  });
+});
+
+// ─── Repository upsert (Phase 3 REPO-02) — makeProcessSupplierQuick must
+// also write through to the shared supplier_identities/org_supplier_data
+// repository, with ai_score and last_category left null (quick-scan has no
+// qualifier score or category at insert time). ─────────────────────────────
+describe("makeProcessSupplierQuick repository upsert (REPO-02)", () => {
+  it("Q1: writes an identity row with ai_score=null and last_category=null", async () => {
+    const { deps } = baseQuickDeps({ orgId: 1 });
+    const process = makeProcessSupplierQuick(deps);
+
+    await process(candidate({ name: "Acme", country: "IT", website: "https://acme.example" }));
+
+    const known = await findKnownSuppliers(deps.db, 1);
+    expect(known).toHaveLength(1);
+    expect(known[0].name).toBe("Acme");
+    expect(known[0].ai_score).toBeNull();
+    expect(known[0].last_category).toBeNull();
+  });
+
+  it("Q2: calling the quick-scan processor twice for the same (orgId, name) produces exactly one identity row", async () => {
+    const { deps } = baseQuickDeps({ orgId: 1 });
+    const process = makeProcessSupplierQuick(deps);
+
+    await process(candidate({ name: "Acme" }));
+    await process(candidate({ name: "Acme" }));
+
+    const known = await findKnownSuppliers(deps.db, 1);
+    expect(known).toHaveLength(1);
+  });
+
+  it("Q3: if the repository upsert throws, the outer suppliers INSERT still succeeds and returns the saved supplier", async () => {
+    const { deps } = baseQuickDeps({ orgId: 1 });
+    const realDb = deps.db;
+    const throwingDb = {
+      ...realDb,
+      prepare(sql: string) {
+        if (/insert\s+into\s+supplier_identities/i.test(sql)) {
+          return { run: async () => { throw new Error("repository down"); }, get: async () => undefined, all: async () => [] };
+        }
+        return realDb.prepare(sql);
+      },
+    } as typeof realDb;
+    const process = makeProcessSupplierQuick({ ...deps, db: throwingDb });
+
+    const saved = await process(candidate({ name: "Acme" }));
+
+    expect(saved).toBeTruthy();
+    expect(saved.name).toBe("Acme");
   });
 });
 

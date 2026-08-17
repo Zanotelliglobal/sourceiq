@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
       fresh = fresh.slice(0, Math.max(0, quickScanHeadroom));
     }
 
-    const processQuick = makeProcessSupplierQuick({ db, eventId: event.id, send: () => {} });
+    const processQuick = makeProcessSupplierQuick({ db, eventId: event.id, orgId: ctx.orgId, send: () => {} });
     for (const c of fresh) {
       inserted.push(await processQuick(c));
     }
