@@ -406,6 +406,26 @@ export function makeProcessSupplierDeepen(deps: ProcessSupplierDeps, agent: Agen
     const saved = await deps.db.prepare("SELECT * FROM suppliers WHERE id=?").get(supplierId) as Supplier;
     deps.send({ type: "supplier_updated", id: supplierId, supplier: saved, agent_id: agent.id, agent_label: agent.label });
 
+    // Repository upsert (Phase 3 REPO-02, deepen path). Idempotent with any
+    // prior quick-scan repository write for the same supplier — ON CONFLICT
+    // (org_id, norm_name) DO UPDATE means the quick-scan's null ai_score is
+    // overwritten with the real deepen score here.
+    let identityIdDeepen: number | null = null;
+    try {
+      identityIdDeepen = await upsertSupplierIdentity(deps.db, {
+        orgId: deps.orgId,
+        name: s.name,
+        website: s.website,
+        country: s.country,
+        categoryLabel: deps.categoryLabel,
+      });
+      await upsertOrgSupplierData(deps.db, {
+        identityId: identityIdDeepen,
+        orgId: deps.orgId,
+        aiScore: score.overall_score,
+      });
+    } catch { /* best-effort */ }
+
     // Enrichment runs OFF the critical path — mirrors makeProcessSupplier.
     const enrichTask = schedule(async () => {
       let enrichment;
@@ -417,6 +437,12 @@ export function makeProcessSupplierDeepen(deps: ProcessSupplierDeps, agent: Agen
       const enrichmentJson = JSON.stringify(enrichment);
       await deps.db.prepare(`UPDATE suppliers SET enrichment=? WHERE id=?`).run(enrichmentJson, supplierId);
       deps.send({ type: "supplier_updated", id: supplierId, enrichment: enrichmentJson });
+
+      if (identityIdDeepen !== null) {
+        try {
+          await updateOrgSupplierDataEnrichment(deps.db, { identityId: identityIdDeepen, enrichmentJson });
+        } catch { /* best-effort */ }
+      }
     });
     deps.backgroundTasks.push(enrichTask);
 

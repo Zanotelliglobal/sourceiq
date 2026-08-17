@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { makeProcessSupplier, type ScoutSupplier, type ProcessSupplierDeps } from "@/lib/process-supplier";
+import { makeProcessSupplier, makeProcessSupplierDeepen, type ScoutSupplier, type ProcessSupplierDeps } from "@/lib/process-supplier";
+import { findKnownSuppliers, upsertSupplierIdentity, upsertOrgSupplierData } from "@/lib/supplier-repository";
 import type { getDb } from "@/lib/db";
 import type { ContactChannels } from "@/lib/contact";
 
@@ -22,35 +23,63 @@ function fakeDb() {
     return m ? m[1].split(",").map(c => c.trim()) : [];
   };
 
-  // Repository tables (Phase 3 REPO-01/02/03/04) get their own row stores,
-  // keyed by table name off the INSERT statement, so upsertSupplierIdentity/
-  // upsertOrgSupplierData calls from makeProcessSupplier() are recognized
-  // instead of silently falling through to the no-op default (Pitfall 3) —
-  // this file doesn't assert on repository writes yet, but a silent no-op
-  // here would mask a real crash in that code path.
-  const repoTables: Record<string, Record<string, unknown>[]> = {
-    supplier_identities: [],
-    org_supplier_data: [],
-  };
-  let nextRepoId = 1;
+  // Repository tables (Phase 3 REPO-01/02/03/04) get their own row stores
+  // with real `ON CONFLICT` upsert semantics — dedup on (org_id, norm_name)
+  // for supplier_identities, on identity_id for org_supplier_data — mirroring
+  // lib/supplier-repository.ts's actual SQL exactly (Pitfall 3: a naive
+  // blind-INSERT fake here would let a dedup regression pass silently, which
+  // matters now that Plan 03-02's deepen-path idempotency tests (D1) assert
+  // on exact row counts across two independent write paths).
+  const identities: Record<string, unknown>[] = [];
+  const orgData: Record<string, unknown>[] = [];
+  let nextIdentityId = 1;
+  let nextOrgDataId = 1;
 
   const db = {
     rows,
+    identities,
+    orgData,
     prepare(sql: string) {
       return {
         async run(...params: unknown[]) {
-          const tableMatch = sql.match(/insert into (\w+)/i);
-          const table = tableMatch?.[1];
-          if (table && table in repoTables) {
-            const cols = insertColumns(sql);
-            const row: Record<string, unknown> = { id: nextRepoId++ };
-            cols.forEach((c, i) => { row[c] = params[i]; });
-            repoTables[table].push(row);
+          if (/insert\s+into\s+supplier_identities/i.test(sql)) {
+            const [orgId, name, normNameVal, domain, website, country, lastCategory] = params;
+            const existing =
+              normNameVal === ""
+                ? undefined
+                : identities.find(r => r.org_id === orgId && r.norm_name === normNameVal);
+            if (existing) {
+              existing.name = name;
+              existing.domain = domain ?? existing.domain;
+              existing.website = website ?? existing.website;
+              existing.country = country ?? existing.country;
+              existing.last_category = lastCategory ?? existing.last_category;
+              return { changes: 1, lastInsertRowid: existing.id as number };
+            }
+            const row: Record<string, unknown> = {
+              id: nextIdentityId++, org_id: orgId, name, norm_name: normNameVal,
+              domain, website, country, last_category: lastCategory,
+            };
+            identities.push(row);
+            return { changes: 1, lastInsertRowid: row.id as number };
+          }
+          if (/insert\s+into\s+org_supplier_data/i.test(sql)) {
+            const [identityId, orgId, aiScore] = params;
+            const existing = orgData.find(r => r.identity_id === identityId);
+            if (existing) {
+              existing.ai_score = aiScore;
+              return { changes: 1, lastInsertRowid: existing.id as number };
+            }
+            const row: Record<string, unknown> = {
+              id: nextOrgDataId++, identity_id: identityId, org_id: orgId,
+              enrichment: null, ai_score: aiScore, notes: null, rating: null,
+            };
+            orgData.push(row);
             return { changes: 1, lastInsertRowid: row.id as number };
           }
           if (/^\s*update\s+org_supplier_data\s+set\s+enrichment/i.test(sql)) {
             const [enrichment, identityId] = params;
-            const row = repoTables.org_supplier_data.find(r => r.identity_id === identityId);
+            const row = orgData.find(r => r.identity_id === identityId);
             if (row) row.enrichment = enrichment;
             return { changes: row ? 1 : 0, lastInsertRowid: undefined };
           }
@@ -95,7 +124,23 @@ function fakeDb() {
           }
           return undefined;
         },
-        async all() { return rows; },
+        async all(...params: unknown[]) {
+          if (/from\s+supplier_identities\s+si/i.test(sql)) {
+            const orgId = params[0];
+            return identities
+              .filter(si => si.org_id === orgId)
+              .map(si => {
+                const osd = orgData.find(r => r.identity_id === si.id);
+                return {
+                  identity_id: si.id, org_id: si.org_id, name: si.name, norm_name: si.norm_name,
+                  domain: si.domain, website: si.website, country: si.country,
+                  last_category: si.last_category, enrichment: osd?.enrichment ?? null,
+                  ai_score: osd?.ai_score ?? null, notes: osd?.notes ?? null, rating: osd?.rating ?? null,
+                };
+              });
+          }
+          return rows;
+        },
       };
     },
   };
@@ -356,5 +401,82 @@ describe("makeProcessSupplier", () => {
     // `!s.contact_email && s.website` scrape branch too, since website is ""),
     // and the badge task is also skipped without a website.
     expect(deps.backgroundTasks.length).toBe(1);
+  });
+});
+
+// ─── Repository upsert (Phase 3 REPO-02) — makeProcessSupplierDeepen must
+// also write through to the shared supplier_identities/org_supplier_data
+// repository, both synchronously (identity + real ai_score) and from its
+// enrichTask closure (enrichment second-write), idempotent with any prior
+// quick-scan write for the same supplier. ──────────────────────────────────
+describe("makeProcessSupplierDeepen repository upsert (REPO-02)", () => {
+  it("D1: idempotent with a prior quick-scan repository write — exactly one identity row, ai_score and last_category now reflect the deepen write", async () => {
+    const { deps } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+
+    // Simulate a prior quick-scan repository write for the same supplier:
+    // aiScore=null, no categoryLabel yet.
+    const priorIdentityId = await upsertSupplierIdentity(deps.db, {
+      orgId: deps.orgId,
+      name: "Acme Manufacturing",
+      website: "https://acme.example",
+      country: "Italy",
+      categoryLabel: null,
+    });
+    await upsertOrgSupplierData(deps.db, { identityId: priorIdentityId, orgId: deps.orgId, aiScore: null });
+
+    // Seed an existing suppliers row for the deepen UPDATE-by-id to target
+    // (mirrors a quick-scan candidate already sitting in the suppliers table).
+    const seedResult = await deps.db.prepare(`INSERT INTO suppliers (event_id, name) VALUES (?, ?)`).run(1, "Acme Manufacturing");
+    const supplierId = seedResult.lastInsertRowid;
+
+    const deepen = makeProcessSupplierDeepen(deps, AGENT);
+    await deepen(supplierId as number, scoutSupplier());
+
+    const known = await findKnownSuppliers(deps.db, deps.orgId);
+    expect(known).toHaveLength(1);
+    expect(known[0].ai_score).toBe(92); // fakeQualifier's overall_score — no longer null
+    expect(known[0].last_category).toBe(deps.categoryLabel);
+  });
+
+  it("D2: the enrichTask closure mirrors resolved enrichment into org_supplier_data.enrichment", async () => {
+    const { deps } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const seedResult = await deps.db.prepare(`INSERT INTO suppliers (event_id, name) VALUES (?, ?)`).run(1, "Acme Manufacturing");
+    const supplierId = seedResult.lastInsertRowid;
+
+    const deepen = makeProcessSupplierDeepen(deps, AGENT);
+    await deepen(supplierId as number, scoutSupplier());
+    await Promise.allSettled(deps.backgroundTasks);
+
+    const known = await findKnownSuppliers(deps.db, deps.orgId);
+    expect(known).toHaveLength(1);
+    expect(known[0].enrichment).toBe(expectedEnrichmentJson);
+  });
+
+  it("D3: repository upsert failures (sync path and enrichTask) never throw into the deepen flow", async () => {
+    const { deps } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const seedResult = await deps.db.prepare(`INSERT INTO suppliers (event_id, name) VALUES (?, ?)`).run(1, "Acme Manufacturing");
+    const supplierId = seedResult.lastInsertRowid;
+
+    const realDb = deps.db;
+    const throwingDb = {
+      ...realDb,
+      prepare(sql: string) {
+        if (/insert\s+into\s+supplier_identities/i.test(sql) || /update\s+org_supplier_data\s+set\s+enrichment/i.test(sql)) {
+          return { run: async () => { throw new Error("repository down"); }, get: async () => undefined, all: async () => [] };
+        }
+        return realDb.prepare(sql);
+      },
+    } as typeof realDb;
+
+    const deepen = makeProcessSupplierDeepen({ ...deps, db: throwingDb }, AGENT);
+    await expect(deepen(supplierId as number, scoutSupplier())).resolves.toBeUndefined();
+    const settled = await Promise.allSettled(deps.backgroundTasks);
+    expect(settled.every(r => r.status === "fulfilled")).toBe(true);
   });
 });
