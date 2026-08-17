@@ -11,6 +11,7 @@ import { logAudit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { rateLimit } from "@/lib/ratelimit";
 import { normName, domainOf } from "@/lib/dedup";
+import { findKnownSuppliers, repositoryEntryMatchesEvent, type RepositoryEntry } from "@/lib/supplier-repository";
 
 export const maxDuration = 300;
 
@@ -180,6 +181,21 @@ export async function POST(req: NextRequest) {
             : `🧠 Orchestrator planning Wave ${waveNumber} strategy...`,
         });
 
+        // ─── Phase 3 REPO-05: repository pre-search check ───────────────────────────
+        // Query the org's repository for already-known suppliers matching this
+        // event's category+geography BEFORE running scouts, so we don't spend
+        // web_search budget rediscovering them. Best-effort: on failure, continue
+        // with an empty relevantKnown list — this optimization must never break
+        // the existing scout dispatch path. Lives here (route level), NOT threaded
+        // into lib/agents.ts's runOrchestrator() — see RESEARCH.md Pitfall 1.
+        let relevantKnown: RepositoryEntry[] = [];
+        try {
+          const knownSuppliers = await findKnownSuppliers(db, ctx.orgId);
+          relevantKnown = knownSuppliers.filter((s) =>
+            repositoryEntryMatchesEvent(s, categoryLabel, event.target_countries),
+          );
+        } catch { /* best-effort — pre-search is an optimization, not a critical path */ }
+
         // Run orchestrator to plan agents — UNLESS this is a "Deepen" wave
         // (isTargeted), in which case we already know exactly what to do
         // (verify these specific candidates) and skip the Opus planning call
@@ -232,8 +248,13 @@ export async function POST(req: NextRequest) {
           if (dom) seenDomains.add(dom);
           return true;
         };
-        // Avoid-list passed to scouts: the human-readable names we already have.
-        const avoidNames: string[] = existing.map(s => s.name);
+        // Avoid-list passed to scouts: the human-readable names we already have,
+        // extended with names already known in the repository under a matching
+        // category+geography (REPO-05, D-04).
+        const avoidNames: string[] = [
+          ...existing.map(s => s.name),
+          ...relevantKnown.map(s => s.name),
+        ];
 
         // Plan cap on suppliers-per-event: scouts run concurrently, so track
         // remaining headroom in a closure variable and decrement it
