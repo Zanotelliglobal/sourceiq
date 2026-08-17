@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
-current_phase: 02
-current_phase_name: marketing-pricing-surface
-status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-08-17T04:54:59.205Z"
+current_phase: 4
+current_phase_name: Supplier Star Ratings
+status: planning
+stopped_at: Completed 03-04-PLAN.md (Phase 03 closed)
+last_updated: "2026-08-17T05:14:03.731Z"
 last_activity: 2026-08-16
+last_activity_desc: Phase 03 (persistent-supplier-repository) closed — all 4 plans complete, verification passed, human checkpoint approved
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 12
-  completed_plans: 11
-  percent: 0
-last_activity_desc: Phase 03 Plan 01 (tracer) executed in parallel with open Phase 02
+  completed_plans: 12
+  percent: 20
 ---
 
 # Project State
@@ -23,24 +23,24 @@ See: .planning/PROJECT.md (updated 2026-08-15)
 
 **Core value:** Buyers get a vetted, real supplier shortlist for a sourcing need faster
 than manual research would produce — and can act on it (outreach) without leaving the app.
-**Current focus:** Phase 02 — marketing-pricing-surface
+**Current focus:** Phase 4 — supplier-star-ratings
 
 ## Current Position
 
-Phase: 02 (marketing-pricing-surface) — EXECUTING
-Plan: 4 of 4 (Tasks 1 and 3 done; Task 2 — live Stripe Price setup — deferred by user, see Deferred Items)
-Status: Verification suite passed, human checkpoints approved; phase not yet formally closed (PRICE-04 open)
-Last activity: 2026-08-16
+Phase: 4 — Supplier Star Ratings
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-16 — Phase 03 complete, transitioned to Phase 4
 
-Progress: [█████████░] 92% (0 of 5 phases complete)
+Progress: [████░░░░░░] 20% (1 of 5 phases complete)
 
-**Also in progress (parallel track):** Phase 03 (persistent-supplier-repository) — Plan 2 of 4 complete (03-01 tracer + 03-02 write-path expansion: `makeProcessSupplierQuick` and `makeProcessSupplierDeepen` now both write through the shared supplier-repository upsert path, cross-write-path idempotency (REPO-03) proven via test, all 246 tests green). Phase 3 depends only on Phase 1 (complete) and proceeds independently of Phase 2's open PRICE-04 item. Next: 03-03 (REPO-05 pre-search read path).
+**Also in progress:** Phase 02 (marketing-pricing-surface) remains open — PRICE-04 (live Stripe Price setup) is the sole item deferred by user choice, blocking formal phase close. Not blocking Phase 4, which depends only on Phase 3 (now complete).
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 4
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -48,7 +48,7 @@ Progress: [█████████░] 92% (0 of 5 phases complete)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 03 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -85,6 +85,7 @@ Recent decisions affecting current work:
 - [03-01]: Ratified checkpoint decision 'ratify-as-designed' — two-table supplier_identities/org_supplier_data schema split (D-01) with discretionary last_category column, needed later for REPO-05 category matching in Plan 03-03
 - [03-02]: Plan's Task 2 acceptance criteria specified exact grep counts for `identityIdDeepen`/`updateOrgSupplierDataEnrichment` that did not match implementing the plan's own literal code snippet verbatim (5 vs stated 3, 3 vs stated 2) — judged a plan counting error, not an implementation deviation; correctness verified via the full passing test suite instead of forcing an artificial occurrence count
 - [Phase ?]: 03-03: R1/R2 pre-search integration-shape tests grouped into Task 1's commit (no route.ts dependency); Task 2's commit scoped purely to route.ts wiring.
+- [03-04]: Phase 3 formally closed — `phase.complete` run, all 4 plans verified against REPO-01..06, human checkpoint approved. Phase 4 (Supplier Star Ratings) now unblocked.
 
 ### Pending Todos
 
@@ -97,7 +98,7 @@ None yet.
 - Carried forward (not yet actioned): 4 untracked scratch files in repo root (`finish-backlog.sh`, `finish-backlog2.sh`, `merge-backlog.sh`, `.file_issues.tmp.py`) from unrelated prior PR-backlog-merge work, flagged during 01-04's BRAND-05 sweep and left in place per user's "approved" — contain only a local absolute path and a GitHub repo slug referencing "sourceiq", not shipped code. Not on the BRAND-05 exception list; revisit if they cause noise in future sweeps.
 - Phase 2 (RESOLVED, 02-CONTEXT D-01): existing-customer plan grandfathering is moot — no real paying customers exist yet, so no legacy-tier mapping or Stripe migration logic is needed.
 - Phase 2 (OPEN — sole item blocking phase close): PRICE-04 (live Stripe Price object creation + `STRIPE_PRICE_<TIER>_<CADENCE>` env var wiring) is deferred by explicit user choice ("1") rather than force-closed. 02-04's automated verification (Task 1) and human visual/interactive checkpoint (Task 3) both passed and were approved; only the Stripe dashboard setup (Task 2, user-only action — cannot be done by the agent) remains. Self-serve checkout for Basic/Growth/Premium still shows the "Coming soon" fallback until this is done. See `.planning/phases/02-marketing-pricing-surface/deferred-items.md` and `02-04-SUMMARY.md` for full detail. No `*-VERIFICATION.md` exists for Phase 2 and `phase.complete` has deliberately not been run — once Stripe setup is done, re-verify Task 2, write a passing VERIFICATION.md, then run `gsd_run query phase complete 02` to formally close the phase and advance to Phase 3.
-- Phase 3 (IN PROGRESS, parallel to open Phase 2): Plans 03-01 (tracer) and 03-02 (write-path expansion) complete. `supplier_identities`/`org_supplier_data` schema, `lib/supplier-repository.ts`, and write-path wiring now cover all three discovery flows — `makeProcessSupplier()`, `makeProcessSupplierQuick()`, `makeProcessSupplierDeepen()` (REPO-01/02/03/04/06 marked complete in REQUIREMENTS.md). Cross-write-path idempotency (REPO-03) proven via test: pre-seeding a quick-scan-style entry then running deepen against the same normalized name converges on one identity row, deepen's score/category overwriting the nulls. Per-org (not platform-wide) repository scope confirmed via D-01's direct `org_id` column on both tables. A pre-existing sandbox-only `@anthropic-ai/sdk`/`credentials.mjs` module-resolution artifact (documented, root-caused to the sandbox's `**/credentials*` deny pattern colliding with the SDK's legitimately-named file) affects `tests/process-supplier.test.ts` and `tests/quick-scan.test.ts` at collection time inside the sandbox only; verified out-of-sandbox that all 246 tests pass and typecheck/lint are clean. Remaining: 03-03 (REPO-05 pre-search read path), 03-04 (final verification + sign-off).
+- Phase 3 (RESOLVED, phase closed 03-04): All 4 plans complete. `supplier_identities`/`org_supplier_data` schema, `lib/supplier-repository.ts`, write-path wiring across all three discovery flows, and the REPO-05 pre-search read path in `app/api/orchestrate/route.ts` are all live. Full D-06 suite passes (258/258 tests, clean typecheck/lint/build) and both tables confirmed materialized on the live Neon DB. Two-org isolation (REPO-04) proven via explicit substring-negation test. All REPO-01 through REPO-06 requirements traced and verified in `03-VERIFICATION.md`. Human checkpoint approved by user ("approved"). No open blockers.
 - Phase 5: SSO needs Clerk Pro-plan Enterprise Connections entitlement verified before scoping; support chatbot build-vs-buy (in-house vs. vendor) needs confirmation before implementation.
 
 ## Deferred Items
@@ -110,6 +111,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-17T04:54:53.967Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-08-17T05:14:03.731Z
+Stopped at: Phase 03 complete (03-04-PLAN.md), transitioned to Phase 4
 Resume file: None
