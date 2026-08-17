@@ -80,25 +80,25 @@ Requirements for this milestone (the 10-item change-request backlog in
 
 ### Supplier Repository
 
-- [ ] **REPO-01**: A new persistent, org-scoped supplier identity store exists,
+- [x] **REPO-01**: A new persistent, org-scoped supplier identity store exists,
       separate from the per-event `suppliers` table, that survives across events
 
-- [ ] **REPO-02**: Every supplier discovered via quick scan, full investigation, or (once
+- [x] **REPO-02**: Every supplier discovered via quick scan, full investigation, or (once
       built) RFP matching is written into the repository through a single shared write
       path (extending `lib/process-supplier.ts`'s existing insertion point)
 
-- [ ] **REPO-03**: The repository dedups on the same name/domain normalization already
+- [x] **REPO-03**: The repository dedups on the same name/domain normalization already
       used for within-event dedup (`lib/dedup.ts`), so re-discovering a known supplier
       doesn't create a duplicate identity record
 
-- [ ] **REPO-04**: Shared/public supplier identity fields (name, domain, country) are
+- [x] **REPO-04**: Shared/public supplier identity fields (name, domain, country) are
       modeled separately from org-private fields (enrichment, AI score, notes, rating)
       so a single query bug cannot leak one org's private data to another org
 
 - [ ] **REPO-05**: A new investigation can check the repository for an already-known
       supplier before spending AI-search budget rediscovering it
 
-- [ ] **REPO-06**: Repository is scoped per-org (not platform-wide) for this milestone —
+- [x] **REPO-06**: Repository is scoped per-org (not platform-wide) for this milestone —
       see Out of Scope
 
 ### Supplier Ratings
@@ -208,12 +208,12 @@ Explicitly excluded. Documented to prevent scope creep.
 | MKT-03 | Phase 2 | Pending |
 | MKT-04 | Phase 2 | Pending |
 | MKT-05 | Phase 2 | Pending |
-| REPO-01 | Phase 3 | Pending |
-| REPO-02 | Phase 3 | Pending |
-| REPO-03 | Phase 3 | Pending |
-| REPO-04 | Phase 3 | Pending |
+| REPO-01 | Phase 3 | Complete |
+| REPO-02 | Phase 3 | Complete |
+| REPO-03 | Phase 3 | Complete |
+| REPO-04 | Phase 3 | Complete |
 | REPO-05 | Phase 3 | Pending |
-| REPO-06 | Phase 3 | Pending |
+| REPO-06 | Phase 3 | Complete |
 | RATE-01 | Phase 4 | Pending |
 | RATE-02 | Phase 4 | Pending |
 | RATE-03 | Phase 4 | Pending |
