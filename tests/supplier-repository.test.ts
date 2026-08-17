@@ -3,7 +3,9 @@ import {
   upsertSupplierIdentity,
   upsertOrgSupplierData,
   findKnownSuppliers,
+  repositoryEntryMatchesEvent,
   type Db,
+  type RepositoryEntry,
 } from "@/lib/supplier-repository";
 
 // ─── Fakes ──────────────────────────────────────────────────────────────────
@@ -353,5 +355,152 @@ describe("lib/supplier-repository", () => {
 
     const rows = (db as unknown as { identities: Record<string, unknown>[] }).identities;
     expect(rows.filter((r) => r.org_id === 1).length).toBe(1);
+  });
+});
+
+describe("REPO-05 matching heuristic", () => {
+  it("M1: category exact match + geography match returns true", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "IT", last_category: "Precision Machining & CNC" },
+        "Precision Machining & CNC",
+        "IT, DE",
+      ),
+    ).toBe(true);
+  });
+
+  it("M2: category mismatch returns false", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "IT", last_category: "Textiles" },
+        "Precision Machining & CNC",
+        "IT",
+      ),
+    ).toBe(false);
+  });
+
+  it("M3: geography mismatch returns false", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "US", last_category: "Precision Machining & CNC" },
+        "Precision Machining & CNC",
+        "IT, DE",
+      ),
+    ).toBe(false);
+  });
+
+  it("M4: permissive null category returns true (open match)", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "IT", last_category: null },
+        "Precision Machining & CNC",
+        "IT",
+      ),
+    ).toBe(true);
+  });
+
+  it("M5: global — empty target_countries matches any country", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "IT", last_category: "Precision Machining & CNC" },
+        "Precision Machining & CNC",
+        "",
+      ),
+    ).toBe(true);
+  });
+
+  it("M6: case-insensitive category match", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "it", last_category: "PRECISION MACHINING & CNC" },
+        "precision machining & cnc",
+        "IT",
+      ),
+    ).toBe(true);
+  });
+
+  it("M7: whitespace tolerance in target_countries", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "IT", last_category: "Textiles" },
+        "Textiles",
+        "  it , de ",
+      ),
+    ).toBe(true);
+  });
+
+  it("M8: AND semantics — same-country wrong-industry does NOT match", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: "IT", last_category: "Textiles" },
+        "Precision Machining & CNC",
+        "IT",
+      ),
+    ).toBe(false);
+  });
+
+  it("M9: null entry country + empty target_countries (global) matches", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: null, last_category: "Textiles" },
+        "Textiles",
+        "",
+      ),
+    ).toBe(true);
+  });
+
+  it("M10: null entry country + specific target_countries does NOT match (under-match safer than over-match)", () => {
+    expect(
+      repositoryEntryMatchesEvent(
+        { country: null, last_category: "Textiles" },
+        "Textiles",
+        "IT",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("REPO-05 pre-search integration shape", () => {
+  it("R1: findKnownSuppliers + repositoryEntryMatchesEvent filters to only category+geography matches", async () => {
+    const db = fakeRepositoryDb();
+    const idTextilesIT1 = await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Filati Rossi Srl",
+      website: null,
+      country: "IT",
+      categoryLabel: "Textiles",
+    });
+    const idTextilesIT2 = await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Tessuti Bianchi SpA",
+      website: null,
+      country: "IT",
+      categoryLabel: "Textiles",
+    });
+    await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Auto Parts GmbH",
+      website: null,
+      country: "IT",
+      categoryLabel: "Automotive",
+    });
+
+    const knownSuppliers = await findKnownSuppliers(db, 1);
+    const relevantKnown = knownSuppliers.filter((s: RepositoryEntry) =>
+      repositoryEntryMatchesEvent(s, "Textiles", "IT"),
+    );
+
+    expect(relevantKnown).toHaveLength(2);
+    const ids = relevantKnown.map((s) => s.identity_id).sort();
+    expect(ids).toEqual([idTextilesIT1, idTextilesIT2].sort());
+  });
+
+  it("R2: empty repository returns [] and does not throw", async () => {
+    const db = fakeRepositoryDb();
+    const knownSuppliers = await findKnownSuppliers(db, 1);
+    const relevantKnown = knownSuppliers.filter((s: RepositoryEntry) =>
+      repositoryEntryMatchesEvent(s, "Textiles", "IT"),
+    );
+    expect(relevantKnown).toEqual([]);
   });
 });

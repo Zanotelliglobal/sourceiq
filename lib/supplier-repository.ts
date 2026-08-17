@@ -145,3 +145,42 @@ export async function findKnownSuppliers(db: Db, orgId: number): Promise<Reposit
     )
     .all<RepositoryEntry>(orgId);
 }
+
+// ─── REPO-05 Matching Heuristic (D-04, Claude's Discretion per 03-CONTEXT.md) ───
+// See 03-RESEARCH.md 'REPO-05 Matching Heuristic' for full rationale.
+// Category vocabulary is the fixed 13-item list client-side in
+// app/events/new/page.tsx CATEGORIES; not server-enforced, so
+// case-insensitive trim-normalized exact match is both sufficient and honest.
+export function normCategory(c: string | null | undefined): string {
+  return (c || "").trim().toLowerCase();
+}
+
+// target_countries is stored as comma-joined free text; no controlled vocab.
+export function parseTargetCountries(targetCountries: string | null | undefined): string[] {
+  return (targetCountries || "")
+    .split(",")
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function repositoryEntryMatchesEvent(
+  entry: { country: string | null; last_category: string | null },
+  eventCategory: string,
+  eventTargetCountries: string | null | undefined,
+): boolean {
+  // Category: null entry.last_category = open match (never seen under a
+  // category before, don't exclude); otherwise case-insensitive equality.
+  const categoryMatch =
+    !entry.last_category ||
+    normCategory(entry.last_category) === normCategory(eventCategory);
+
+  // Geography: empty target_countries = global (match any); otherwise
+  // entry.country must be present and appear in the target list.
+  const targets = parseTargetCountries(eventTargetCountries);
+  const geoMatch =
+    targets.length === 0 ||
+    (!!entry.country && targets.includes(entry.country.trim().toLowerCase()));
+
+  // AND semantics — same-country wrong-industry supplier does NOT match.
+  return categoryMatch && geoMatch;
+}
