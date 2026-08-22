@@ -18,9 +18,19 @@ export async function GET(
   // Return 404 (not 403) for other tenants' events so we don't leak existence.
   if (!event || Number(event.org_id) !== ctx.orgId) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // LEFT JOIN (not INNER): rows written before Phase 4 (identity_id NULL) or
+  // whose repository write failed best-effort must still surface, with
+  // `rating` coalesced to null by the JOIN rather than the row vanishing.
+  // org_id is a compound JOIN predicate (not just WHERE) so a supplier's
+  // rating never leaks across tenants even if identity_id collided (it can't,
+  // but the query shouldn't rely on that invariant alone — T-04-03).
   const suppliers = await db.prepare(
-    "SELECT * FROM suppliers WHERE event_id = ? ORDER BY ai_score DESC, created_at ASC"
-  ).all(id) as Record<string, unknown>[];
+    `SELECT s.*, osd.rating AS rating
+     FROM suppliers s
+     LEFT JOIN org_supplier_data osd ON osd.identity_id = s.identity_id AND osd.org_id = ?
+     WHERE s.event_id = ?
+     ORDER BY s.ai_score DESC, s.created_at ASC`
+  ).all(ctx.orgId, id) as Record<string, unknown>[];
 
   // Effective status: a working run ('scouting'/'outreach') whose row hasn't been
   // written to in > 5 min was interrupted (serverless timeout, disconnect on

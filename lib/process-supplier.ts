@@ -188,6 +188,11 @@ export function makeProcessSupplier(deps: ProcessSupplierDeps, agent: AgentPlanE
         orgId: deps.orgId,
         aiScore: score.overall_score,
       });
+      if (identityId !== null) {
+        try {
+          await deps.db.prepare("UPDATE suppliers SET identity_id=? WHERE id=?").run(identityId, supplierId);
+        } catch { /* best-effort — back-link failure never blocks per-event flow */ }
+      }
     } catch { /* best-effort — repository write failure never blocks per-event flow */ }
 
     // Enrichment runs OFF the critical path — the card is already streamed.

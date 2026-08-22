@@ -126,6 +126,26 @@ export async function updateOrgSupplierDataEnrichment(
 }
 
 /**
+ * Set (or clear, via `rating: null`) the org-private star rating for a
+ * supplier identity. Unlike `updateOrgSupplierDataEnrichment` above, this
+ * predicate is compound (`identity_id AND org_id`) — ratings are a
+ * client-writable, per-org field (Phase 4, D-01/D-03), so the WHERE clause
+ * must re-assert tenant ownership at the write itself rather than relying
+ * solely on the caller having already resolved `identityId` from an
+ * org-scoped `suppliers` row (T-04-03).
+ */
+export async function updateOrgSupplierDataRating(
+  db: Db,
+  params: { identityId: number; orgId: number; rating: number | null }
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE org_supplier_data SET rating=?, updated_at=now() WHERE identity_id=? AND org_id=?`
+    )
+    .run(params.rating, params.identityId, params.orgId);
+}
+
+/**
  * Read every known supplier identity for an org, LEFT JOINed with its
  * org-private data. `orgId` is a MANDATORY, non-optional parameter — the
  * sole client-visible tenancy predicate for these tables (V4 Access Control,

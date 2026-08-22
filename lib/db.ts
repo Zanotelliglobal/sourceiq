@@ -342,6 +342,17 @@ async function initSchema(): Promise<void> {
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Phase 4 (Supplier Star Ratings, D-01): back-link from a per-event
+    -- suppliers row to its durable repository identity. Added here (after
+    -- both suppliers and supplier_identities already exist above) rather
+    -- than inline on the suppliers CREATE TABLE at line 221, which predates
+    -- supplier_identities at line 315 — an inline FK at that point would be
+    -- unsafe table-creation-order-wise. No inline REFERENCES clause is added
+    -- (application-level integrity only, matching org_supplier_data.identity_id
+    -- being the sole existing FK into supplier_identities). Populated
+    -- going-forward only (D-02) — no backfill for pre-Phase-4 rows.
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS identity_id BIGINT;
+
     CREATE TABLE IF NOT EXISTS agent_runs (
       id            BIGSERIAL PRIMARY KEY,
       event_id      BIGINT NOT NULL REFERENCES sourcing_events(id) ON DELETE CASCADE,

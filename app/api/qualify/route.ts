@@ -9,6 +9,7 @@ import { requireSpendableSubscription } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 import { claimOutreachSend, releaseOutreachClaim, claimFollowupSend, releaseFollowupClaim } from "@/lib/outreach-claim";
 import { isSuppressed } from "@/lib/suppression";
+import { updateOrgSupplierDataRating } from "@/lib/supplier-repository";
 
 // Every funnel_stage value the app actually understands (see STAGES/FUNNEL in
 // app/events/[id]/page.tsx and the "disqualified" dimmed-row treatment there).
@@ -83,6 +84,28 @@ export async function POST(req: NextRequest) {
     await db.prepare(
       "UPDATE suppliers SET feedback_signal = ?, feedback_updated_at = datetime('now') WHERE id = ?"
     ).run(signal, supplier_id);
+    return NextResponse.json({ success: true });
+  }
+
+  // Star rating (Phase 4, D-01/D-06/D-07): 1-5, or null to clear (re-clicking
+  // an active star toggles it off client-side). Persisted onto the org-private
+  // repository row (org_supplier_data), keyed by the supplier's identity_id —
+  // NOT onto the per-event suppliers row — so the rating accumulates across
+  // events for the same real-world supplier. identity_id is resolved
+  // server-side (never trusted from the client) to guarantee it matches the
+  // already-tenant-checked supplier_id above.
+  if (action === "set_rating") {
+    if (!supplier_id) return NextResponse.json({ error: "supplier_id required" }, { status: 400 });
+    const rating = body.rating;
+    if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+      return NextResponse.json({ error: "rating must be an integer 1-5, or null to clear" }, { status: 400 });
+    }
+    const row = await db.prepare("SELECT identity_id FROM suppliers WHERE id = ?").get(supplier_id) as
+      { identity_id: number | null } | undefined;
+    if (!row || row.identity_id === null) {
+      return NextResponse.json({ error: "Rating unavailable for this supplier" }, { status: 400 });
+    }
+    await updateOrgSupplierDataRating(db, { identityId: row.identity_id, orgId: ctx.orgId, rating });
     return NextResponse.json({ success: true });
   }
 

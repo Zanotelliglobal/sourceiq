@@ -26,6 +26,7 @@ type Supplier = {
   partnered_customers: string | null; partnered_customer_count: number | null;
   key_export_markets: string | null; verification_badges: string | null;
   feedback_signal: number | null;
+  identity_id: number | null; rating: number | null;
   website: string | null; contact_email: string | null;
   contact_url: string | null; contact_phone: string | null; contact_linkedin: string | null;
   data_sources: string | null; scout_agent: string | null;
@@ -194,13 +195,14 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 // dashboard/billing modals can share it too) — imported above.
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeedback }: {
+function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeedback, onRating }: {
   supplier: Supplier;
   onClose: () => void;
   onMove: (id: number, stage: string) => void;
   onOutreach: (s: Supplier) => void;
   onFollowUp: (s: Supplier) => void;
   onFeedback: (id: number, signal: number) => void;
+  onRating: (id: number, rating: number | null) => void;
 }) {
   const t = useT();
   const caps    = tryParse<string[]>(supplier.capabilities, []);
@@ -426,6 +428,41 @@ function DetailPanel({ supplier, onClose, onMove, onOutreach, onFollowUp, onFeed
               <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-500">
                 <Info className="w-3 h-3 flex-shrink-0" />
                 {t("AI may make mistakes. Please verify important information.")}
+              </div>
+            </div>
+          )}
+
+          {/* Buyer star rating (Phase 4, D-01/D-03/D-05/D-06/D-07). Separate
+              sibling block, NOT nested inside the score_rationale-gated AI
+              Assessment section above — gated instead on identity_id (a row
+              is only ratable once it has a durable repository identity).
+              Distinct from the unrelated "Add to Short List"/"Shortlist"
+              Star icons elsewhere in this file: smaller (w-3.5 h-3.5 vs
+              w-4/w-2.5/w-3), Trust Blue not amber. Clicking the star at the
+              current rating clears it (toggle-to-clear, no confirmation),
+              mirroring the thumbs feedback control's pattern above. */}
+          {supplier.identity_id !== null && (
+            <div className="-mt-2">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">{t("Rating")}</div>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((n) => {
+                  const filled = supplier.rating !== null && supplier.rating >= n;
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => onRating(supplier.id, supplier.rating === n ? null : n)}
+                      aria-label={t("Rate {n} stars", { n })}
+                      aria-pressed={filled}
+                      className={`p-1 rounded-md border transition-colors ${
+                        filled
+                          ? "border-transparent text-blue-600"
+                          : "border-transparent text-slate-300 hover:border-slate-200 hover:text-blue-600"
+                      }`}
+                    >
+                      <Star className="w-3.5 h-3.5" fill={filled ? "currentColor" : "none"} />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1870,6 +1907,26 @@ export default function EventPage() {
     }
   }
 
+  // Star rating (Phase 4). Same optimistic-update-then-revert shape as
+  // setFeedback above; clicking the active star clears the rating (null).
+  async function setRating(supplierId: number, rating: number | null) {
+    const prev = suppliers.find(s => s.id === supplierId)?.rating ?? null;
+    setSuppliers(p => p.map(s => s.id === supplierId ? { ...s, rating } : s));
+    if (selected?.id === supplierId) setSelected(s => s ? { ...s, rating } : s);
+    try {
+      const res = await fetch("/api/qualify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set_rating", supplier_id: supplierId, rating }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      setSuppliers(p => p.map(s => s.id === supplierId ? { ...s, rating: prev } : s));
+      if (selected?.id === supplierId) setSelected(s => s ? { ...s, rating: prev } : s);
+      addLog(`ERR could not save rating: ${String(err)}`);
+      pushToast("error", t("Could not save rating. Please try again."));
+    }
+  }
+
   function handleOutreachSent(supplierId: number) {
     setSuppliers(prev => prev.map(s => s.id === supplierId ? { ...s, outreach_status: "sent", funnel_stage: "contacted" } : s));
   }
@@ -2698,6 +2755,7 @@ export default function EventPage() {
           onOutreach={setOutreachTarget}
           onFollowUp={sendFollowUp}
           onFeedback={setFeedback}
+          onRating={setRating}
         />
       )}
 

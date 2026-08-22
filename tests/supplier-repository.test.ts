@@ -107,6 +107,17 @@ function fakeRepositoryDb(opts: { throwOnIdentityInsert?: boolean } = {}) {
             return { changes: row ? 1 : 0, lastInsertRowid: undefined };
           }
 
+          // updateOrgSupplierDataRating: compound identity_id AND org_id
+          // predicate (T-04-03) — unlike the enrichment/notes updates above,
+          // this must NOT match on identity_id alone, so a mismatched org_id
+          // (cross-tenant write attempt) is a genuine no-op (changes: 0).
+          if (/^\s*update\s+org_supplier_data\s+set\s+rating/i.test(sql)) {
+            const [rating, identityId, orgId] = params;
+            const row = orgData.find((r) => r.identity_id === identityId && r.org_id === orgId);
+            if (row) row.rating = rating;
+            return { changes: row ? 1 : 0, lastInsertRowid: undefined };
+          }
+
           return { changes: 0, lastInsertRowid: undefined };
         },
         async get() {
