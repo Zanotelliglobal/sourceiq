@@ -137,7 +137,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Tracer-first: suppliers.identity_id linkage across all 3 discovery factories, updateOrgSupplierDataRating(), set_rating API action, JOIN-enabled read path, and the DetailPanel star control (RATE-01, RATE-02, RATE-03)
+- [x] 04-01-PLAN.md — Tracer-first: suppliers.identity_id linkage across all 3 discovery factories, updateOrgSupplierDataRating(), set_rating API action, JOIN-enabled read path, and the DetailPanel star control (RATE-01, RATE-02, RATE-03)
 
 **UI hint**: yes
 

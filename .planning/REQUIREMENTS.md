@@ -103,14 +103,14 @@ Requirements for this milestone (the 10-item change-request backlog in
 
 ### Supplier Ratings
 
-- [ ] **RATE-01**: A buyer can rate a supplier 1-5 stars from the supplier row/detail
+- [x] **RATE-01**: A buyer can rate a supplier 1-5 stars from the supplier row/detail
       view in the event page
 
-- [ ] **RATE-02**: Ratings attach to the supplier's repository entry (REPO-01), not a
+- [x] **RATE-02**: Ratings attach to the supplier's repository entry (REPO-01), not a
       per-event column, so ratings accumulate across every event that encounters that
       supplier within the org
 
-- [ ] **RATE-03**: The new star rating coexists with (does not replace) the existing
+- [x] **RATE-03**: The new star rating coexists with (does not replace) the existing
       per-event `feedback_signal` thumbs-up/down field
 
 ### RFP Matching Intake
@@ -214,9 +214,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | REPO-04 | Phase 3 | Complete |
 | REPO-05 | Phase 3 | Complete |
 | REPO-06 | Phase 3 | Complete |
-| RATE-01 | Phase 4 | Pending |
-| RATE-02 | Phase 4 | Pending |
-| RATE-03 | Phase 4 | Pending |
+| RATE-01 | Phase 4 | Complete |
+| RATE-02 | Phase 4 | Complete |
+| RATE-03 | Phase 4 | Complete |
 | RFP-01 | Phase 5 | Pending |
 | RFP-02 | Phase 5 | Pending |
 | RFP-03 | Phase 5 | Pending |
