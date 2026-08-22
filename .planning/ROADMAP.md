@@ -133,7 +133,12 @@ Plans:
   2. A supplier's star rating is attached to its repository entry and displays consistently across every event within the org that encounters that supplier, not reset per event
   3. The existing per-event `feedback_signal` thumbs-up/down field still works unchanged alongside the new star rating
 
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Tracer-first: suppliers.identity_id linkage across all 3 discovery factories, updateOrgSupplierDataRating(), set_rating API action, JOIN-enabled read path, and the DetailPanel star control (RATE-01, RATE-02, RATE-03)
+
 **UI hint**: yes
 
 ### Phase 5: RFP Intake, SSO & Support Chatbot
