@@ -133,7 +133,7 @@ Plans:
   2. A supplier's star rating is attached to its repository entry and displays consistently across every event within the org that encounters that supplier, not reset per event
   3. The existing per-event `feedback_signal` thumbs-up/down field still works unchanged alongside the new star rating
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 Plans:
 **Wave 1**
 
@@ -168,5 +168,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Rename & Brand Migration | 4/4 | Complete | 2026-08-15 |
 | 2. Marketing & Pricing Surface | 4/4 | In Progress|  |
 | 3. Persistent Supplier Repository | 4/4 | Complete    | 2026-08-16 |
-| 4. Supplier Star Ratings | 0/TBD | Not started | - |
+| 4. Supplier Star Ratings | 1/1 | In Progress|  |
 | 5. RFP Intake, SSO & Support Chatbot | 0/TBD | Not started | - |
