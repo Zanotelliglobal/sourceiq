@@ -150,16 +150,25 @@ three distinct color families, zero collisions.
 
 ## UI Considerations
 
-Applicable state considerations resolved: 6 covered, 0 backstop, 0 unresolved
+Generated via `ui-consideration-probe.cjs` (deterministic engine, ui-phase.md Step 9.5)
+against 2 authored elements — `E1-star-row` (kind: `interactive-control`) and
+`E2-rating-label` (kind: `static-content`) — plus 3 additional open,
+domain-specific UX rows the closed 8-category taxonomy doesn't reach (prose-owned,
+per `references/domain-probes.md`'s content/robustness-vs-open-UX split).
+
+Engine coverage: 5/5 applicable considerations closed (2 resolved-explicit,
+1 resolved-backstop, 2 dismissed, 0 unresolved). Plus 3 prose-owned rows, all
+covered. **Total: 8/8 covered, 0 unresolved.**
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
-| populated | star row (rating = 1–5) | ✅ covered | Stars render filled (blue-600, `fill="currentColor"`) up to the current rating value; unfilled stars render `fill="none"`, slate-300 — per D-05 and 04-RESEARCH.md's code pattern |
-| empty/zero | star row (rating = null, `identity_id` present) | ✅ covered | All 5 stars render unfilled; "Rating" label still visible — see Copywriting Contract "Empty state" row |
-| zero-one-many | control visibility (`identity_id` null vs. not) | ✅ covered | D-03 (locked): rows with `identity_id IS NULL` (all pre-Phase-4 rows) simply omit the control entirely — no disabled/tooltip state |
-| loading | control visibility during identity resolution | ✅ covered | D-03 (locked, confirmed via discussion): `identity_id` is set synchronously at the same INSERT/UPDATE as the row itself — there is no async "resolving" window, so no loading state exists to design |
-| error | rating write fails (network/server error) | ✅ covered | Optimistic update + revert-on-failure + toast, exact copy defined above — mirrors the existing `setFeedback` handler shape verbatim (04-RESEARCH.md Code Examples) |
-| overflow / long-text | n/a — icon-only control, no dynamic text | ✅ covered | Fixed 5-icon row; no text strings of variable length are rendered inside the control (aria-labels are not visually rendered, so no layout/overflow risk) |
+| populated | star row (rating = 1–5) | ✅ covered (prose-owned) | Stars render filled (blue-600, `fill="currentColor"`) up to the current rating value; unfilled stars render `fill="none"`, slate-300 — per D-05 and 04-RESEARCH.md's code pattern |
+| empty/zero | star row (rating = null, `identity_id` present) | ✅ covered (prose-owned) | All 5 stars render unfilled; "Rating" label still visible — see Copywriting Contract "Empty state" row |
+| zero-one-many | control visibility (`identity_id` null vs. not) | ✅ covered (prose-owned) | D-03 (locked): rows with `identity_id IS NULL` (all pre-Phase-4 rows) simply omit the control entirely — no disabled/tooltip state |
+| loading | `E1-star-row` (interactive-control) | ✅ resolved — explicit | No loading state exists: `identity_id` is written synchronously at the same INSERT/UPDATE as the `suppliers` row (D-03), so there is no async resolution window. Until then, the control is entirely absent from the DOM (same treatment as the hidden/legacy-row case) |
+| error | `E1-star-row` (interactive-control) | ✅ resolved — explicit | Optimistic update with revert-on-failure; on failure show toast `t("Could not save rating. Please try again.")`, mirroring the existing `setFeedback` error-toast pattern verbatim |
+| overflow | `E2-rating-label` (static-content) | ✅ resolved — backstop | Label reuses the exact sibling "AI Assessment"/"Key Export Markets" header pattern already proven at this panel width across all 4 locales (de/es/fr/it); no new overflow risk beyond that existing, already-shipped pattern |
+| long-text | `E1-star-row` + `E2-rating-label` | ⛔ dismissed | Fixed 5-icon-only control with no dynamic/variable-length text rendered inside it (aria-labels aren't visually rendered); "Rating" is a fixed short single-word label whose translated equivalents (e.g. "Bewertung", "Calificación") are similarly short — long-text truncation/wrapping doesn't apply to either element |
 
 ---
 
