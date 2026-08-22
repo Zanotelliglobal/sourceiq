@@ -43,6 +43,13 @@ research would produce — and can act on it (outreach) without leaving the app.
   parsing via Svix webhook) — existing
 - ✓ CSV/PDF export of supplier shortlists — existing
 - ✓ i18n support (de/es/fr/it locales) — existing
+- ✓ **Supplier star-rating feedback** (1-5): buyers rate a supplier 1-5 stars from
+  the event detail view; the rating attaches to the supplier's durable
+  cross-org-scoped repository identity (`org_supplier_data.rating`, keyed by
+  `identity_id`+`org_id`), so it accumulates across every event that encounters
+  that supplier rather than resetting per event, and coexists unchanged with the
+  existing per-event `feedback_signal` thumbs-up/down field. — Validated in
+  Phase 4: Supplier Star Ratings (Backlog #9)
 
 ### Active
 
@@ -72,9 +79,6 @@ research would produce — and can act on it (outreach) without leaving the app.
       investigation to run against the parsed brief. (Backlog #7)
 - [ ] **Demo video + screenshots** on the landing page hero — mostly asset-dependent;
       placeholder can ship before real assets exist. (Backlog #8)
-- [ ] **Supplier star-rating feedback** (1-5) — schema/scope decision needed: per-event
-      column vs. cross-event supplier-identity table; directly depends on #10 below.
-      (Backlog #9)
 - [ ] **Persistent cross-investigation supplier repository**: durable, deduped
       supplier record store spanning quick scan / full investigation / (future) RFP
       matching, so discoveries aren't siloed per-event. Scope (per-org vs.
@@ -153,4 +157,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-15 after initialization*
+*Last updated: 2026-08-21 after Phase 4 (Supplier Star Ratings) completion*
