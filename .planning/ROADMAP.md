@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Rename & Brand Migration** - SourceIQ → SourceGPT across every user-facing surface and internal identifier, with a human-verified pass over security-relevant prompt text.
 - [ ] **Phase 2: Marketing & Pricing Surface** - New 3+1 tier USD pricing page, footer/CTA/CCPA legal surface, and repositioned feature-grid copy, with existing customers protected from billing outage.
 - [x] **Phase 3: Persistent Supplier Repository** - Durable, deduped, org-scoped supplier identity store shared across quick scan, full investigation, and (later) RFP matching, with private org data isolated from shared identity fields. (completed 2026-08-16)
-- [ ] **Phase 4: Supplier Star Ratings** - Buyers rate suppliers 1-5 stars at the repository-identity level, coexisting with the existing per-event thumbs-up/down signal.
+- [x] **Phase 4: Supplier Star Ratings** - Buyers rate suppliers 1-5 stars at the repository-identity level, coexisting with the existing per-event thumbs-up/down signal. (completed 2026-08-21)
 - [ ] **Phase 5: RFP Intake, SSO & Support Chatbot** - Document-based investigation intake, enterprise SSO login, and an in-app/public support widget, each additive to existing flows.
 
 ## Phase Details
@@ -168,5 +168,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Rename & Brand Migration | 4/4 | Complete | 2026-08-15 |
 | 2. Marketing & Pricing Surface | 4/4 | In Progress|  |
 | 3. Persistent Supplier Repository | 4/4 | Complete    | 2026-08-16 |
-| 4. Supplier Star Ratings | 1/1 | In Progress|  |
+| 4. Supplier Star Ratings | 1/1 | Complete    | 2026-08-21 |
 | 5. RFP Intake, SSO & Support Chatbot | 0/TBD | Not started | - |
