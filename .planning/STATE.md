@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 current_phase: 5
 current_phase_name: RFP Intake, SSO & Support Chatbot
 status: planning
-stopped_at: Completed 04-01-PLAN.md — Task 3 human-verify checkpoint approved by user, all 3 tasks complete
+stopped_at: Phase 4 (Supplier Star Ratings) complete — verified passed, ready to plan Phase 5
 last_updated: "2026-08-22T06:48:27.341Z"
 last_activity: 2026-08-21
-last_activity_desc: Phase 4 execution started
+last_activity_desc: Phase 4 verified passed and formally closed; transitioned to Phase 5
 progress:
   total_phases: 5
   completed_phases: 2
@@ -19,11 +19,11 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-15)
+See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Buyers get a vetted, real supplier shortlist for a sourcing need faster
 than manual research would produce — and can act on it (outreach) without leaving the app.
-**Current focus:** Phase 4 — supplier-star-ratings
+**Current focus:** Phase 5 — RFP Intake, SSO & Support Chatbot
 
 ## Current Position
 
@@ -105,7 +105,8 @@ None yet.
 - Phase 2 (OPEN — sole item blocking phase close): PRICE-04 (live Stripe Price object creation + `STRIPE_PRICE_<TIER>_<CADENCE>` env var wiring) is deferred by explicit user choice ("1") rather than force-closed. 02-04's automated verification (Task 1) and human visual/interactive checkpoint (Task 3) both passed and were approved; only the Stripe dashboard setup (Task 2, user-only action — cannot be done by the agent) remains. Self-serve checkout for Basic/Growth/Premium still shows the "Coming soon" fallback until this is done. See `.planning/phases/02-marketing-pricing-surface/deferred-items.md` and `02-04-SUMMARY.md` for full detail. No `*-VERIFICATION.md` exists for Phase 2 and `phase.complete` has deliberately not been run — once Stripe setup is done, re-verify Task 2, write a passing VERIFICATION.md, then run `gsd_run query phase complete 02` to formally close the phase and advance to Phase 3.
 - Phase 3 (RESOLVED, phase closed 03-04): All 4 plans complete. `supplier_identities`/`org_supplier_data` schema, `lib/supplier-repository.ts`, write-path wiring across all three discovery flows, and the REPO-05 pre-search read path in `app/api/orchestrate/route.ts` are all live. Full D-06 suite passes (258/258 tests, clean typecheck/lint/build) and both tables confirmed materialized on the live Neon DB. Two-org isolation (REPO-04) proven via explicit substring-negation test. All REPO-01 through REPO-06 requirements traced and verified in `03-VERIFICATION.md`. Human checkpoint approved by user ("approved"). No open blockers.
 - Phase 5: SSO needs Clerk Pro-plan Enterprise Connections entitlement verified before scoping; support chatbot build-vs-buy (in-house vs. vendor) needs confirmation before implementation.
-- Phase 4 (RESOLVED, 04-01 Task 3 approved): The blocking human-verify checkpoint (star control renders/toggles/persists across reload, coexists with the thumbs control, hidden for null identity_id, cross-event accumulation) was completed interactively by the user, who confirmed all 8 how-to-verify steps passed and responded "approved". Plan 04-01 (all 3 tasks: 9f26c92, 43677a8, Task 3 checkpoint) is now fully complete. No `*-VERIFICATION.md` has been written and `phase.complete` has not been run for Phase 4 — revisit if formal phase closure via `gsd_run query phase complete 4` is desired.
+- Phase 4 (RESOLVED, phase closed): The blocking human-verify checkpoint (star control renders/toggles/persists across reload, coexists with the thumbs control, hidden for null identity_id, cross-event accumulation) was completed interactively by the user, who confirmed all 8 how-to-verify steps passed and responded "approved". Plan 04-01 (all 3 tasks: 9f26c92, 43677a8, Task 3 checkpoint) is fully complete, goal-verified `passed` (RATE-01/02/03 all traced to code, `04-VERIFICATION.md`), and `phase.complete` has been run. No open blockers.
+- Phase 4 (non-blocking follow-up, from `04-REVIEW.md`, advisory-only since `tdd_mode: false`): (1) the new "Rating" star-control label collides with a pre-existing, unrelated "Rating" quick-fact card (`supplier.review_score`) in the same DetailPanel — both visible simultaneously whenever `review_score` is populated, undercutting the intended visual-distinctness goal; (2) `set_rating` doesn't check the `UPDATE`'s `changes` count before reporting success — a zero-row match (should never happen today) would be silently reported as saved; (3) the two new strings (`"Rate {n} stars"`, `"Could not save rating. Please try again."`) are missing from the de/es/fr/it locale dictionaries. None block Phase 4's goal; worth a small cleanup pass or folding into Phase 5 planning.
 
 ## Deferred Items
 
@@ -117,6 +118,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-22T06:25:08.862Z
-Stopped at: Completed 04-01-PLAN.md — Task 3 human-verify checkpoint approved by user, all 3 tasks complete
+Last session: 2026-08-22T06:48:27.341Z
+Stopped at: Phase 4 (Supplier Star Ratings) complete — verified passed, roadmap/state/project docs updated, ready to plan Phase 5
 Resume file: None
