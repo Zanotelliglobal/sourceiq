@@ -63,14 +63,21 @@ phase — kept for visual consistency with the immediately adjacent thumbs
 control):
 - `p-1` (4px) button padding per star icon-button, matching the existing
   thumbs button padding exactly (`page.tsx:402,415`).
-- `mt-1.5` (6px) is an established half-step exception already used for
-  meta/helper text spacing in this exact panel (`page.tsx:426`) — reuse only
-  if a helper line is added below the star row; do not introduce new
-  half-step values beyond this one precedent.
-- Icon size: `w-3.5 h-3.5` (14px) per star icon, matching the existing thumbs
-  icon size exactly (`page.tsx:408,421`) — deliberately smaller than the
-  unrelated shortlist `Star` icon (`w-4 h-4` / `w-2.5 h-2.5` / `w-3 h-3` at
-  three other call sites) to reinforce D-05's required visual distinction.
+- `mt-1` (4px) for optional helper/meta text spacing below the star row, if
+  a helper line is ever added. This supersedes the previous draft's `mt-1.5`
+  (6px), which violated the multiple-of-4 spacing rule — no half-step
+  exception is needed or permitted here; `mt-1` (4px, the `xs` token already
+  declared above) satisfies both the visual-consistency goal and the hard
+  numeric rule.
+- Icon size: `w-3.5 h-3.5` (14px) per star icon — this is the **authoritative
+  value** for the executor, matching the existing thumbs icon size exactly
+  (`page.tsx:408,421`) and deliberately smaller than the unrelated shortlist
+  `Star` icon (`w-4 h-4` / `w-2.5 h-2.5` / `w-3 h-3` at three other call
+  sites) to reinforce D-05's required visual distinction. Note:
+  04-RESEARCH.md's illustrative code example uses `w-4 h-4` (16px) — that
+  example predates this sizing decision and is superseded here; the planner
+  and executor must implement `w-3.5 h-3.5` (14px), not the research
+  snippet's 16px.
 
 ---
 
