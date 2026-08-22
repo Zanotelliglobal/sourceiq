@@ -336,6 +336,11 @@ export function makeProcessSupplierQuick(deps: ProcessSupplierQuickDeps) {
         orgId: deps.orgId,
         aiScore: null,
       });
+      if (identityId !== null) {
+        try {
+          await deps.db.prepare("UPDATE suppliers SET identity_id=? WHERE id=?").run(identityId, supplierId);
+        } catch { /* best-effort — back-link failure never blocks per-event flow */ }
+      }
     } catch { /* best-effort */ }
 
     return saved;
@@ -429,6 +434,11 @@ export function makeProcessSupplierDeepen(deps: ProcessSupplierDeps, agent: Agen
         orgId: deps.orgId,
         aiScore: score.overall_score,
       });
+      if (identityIdDeepen !== null) {
+        try {
+          await deps.db.prepare("UPDATE suppliers SET identity_id=? WHERE id=?").run(identityIdDeepen, supplierId);
+        } catch { /* best-effort — back-link failure never blocks per-event flow */ }
+      }
     } catch { /* best-effort */ }
 
     // Enrichment runs OFF the critical path — mirrors makeProcessSupplier.

@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { makeProcessSupplier, makeProcessSupplierDeepen, type ScoutSupplier, type ProcessSupplierDeps } from "@/lib/process-supplier";
+import {
+  makeProcessSupplier,
+  makeProcessSupplierQuick,
+  makeProcessSupplierDeepen,
+  type ScoutSupplier,
+  type ProcessSupplierDeps,
+  type ProcessSupplierQuickDeps,
+  type QuickScoutCandidate,
+} from "@/lib/process-supplier";
 import { findKnownSuppliers, upsertSupplierIdentity, upsertOrgSupplierData } from "@/lib/supplier-repository";
 import type { getDb } from "@/lib/db";
 import type { ContactChannels } from "@/lib/contact";
@@ -89,6 +97,12 @@ function fakeDb() {
             cols.forEach((c, i) => { row[c] = params[i]; });
             rows.push(row);
             return { changes: 1, lastInsertRowid: row.id as number };
+          }
+          if (/^\s*update\s+suppliers\s+set\s+identity_id/i.test(sql)) {
+            const [identityId, id] = params;
+            const row = rows.find(r => r.id === id);
+            if (row) row.identity_id = identityId;
+            return { changes: row ? 1 : 0, lastInsertRowid: undefined };
           }
           if (/^\s*update\s+suppliers\s+set\s+contact_email/i.test(sql)) {
             const [contact_email, contact_url, contact_phone, contact_linkedin, id] = params;
@@ -218,6 +232,28 @@ const expectedEnrichmentJson = JSON.stringify({
   key_strengths: [] as string[],
   recommended_action: "pursue",
 });
+
+function baseQuickDeps(overrides: Partial<ProcessSupplierQuickDeps> = {}): { deps: ProcessSupplierQuickDeps; events: Record<string, unknown>[]; db: Db } {
+  const events: Record<string, unknown>[] = [];
+  const db = fakeDb();
+  const deps: ProcessSupplierQuickDeps = {
+    db,
+    eventId: 1,
+    orgId: 1,
+    send: (e) => { events.push(e); },
+    ...overrides,
+  };
+  return { deps, events, db };
+}
+
+function quickCandidate(overrides: Partial<QuickScoutCandidate> = {}): QuickScoutCandidate {
+  return {
+    name: "Acme Manufacturing",
+    country: "Italy",
+    website: "https://acme.example",
+    ...overrides,
+  };
+}
 
 describe("makeProcessSupplier", () => {
   it("inserts the supplier with enrichment=null and sends supplier_found BEFORE enrichment or the contact scrape resolves", async () => {
@@ -402,6 +438,86 @@ describe("makeProcessSupplier", () => {
     // and the badge task is also skipped without a website.
     expect(deps.backgroundTasks.length).toBe(1);
   });
+
+  it("Phase 4 D-02: back-links the freshly-inserted suppliers row to its repository identity_id", async () => {
+    const { deps, events } = baseDeps({
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await process(scoutSupplier());
+
+    const found = events.find(e => e.type === "supplier_found") as { supplier: { id: number } };
+    const row = (deps.db as unknown as { rows: Record<string, unknown>[] }).rows.find(r => r.id === found.supplier.id);
+    expect(row?.identity_id).not.toBeNull();
+    expect(row?.identity_id).not.toBeUndefined();
+
+    const known = await findKnownSuppliers(deps.db, deps.orgId);
+    expect(known).toHaveLength(1);
+    expect(row?.identity_id).toBe(known[0].identity_id);
+  });
+
+  it("Phase 4 D-02: a repository write failure never blocks the per-event flow, and identity_id stays unset", async () => {
+    const realDb = fakeDb();
+    const throwingDb = {
+      ...realDb,
+      prepare(sql: string) {
+        if (/insert\s+into\s+supplier_identities/i.test(sql)) {
+          return { run: async () => { throw new Error("repository down"); }, get: async () => undefined, all: async () => [] };
+        }
+        return realDb.prepare(sql);
+      },
+    } as typeof realDb;
+    const { deps, events } = baseDeps({
+      db: throwingDb,
+      scrapeSupplierContact: async (): Promise<ContactChannels> => ({ contact_email: "", contact_url: "", phone: "", linkedin: "", source: "" }),
+    });
+    const process = makeProcessSupplier(deps, AGENT);
+
+    await expect(process(scoutSupplier())).resolves.toBeUndefined();
+
+    const found = events.find(e => e.type === "supplier_found") as { supplier: { id: number } };
+    const row = (realDb as unknown as { rows: Record<string, unknown>[] }).rows.find(r => r.id === found.supplier.id);
+    expect(row?.identity_id).toBeUndefined();
+  });
+});
+
+describe("makeProcessSupplierQuick repository upsert + identity_id back-link (Phase 3 REPO-02, Phase 4 D-02)", () => {
+  it("back-links the freshly-inserted suppliers row to its repository identity_id", async () => {
+    const { deps, events, db } = baseQuickDeps();
+    const quick = makeProcessSupplierQuick(deps);
+
+    const saved = await quick(quickCandidate());
+
+    expect(events.some(e => e.type === "supplier_found")).toBe(true);
+    const row = (db as unknown as { rows: Record<string, unknown>[] }).rows.find(r => r.id === saved.id);
+    expect(row?.identity_id).not.toBeNull();
+    expect(row?.identity_id).not.toBeUndefined();
+
+    const known = await findKnownSuppliers(db, deps.orgId);
+    expect(known).toHaveLength(1);
+    expect(row?.identity_id).toBe(known[0].identity_id);
+  });
+
+  it("a repository write failure never blocks the quick-scan insert, and identity_id stays unset", async () => {
+    const realDb = fakeDb();
+    const throwingDb = {
+      ...realDb,
+      prepare(sql: string) {
+        if (/insert\s+into\s+supplier_identities/i.test(sql)) {
+          return { run: async () => { throw new Error("repository down"); }, get: async () => undefined, all: async () => [] };
+        }
+        return realDb.prepare(sql);
+      },
+    } as typeof realDb;
+    const { deps } = baseQuickDeps({ db: throwingDb });
+    const quick = makeProcessSupplierQuick(deps);
+
+    const saved = await quick(quickCandidate());
+
+    const row = (realDb as unknown as { rows: Record<string, unknown>[] }).rows.find(r => r.id === saved.id);
+    expect(row?.identity_id).toBeUndefined();
+  });
 });
 
 // ─── Repository upsert (Phase 3 REPO-02) — makeProcessSupplierDeepen must
@@ -438,6 +554,10 @@ describe("makeProcessSupplierDeepen repository upsert (REPO-02)", () => {
     expect(known).toHaveLength(1);
     expect(known[0].ai_score).toBe(92); // fakeQualifier's overall_score — no longer null
     expect(known[0].last_category).toBe(deps.categoryLabel);
+
+    // Phase 4 D-02: the deepen path also back-links suppliers.identity_id.
+    const row = (deps.db as unknown as { rows: Record<string, unknown>[] }).rows.find(r => r.id === supplierId);
+    expect(row?.identity_id).toBe(known[0].identity_id);
   });
 
   it("D2: the enrichTask closure mirrors resolved enrichment into org_supplier_data.enrichment", async () => {

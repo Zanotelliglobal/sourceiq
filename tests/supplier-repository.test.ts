@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   upsertSupplierIdentity,
   upsertOrgSupplierData,
+  updateOrgSupplierDataRating,
   findKnownSuppliers,
   repositoryEntryMatchesEvent,
   type Db,
@@ -513,5 +514,88 @@ describe("REPO-05 pre-search integration shape", () => {
       repositoryEntryMatchesEvent(s, "Textiles", "IT"),
     );
     expect(relevantKnown).toEqual([]);
+  });
+});
+
+describe("updateOrgSupplierDataRating (Phase 4, RATE-01/02/03)", () => {
+  it("writes a rating (1-5) onto the org_supplier_data row scoped to (identityId, orgId)", async () => {
+    const db = fakeRepositoryDb();
+    const identityId = await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Acme Corp",
+      website: "https://acme.example",
+      country: "Italy",
+      categoryLabel: "Precision Machining & CNC",
+    });
+    await upsertOrgSupplierData(db, { identityId, orgId: 1, aiScore: 88 });
+
+    await updateOrgSupplierDataRating(db, { identityId, orgId: 1, rating: 4 });
+
+    const results = await findKnownSuppliers(db, 1);
+    expect(results).toHaveLength(1);
+    expect(results[0].rating).toBe(4);
+  });
+
+  it("clears a rating back to null (toggle-to-clear)", async () => {
+    const db = fakeRepositoryDb();
+    const identityId = await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Acme Corp",
+      website: "https://acme.example",
+      country: "Italy",
+      categoryLabel: "Precision Machining & CNC",
+    });
+    await upsertOrgSupplierData(db, { identityId, orgId: 1, aiScore: 88 });
+    await updateOrgSupplierDataRating(db, { identityId, orgId: 1, rating: 3 });
+
+    await updateOrgSupplierDataRating(db, { identityId, orgId: 1, rating: null });
+
+    const results = await findKnownSuppliers(db, 1);
+    expect(results[0].rating).toBeNull();
+  });
+
+  it("cross-org isolation: org A's rating write never appears on org B's identical-named supplier", async () => {
+    const db = fakeRepositoryDb();
+    const idA = await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Acme Corp",
+      website: "https://acme.example",
+      country: "Italy",
+      categoryLabel: "Precision Machining & CNC",
+    });
+    await upsertOrgSupplierData(db, { identityId: idA, orgId: 1, aiScore: 90 });
+
+    const idB = await upsertSupplierIdentity(db, {
+      orgId: 2,
+      name: "Acme Corp",
+      website: "https://acme.example",
+      country: "Italy",
+      categoryLabel: "Precision Machining & CNC",
+    });
+    await upsertOrgSupplierData(db, { identityId: idB, orgId: 2, aiScore: 40 });
+
+    await updateOrgSupplierDataRating(db, { identityId: idA, orgId: 1, rating: 5 });
+
+    const resultsForOrgB = await findKnownSuppliers(db, 2);
+    expect(resultsForOrgB[0].rating).toBeNull();
+  });
+
+  it("mismatched org_id (cross-tenant write attempt on a real identity_id) is a genuine no-op", async () => {
+    const db = fakeRepositoryDb();
+    const identityId = await upsertSupplierIdentity(db, {
+      orgId: 1,
+      name: "Acme Corp",
+      website: "https://acme.example",
+      country: "Italy",
+      categoryLabel: "Precision Machining & CNC",
+    });
+    await upsertOrgSupplierData(db, { identityId, orgId: 1, aiScore: 88 });
+
+    // Attempt to write using the correct identity_id but the WRONG org_id —
+    // must not match (compound predicate), so nothing is written.
+    await updateOrgSupplierDataRating(db, { identityId, orgId: 999, rating: 5 });
+
+    const results = await findKnownSuppliers(db, 1);
+    expect(results[0].rating).toBeNull();
   });
 });
