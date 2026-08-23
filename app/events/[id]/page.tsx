@@ -1492,6 +1492,12 @@ export default function EventPage() {
   const [campaigning, setCampaigning] = useState(false);
   const [confirmCampaign, setConfirmCampaign] = useState(false);
   const [liveAgents, setLiveAgents] = useState<{ agent_id: string; agent_label: string; status: string; message?: string }[]>([]);
+  // handleStreamEvent is a plain function re-created every render, but it's
+  // captured by reference once per stream (see the readEventStream call
+  // below) — so reading `liveAgents` directly inside it would see a stale,
+  // render-time snapshot for the lifetime of that stream. Mirrors the
+  // addLogRef pattern already used for the same reason.
+  const liveAgentsRef = useRef<{ agent_id: string; agent_label: string; status: string; message?: string }[]>([]);
   const [logs, setLogs]         = useState<string[]>([]);
   const [stageFilter, setStageFilter] = useState("all");
   // Structured filter panel state (Epic 3, #38). Persisted per-event in
@@ -1648,6 +1654,7 @@ export default function EventPage() {
   const addLog = (msg: string) =>
     setLogs(prev => [...prev.slice(-149), `${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}  ${msg}`]);
   addLogRef.current = addLog;
+  liveAgentsRef.current = liveAgents;
 
   function handleStreamEvent(msg: Record<string, unknown>) {
     const type = msg.type as string;
@@ -1693,6 +1700,21 @@ export default function EventPage() {
     if (type === "agent_complete") {
       setLiveAgents(prev => prev.map(a => a.agent_id === msg.agent_id ? { ...a, status: "complete", message: `${msg.suppliers_found} leads delivered` } : a));
       addLog(`■  ${msg.agent_label} — ${msg.suppliers_found} suppliers complete`);
+    }
+    // A scout threw (LLM/API error, timeout, malformed response — see the
+    // catch around runScoutAgent() in app/api/orchestrate/route.ts). Without
+    // this handler the failure was silently dropped: the agent's live card
+    // stayed stuck on "running" (or reverted to looking like a normal
+    // zero-result completion once the DB row's default suppliers_found=0
+    // was polled back), and no toast ever fired — indistinguishable from a
+    // scout that legitimately found nothing. AGENT_DOT already defines a red
+    // "error" color for exactly this state; only the wiring to reach it was
+    // missing.
+    if (type === "agent_error") {
+      const label = (liveAgentsRef.current.find(a => a.agent_id === msg.agent_id)?.agent_label) || String(msg.agent_id);
+      setLiveAgents(prev => prev.map(a => a.agent_id === msg.agent_id ? { ...a, status: "error", message: String(msg.message) } : a));
+      addLog(`✗  ${label} — error: ${msg.message}`);
+      pushToast("error", `${label}: ${String(msg.message)}`);
     }
     if (type === "usage") {
       setUsage({ cost_usd: msg.cost_usd as number, total_tokens: msg.total_tokens as number, web_searches: msg.web_searches as number });
@@ -2394,7 +2416,8 @@ export default function EventPage() {
           {liveAgents.length > 0 ? liveAgents.map(a => (
             <div key={a.agent_id} className={`flex items-start gap-2 p-2 rounded-lg border text-xs ${
               a.status === "running" || a.status === "qualifying" ? "border-blue-200 bg-blue-50" :
-              a.status === "complete" ? "border-emerald-100 bg-emerald-50" : "border-slate-100 bg-slate-50"
+              a.status === "complete" ? "border-emerald-100 bg-emerald-50" :
+              a.status === "error" ? "border-red-100 bg-red-50" : "border-slate-100 bg-slate-50"
             }`}>
               <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1 ${AGENT_DOT[a.status] || "bg-slate-300"}`} />
               <div className="min-w-0">
@@ -2403,11 +2426,18 @@ export default function EventPage() {
               </div>
             </div>
           )) : agents.slice(0, 6).map(a => (
-            <div key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs">
-              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.status === "complete" ? "bg-emerald-500" : "bg-slate-300"}`} />
+            <div key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs" title={a.status === "error" ? a.message || undefined : undefined}>
+              {/* status==="error" (persisted agent_runs row from a thrown
+                  runScoutAgent() call) previously fell into the same slate
+                  dot + raw "0" count as a scout that legitimately found
+                  nothing — see the "agent_error" SSE handler above for the
+                  live-stream half of this fix. */}
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.status === "complete" ? "bg-emerald-500" : a.status === "error" ? "bg-red-500" : "bg-slate-300"}`} />
               <div className="min-w-0 flex-1">
                 <span className="text-slate-600 font-medium">{a.agent_label}</span>
-                <span className="text-slate-500 ml-1">W{a.wave} · {a.suppliers_found}</span>
+                <span className={`ml-1 ${a.status === "error" ? "text-red-600" : "text-slate-500"}`}>
+                  {a.status === "error" ? `W${a.wave} · ${t("Error")}` : `W${a.wave} · ${a.suppliers_found}`}
+                </span>
               </div>
             </div>
           ))}
