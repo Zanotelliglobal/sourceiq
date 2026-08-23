@@ -71,3 +71,38 @@ This makes any future scout failure immediately visible (toast + red indicator +
 ### Verification requested from user
 
 Re-run "Launch Discovery" on one of the affected events. If scouts still fail, the fix above will now show the ACTUAL error (toast + red W{n}-agent card + tooltip) instead of a silent zero — please share that exact message for a fast, conclusive follow-up fix.
+
+## Follow-up: timeout root cause (same day)
+
+The visibility fix above worked exactly as intended: the user re-ran "Launch Discovery" in production and every scout now showed a red `W1 · Error` indicator instead of a silent `W1 · 0`. Hovering the tooltip surfaced the actual underlying error, identical across every failing scout:
+
+> "Request timed out."
+
+### Root cause
+
+`lib/agents.ts`'s scout loop bounds the WHOLE scout call (all resumes combined, up to 6) to a single wall-clock budget:
+
+```
+const scoutDeadlineMs = Math.max(30_000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 150_000);
+```
+
+The shrinking remainder of that budget is passed as the Anthropic SDK's own per-call `timeout` option with `maxRetries: 0`. When the budget is exhausted mid-call, the SDK throws `APIConnectionTimeoutError` whose message is literally "Request timed out." — exactly the observed error, now correctly surfaced by the visibility fix above instead of being swallowed.
+
+The code's own comment immediately above that line (tagged `#94`) already acknowledges "a scout with adaptive thinking + web search can take 90-360s in a SINGLE call" — meaning the 150s *default* fallback was, by the original author's own admission, sometimes not enough for one call, let alone a multi-resume scout.
+
+**Not a regression from today's deploy.** Confirmed via `git diff 2517443 HEAD -- lib/agents.ts app/api/orchestrate/route.ts` (`2517443` = `origin/main`'s exact tip immediately before today's develop→main sync) that this timeout logic, `AGENT_MODELS` values, and the scout/qualifier concurrency defaults (`scoutConcurrency`, `qualConcurrency`, `waveSupplierSoftCap`) are byte-identical apart from cosmetic SourceIQ→SourceGPT renames. The timing correlation with the deploy is very likely coincidental — real Anthropic API latency/throughput on `claude-opus-4-7` + adaptive thinking + web_search fluctuating, or increased genuine production concurrency now that a much larger, more-used branch is finally live — not a discrete logic bug introduced by the commits that shipped today. This is a latent, marginal timeout budget that is now consistently tripping under real production load, not new breakage.
+
+### Fix
+
+`lib/agents.ts` line 398 — raised the hardcoded fallback default from `150_000` to `220_000` (220s). Rationale: the route's `maxDuration` is 300s; orchestrator planning + registration happens before scouts start and qualify/enrich happens after, so 220s leaves ~80s of headroom for those phases while giving scouts materially more room to finish within the range the code's own comment says they need. `SCOUT_AGENT_TIMEOUT_MS` remains a supported override either way.
+
+Deliberately did **not** add retry logic: a retry could push a scout call past the route's hard 300s `maxDuration` ceiling mid-stream, trading a clean, now-visible per-agent failure for an uncaught fatal stream error — worse than the status quo.
+
+### Operational follow-up (user action, not code)
+
+- Set `SCOUT_AGENT_TIMEOUT_MS` explicitly in the Vercel production environment (e.g. `220000`) as a belt-and-suspenders config that takes effect without waiting on a redeploy.
+- Check the Anthropic Console's usage/rate-limit dashboard around the failure timestamps to rule out an account-level throughput ceiling that no code change here can fix.
+
+### Verification requested from user
+
+Re-run "Launch Discovery" in production again. Confirm scouts either succeed or, if they still time out, capture the new error/timing pattern to see whether it points to an external Anthropic rate limit rather than the budget itself.
