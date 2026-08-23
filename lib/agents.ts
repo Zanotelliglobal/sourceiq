@@ -395,7 +395,14 @@ Your FINAL message must contain ONLY the JSON array (after you have finished sea
   // through with whatever `fullText` was already produced (the JSON-array
   // match below throws if it's incomplete, which the caller already treats as
   // a normal per-agent failure — other scouts in the pool are unaffected).
-  const scoutDeadlineMs = Math.max(30_000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 150_000);
+  // Default raised 150s -> 220s (see resolved debug session
+  // discovery-not-working-anymore.md follow-up): the comment above already
+  // admits a single call can need up to 360s, so 150s was marginal by the
+  // original author's own account and now consistently trips under real
+  // production load/latency. 220s leaves ~80s of the route's 300s
+  // maxDuration for orchestrator planning + registration (before) and
+  // qualify/enrich (after). SCOUT_AGENT_TIMEOUT_MS still overrides.
+  const scoutDeadlineMs = Math.max(30_000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 220_000);
   const scoutStartedAt = Date.now();
 
   while (guard++ < 6) {
